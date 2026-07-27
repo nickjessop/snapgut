@@ -106,26 +106,19 @@ export default function App() {
       {tab === "logs" && <LogsView onEdit={startEdit} reloadKey={reloadKey} />}
       {tab === "insights" && <InsightsView reloadKey={reloadKey} />}
 
-      {/* Floating + for the non-photo log types */}
-      {tab !== "camera" && (
-        <button className="add-fab" onClick={() => setPlusOpen(true)} aria-label="Add log">
-          ＋
-        </button>
-      )}
-      {tab === "camera" && (
-        <button
-          className="add-fab on-camera"
-          onClick={() => setPlusOpen(true)}
-          aria-label="Add log"
-        >
-          ＋
-        </button>
-      )}
-
       {plusOpen && (
         <div className="sheet-backdrop" onClick={() => setPlusOpen(false)}>
           <div className="action-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="action-grip" />
+            <ActionItem
+              icon="📷"
+              title="Food snap"
+              sub="Photo → AI ingredients"
+              onClick={() => {
+                setPlusOpen(false);
+                setTab("camera");
+              }}
+            />
             <ActionItem
               icon="🩺"
               title="Symptom"
@@ -165,12 +158,8 @@ export default function App() {
           <span className="ico">📖</span>
           Logs
         </button>
-        <button
-          className={`fab${tab === "camera" ? " active" : ""}`}
-          onClick={() => setTab("camera")}
-          aria-label="Camera"
-        >
-          📷
+        <button className="fab" onClick={() => setPlusOpen(true)} aria-label="Add log">
+          ＋
         </button>
         <button
           className={tab === "insights" ? "active" : ""}
