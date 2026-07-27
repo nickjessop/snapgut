@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { getEvents } from "./db";
 import { computeEvidence, type EvidenceSummary } from "./insights";
 import { getInsights } from "./api";
+import FoodsTab from "./FoodsTab";
+
+type InsightTab = "patterns" | "foods";
 
 interface AiInsight {
   headline: string;
@@ -10,6 +13,33 @@ interface AiInsight {
 }
 
 export default function InsightsView({ reloadKey = 0 }: { reloadKey?: number }) {
+  const [tab, setTab] = useState<InsightTab>("patterns");
+
+  return (
+    <div className="insights">
+      <h1>Insights</h1>
+
+      <div className="seg">
+        <button
+          className={`seg-btn${tab === "patterns" ? " on" : ""}`}
+          onClick={() => setTab("patterns")}
+        >
+          Patterns
+        </button>
+        <button
+          className={`seg-btn${tab === "foods" ? " on" : ""}`}
+          onClick={() => setTab("foods")}
+        >
+          Foods
+        </button>
+      </div>
+
+      {tab === "patterns" ? <PatternsTab reloadKey={reloadKey} /> : <FoodsTab reloadKey={reloadKey} />}
+    </div>
+  );
+}
+
+function PatternsTab({ reloadKey }: { reloadKey: number }) {
   const [summary, setSummary] = useState<EvidenceSummary | null>(null);
   const [ai, setAi] = useState<AiInsight | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,8 +68,7 @@ export default function InsightsView({ reloadKey = 0 }: { reloadKey?: number }) 
   }, [reloadKey]);
 
   return (
-    <div className="insights">
-      <h1>Insights</h1>
+    <>
       <p className="disclaimer">
         Patterns from your own logs — meant to help you spot associations and bring
         better questions to a clinician. Not a diagnosis or medical advice.
@@ -72,9 +101,7 @@ export default function InsightsView({ reloadKey = 0 }: { reloadKey?: number }) 
 
       {loading && <p className="status">Analyzing your patterns…</p>}
 
-      {error && (
-        <div className="error-banner">Couldn't generate insights right now.</div>
-      )}
+      {error && <div className="error-banner">Couldn't generate insights right now.</div>}
 
       {ai && (
         <div className="insight-block">
@@ -105,6 +132,6 @@ export default function InsightsView({ reloadKey = 0 }: { reloadKey?: number }) 
           ))}
         </>
       )}
-    </div>
+    </>
   );
 }

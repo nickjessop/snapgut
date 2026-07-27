@@ -856,3 +856,99 @@ body {
   border-radius: 12px;
   object-fit: contain;
 }
+
+/* ---------- Insights segmented tabs ---------- */
+.seg {
+  display: flex;
+  background: var(--card-2);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 18px;
+}
+.seg-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 600;
+  padding: 10px;
+  border-radius: 9px;
+  cursor: pointer;
+}
+.seg-btn.on {
+  background: var(--accent);
+  color: #111;
+}
+
+/* ---------- Food ranking ---------- */
+.rank-group {
+  margin-bottom: 22px;
+}
+.rank-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.rank-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.rank-label {
+  font-weight: 700;
+  font-size: 16px;
+}
+.rank-blurb {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.food-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #2a2a2c;
+}
+.food-img,
+.food-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  flex: 0 0 auto;
+  object-fit: cover;
+  background: var(--card-2);
+}
+.food-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 18px;
+  color: #fff;
+}
+.food-meta {
+  flex: 1;
+  min-width: 0;
+}
+.food-name {
+  font-weight: 600;
+  font-size: 15px;
+  text-transform: capitalize;
+}
+.food-symptoms {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.food-rate {
+  font-weight: 700;
+  font-size: 15px;
+  flex: 0 0 auto;
+}

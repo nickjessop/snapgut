@@ -144,6 +144,36 @@ difficulty swallowing, anemia, new symptoms over age 50 → "please see a doctor
 - [ ] Nutrient/fiber angle (low-FODMAP deficiency risk) — Cronometer-style, later
 - [ ] Portion-aware FODMAP (dose matters) — Monash red/amber/green
 
+## 6b. Food database + images (off-the-shelf research)
+
+Goal: thumbnails per food for the intolerance-ranking tab, and a path to nutrition
+enrichment later. Options evaluated:
+
+| Source | Key? | Cost | Images | Notes |
+| --- | --- | --- | --- | --- |
+| **TheMealDB** ingredient CDN | No (images) | Free | ✅ static per-ingredient | `…/images/ingredients/{Name}.png` (+`-small/-medium/-large`). ~600 ingredients; unknowns 404. $10 lifetime supporter needed for the JSON *API* before public app-store release, but the images are just static files. **Chosen for now.** |
+| **Open Food Facts** | No | Free (ODbL data, CC-BY-SA images) | ✅ product photos | 2.9M+ products, biggest open DB. Product/barcode-centric. **Recommended for future nutrition + branded-product enrichment.** |
+| **Spoonacular** | Yes | Free 150/day, then paid points | ✅ ingredient CDN + ontology | Best ingredient ontology (`ingredients_100x100/…`). Good upgrade if we need structured ingredient data. |
+| **USDA FoodData Central** | Yes | Free | ❌ | Authoritative nutrition, no images. |
+| **Edamam / Nutritionix / FatSecret** | Yes | Freemium | partial | Solid nutrition; keys + limits. |
+
+**Decision:** TheMealDB static images now (zero key, zero cost) with a generated
+letter-avatar fallback for misses. Open Food Facts is the enrichment path when we
+add nutrition/fiber and branded-product lookups.
+
+## 6c. Food intolerance ranking (Foods tab)
+
+Per-ingredient version of the lag-window correlation: for each confident
+ingredient, `symptomRate = meals-followed-by-symptom-within-24h / times-eaten`.
+Ranks (need ≥3 exposures first):
+- **Avoid** ≥ 60% · **Reduce** 35–60% · **Neutral** 20–35% · **Agrees with you** ≤ 20%
+- **Need more data** if eaten < 3
+
+Caveat (by design): overlapping 24h windows can co-attribute an innocent food
+eaten shortly before a symptom caused by something else. More data + varied meal
+combinations separate true triggers over time; this is why it's framed as
+"patterns," min-exposure gated, and never presented as an allergy test.
+
 ## 7. Sources
 
 - Monash FODMAP app — https://www.monash.edu/monash-innovation/impact/licensing/low-fodmap
@@ -161,5 +191,9 @@ difficulty swallowing, anemia, new symptoms over age 50 → "please see a doctor
 - Histamine intolerance review — https://pmc.ncbi.nlm.nih.gov/articles/PMC7463562/
 - Low-FODMAP nutrient risk — https://www.va.gov/WHOLEHEALTHLIBRARY/docs/The-Low-FODMaP-Diet.pdf
 - Cronometer vs MyFitnessPal accuracy — https://www.welling.ai/articles/myfitnesspal-vs-cronometer-2026
+- TheMealDB API + ingredient images — https://www.themealdb.com/api.php
+- Open Food Facts API — https://openfoodfacts.github.io/openfoodfacts-server/api/
+- Open Food Facts image dataset/license — https://blog.openfoodfacts.org/en/news/open-food-facts-images-on-aws-open-dataset-the-ultimate-food-image-database
+- Spoonacular food API — https://spoonacular.com/food-api
 
 _Content synthesized and rephrased from the above sources for licensing compliance._
