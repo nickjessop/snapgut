@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { recognizeMeal } from "./api";
 import { addEvent, type Ingredient, type MealEvent } from "./db";
+import { NoteIcon, AddIcon, BackIcon } from "./icons";
 
 interface Props {
   photo: Blob;
@@ -88,8 +89,8 @@ export default function MealDetails({ photo, initialNote = "", editing, onSaved,
   return (
     <div className="sheet">
       <div className="log-header">
-        <button className="link-btn" onClick={onBack}>
-          {editing ? "Cancel" : "‹ Back"}
+        <button className="link-btn link-btn-icon" onClick={onBack}>
+          {editing ? "Cancel" : <><BackIcon size={18} /> Back</>}
         </button>
         <span className="log-title">{editing ? "Edit meal" : "Meal details"}</span>
         <span style={{ width: 60 }} />
@@ -125,7 +126,11 @@ export default function MealDetails({ photo, initialNote = "", editing, onSaved,
         </div>
       ) : (
         <div className="note-caption" onClick={() => setEditingNote(true)}>
-          {note ? `📝 ${note}` : "＋ Add context"}
+          {note ? (
+            <><NoteIcon size={14} /> {note}</>
+          ) : (
+            <><AddIcon size={14} /> Add context</>
+          )}
         </div>
       )}
 

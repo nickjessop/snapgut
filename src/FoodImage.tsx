@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { isMissing, markMissing } from "./imageCache";
 
 // Deterministic pastel background for the fallback letter-avatar.
 function colorFor(name: string): string {
@@ -13,8 +14,9 @@ function colorFor(name: string): string {
  * See docs/research-and-insights.md for the DB research.
  */
 export default function FoodImage({ name }: { name: string }) {
-  const [failed, setFailed] = useState(false);
   const slug = name.trim().replace(/\s+/g, "_");
+  // Skip the network entirely for images we've already learned are missing.
+  const [failed, setFailed] = useState(() => isMissing(slug));
   const url = `https://www.themealdb.com/images/ingredients/${encodeURIComponent(slug)}-small.png`;
 
   if (failed) {
@@ -31,7 +33,10 @@ export default function FoodImage({ name }: { name: string }) {
       src={url}
       alt=""
       loading="lazy"
-      onError={() => setFailed(true)}
+      onError={() => {
+        markMissing(slug);
+        setFailed(true);
+      }}
     />
   );
 }

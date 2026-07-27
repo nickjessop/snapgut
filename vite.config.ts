@@ -28,6 +28,24 @@ export default defineConfig({
           },
         ],
       },
+      workbox: {
+        runtimeCaching: [
+          {
+            // Cache TheMealDB ingredient thumbnails on-device so we don't
+            // re-fetch them every load (also makes them work offline).
+            urlPattern: /^https:\/\/www\.themealdb\.com\/images\/ingredients\//,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "food-images",
+              expiration: {
+                maxEntries: 600,
+                maxAgeSeconds: 60 * 60 * 24 * 60, // 60 days
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
+      },
     }),
   ],
   server: {

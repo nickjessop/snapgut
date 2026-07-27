@@ -7,6 +7,17 @@ import {
   type MealEvent,
 } from "./db";
 import { getSymptom, BRISTOL } from "./symptoms";
+import {
+  MealIcon,
+  SymptomIcon,
+  BowelIcon,
+  CheckinIcon,
+  NoteIcon,
+  EditIcon,
+  DeleteIcon,
+  type IconProps,
+} from "./icons";
+import type { ComponentType } from "react";
 
 interface Props {
   onEdit: (event: LogEvent) => void;
@@ -71,7 +82,7 @@ export default function LogsView({ onEdit, reloadKey }: Props) {
       </div>
 
       {events.length === 0 ? (
-        <p className="empty">Nothing logged yet. Tap ＋ or snap a meal to start.</p>
+        <p className="empty">Nothing logged yet. Tap + or snap a meal to start.</p>
       ) : (
         groups.map(([day, dayEvents]) => (
           <div key={day} className="day-group">
@@ -87,7 +98,9 @@ export default function LogsView({ onEdit, reloadKey }: Props) {
         <div className="sheet-backdrop" onClick={() => setDetail(null)}>
           <div className="action-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="action-grip" />
-            <div className="detail-title">{describe(detail)}</div>
+            <div className="detail-title">
+              <EventLabel event={detail} /> · {formatTime(detail.createdAt)}
+            </div>
             <button
               className="action-item"
               onClick={() => {
@@ -96,11 +109,15 @@ export default function LogsView({ onEdit, reloadKey }: Props) {
                 onEdit(e);
               }}
             >
-              <span className="ai-ico">✏️</span>
+              <span className="ai-ico">
+                <EditIcon size={22} />
+              </span>
               <div className="ai-title">Edit</div>
             </button>
             <button className="action-item danger" onClick={() => remove(detail.id)}>
-              <span className="ai-ico">🗑️</span>
+              <span className="ai-ico">
+                <DeleteIcon size={22} />
+              </span>
               <div className="ai-title">Delete</div>
             </button>
             <button className="action-cancel" onClick={() => setDetail(null)}>
@@ -113,22 +130,32 @@ export default function LogsView({ onEdit, reloadKey }: Props) {
   );
 }
 
-function describe(e: LogEvent): string {
-  const time = new Date(e.createdAt).toLocaleString(undefined, {
+const KIND: Record<LogEvent["type"], { Icon: ComponentType<IconProps>; label: string }> = {
+  meal: { Icon: MealIcon, label: "Meal" },
+  symptom: { Icon: SymptomIcon, label: "Symptoms" },
+  bowel: { Icon: BowelIcon, label: "Bowel movement" },
+  checkin: { Icon: CheckinIcon, label: "Stress & sleep" },
+};
+
+/** Inline icon + text label for a log event (used in headers/titles). */
+function EventLabel({ event }: { event: LogEvent }) {
+  const { Icon, label } = KIND[event.type];
+  const text = event.type === "meal" ? event.dish || "Meal" : label;
+  return (
+    <span className="evt-label">
+      <Icon size={16} />
+      {text}
+    </span>
+  );
+}
+
+function formatTime(ts: number): string {
+  return new Date(ts).toLocaleString(undefined, {
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
   });
-  const kind =
-    e.type === "meal"
-      ? `🍽️ ${e.dish || "Meal"}`
-      : e.type === "symptom"
-      ? "🩺 Symptoms"
-      : e.type === "bowel"
-      ? "🚽 Bowel movement"
-      : "🧠 Stress & sleep";
-  return `${kind} · ${time}`;
 }
 
 function formatDay(dateStr: string): string {
@@ -154,14 +181,16 @@ function TimelineRow({ event, onClick }: { event: LogEvent; onClick: () => void 
         {event.type === "meal" && <MealBody event={event} />}
         {event.type === "symptom" && (
           <>
-            <div className="tl-title">🩺 Symptoms</div>
+            <div className="tl-title">
+              <SymptomIcon size={16} /> Symptoms
+            </div>
             <div className="sub">{symptomLine(event.symptoms)}</div>
           </>
         )}
         {event.type === "bowel" && (
           <>
             <div className="tl-title">
-              🚽 Bowel movement · type {event.bristol}{" "}
+              <BowelIcon size={16} /> Bowel movement · type {event.bristol}{" "}
               {BRISTOL.find((b) => b.type === event.bristol)?.emoji}
             </div>
             {event.symptoms?.length ? (
@@ -171,7 +200,9 @@ function TimelineRow({ event, onClick }: { event: LogEvent; onClick: () => void 
         )}
         {event.type === "checkin" && (
           <>
-            <div className="tl-title">🧠 Stress & sleep</div>
+            <div className="tl-title">
+              <CheckinIcon size={16} /> Stress & sleep
+            </div>
             <div className="sub">
               {[
                 event.stress && `Stress: ${event.stress}`,
@@ -182,7 +213,11 @@ function TimelineRow({ event, onClick }: { event: LogEvent; onClick: () => void 
             </div>
           </>
         )}
-        {event.note && <div className="sub note">📝 {event.note}</div>}
+        {event.note && (
+          <div className="sub note">
+            <NoteIcon size={13} /> {event.note}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -206,7 +241,9 @@ function MealBody({ event }: { event: MealEvent }) {
     <div className="meal-body">
       {url && <img src={url} alt="" className="tl-thumb" />}
       <div>
-        <div className="tl-title">🍽️ {event.dish || "Meal"}</div>
+        <div className="tl-title">
+          <MealIcon size={16} /> {event.dish || "Meal"}
+        </div>
         {confident && <div className="sub">{confident}</div>}
       </div>
     </div>

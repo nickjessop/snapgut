@@ -114,6 +114,9 @@ body {
   font-size: 22px;
   cursor: pointer;
   backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ---------- Sheet / review ---------- */
@@ -262,6 +265,14 @@ body {
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
+}
+.link-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.link-btn-icon svg {
+  margin-left: -4px;
 }
 .entry {
   display: flex;
@@ -448,7 +459,7 @@ body {
   gap: 3px;
 }
 .tabbar button .ico {
-  font-size: 20px;
+  display: block;
 }
 .tabbar button.active {
   color: var(--accent);
@@ -521,6 +532,13 @@ body {
   font-size: 14px;
   line-height: 1.45;
   margin-bottom: 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.redflag .rf-ico {
+  flex: 0 0 auto;
+  margin-top: 1px;
 }
 
 /* ---------- Photo + note ---------- */
@@ -550,6 +568,13 @@ body {
   color: var(--text);
   cursor: pointer;
   line-height: 1.4;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.note-caption svg {
+  flex: 0 0 auto;
+  color: var(--muted);
 }
 .note-editor {
   display: flex;
@@ -664,7 +689,16 @@ body {
   background: #3a3a3c;
 }
 .action-item .ai-ico {
-  font-size: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.action-item.danger .ai-ico {
+  color: #ff6b6b;
 }
 .ai-title {
   font-size: 17px;
@@ -746,6 +780,13 @@ body {
 .tl-title {
   font-weight: 600;
   font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tl-title svg {
+  color: var(--muted);
+  flex: 0 0 auto;
 }
 .tl-body .sub {
   color: var(--muted);
@@ -754,6 +795,12 @@ body {
 }
 .tl-body .note {
   font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.tl-body .note svg {
+  flex: 0 0 auto;
 }
 .meal-body {
   display: flex;
@@ -770,11 +817,19 @@ body {
 
 /* timeline detail sheet */
 .detail-title {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   font-weight: 600;
   color: var(--muted);
   padding: 4px 0 12px;
   font-size: 14px;
+}
+.evt-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 .action-item.danger .ai-title {
   color: #ff6b6b;

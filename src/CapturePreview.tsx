@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { CloseIcon } from "./icons";
 
 interface Props {
   photo: Blob;
@@ -27,7 +28,7 @@ export default function CapturePreview({ photo, initialNote = "", onProceed, onR
       <img className="capture-img" src={photoUrl} alt="Your meal" />
 
       <button className="circle-btn capture-close" onClick={onRetake} aria-label="Retake">
-        ✕
+        <CloseIcon size={24} />
       </button>
 
       <div className="capture-bottom">

@@ -3,6 +3,7 @@ import { getEvents } from "./db";
 import { computeEvidence, type EvidenceSummary } from "./insights";
 import { getInsights } from "./api";
 import FoodsTab from "./FoodsTab";
+import { WarningIcon } from "./icons";
 
 type InsightTab = "patterns" | "foods";
 
@@ -97,7 +98,11 @@ function PatternsTab({ reloadKey }: { reloadKey: number }) {
         </div>
       )}
 
-      {ai?.redFlag && <div className="redflag">⚠️ {ai.redFlag}</div>}
+      {ai?.redFlag && (
+        <div className="redflag">
+          <WarningIcon size={18} className="rf-ico" /> {ai.redFlag}
+        </div>
+      )}
 
       {loading && <p className="status">Analyzing your patterns…</p>}
 

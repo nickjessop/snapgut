@@ -7,7 +7,18 @@ import BowelLogView from "./BowelLogView";
 import CheckinLogView from "./CheckinLogView";
 import LogsView from "./LogsView";
 import InsightsView from "./InsightsView";
+import {
+  CameraIcon,
+  SymptomIcon,
+  BowelIcon,
+  CheckinIcon,
+  LogsIcon,
+  InsightsIcon,
+  AddIcon,
+  type IconProps,
+} from "./icons";
 import type { LogEvent } from "./db";
+import type { ComponentType } from "react";
 
 type Tab = "camera" | "logs" | "insights";
 type Flow = null | "capture" | "meal-details" | "symptom" | "bowel" | "checkin";
@@ -136,7 +147,7 @@ export default function App() {
           <div className="action-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="action-grip" />
             <ActionItem
-              icon="📷"
+              icon={CameraIcon}
               title="Food snap"
               sub="Photo → AI ingredients"
               onClick={() => {
@@ -145,7 +156,7 @@ export default function App() {
               }}
             />
             <ActionItem
-              icon="🩺"
+              icon={SymptomIcon}
               title="Symptom"
               sub="How your gut feels, right now or earlier"
               onClick={() => {
@@ -154,7 +165,7 @@ export default function App() {
               }}
             />
             <ActionItem
-              icon="🚽"
+              icon={BowelIcon}
               title="Bowel movement"
               sub="Bristol scale + optional symptoms"
               onClick={() => {
@@ -163,7 +174,7 @@ export default function App() {
               }}
             />
             <ActionItem
-              icon="🧠"
+              icon={CheckinIcon}
               title="Stress & sleep"
               sub="Gut-brain check-in"
               onClick={() => {
@@ -180,17 +191,17 @@ export default function App() {
 
       <nav className="tabbar">
         <button className={tab === "logs" ? "active" : ""} onClick={() => setTab("logs")}>
-          <span className="ico">📖</span>
+          <LogsIcon className="ico" size={22} />
           Logs
         </button>
         <button className="fab" onClick={() => setPlusOpen(true)} aria-label="Add log">
-          ＋
+          <AddIcon size={30} strokeWidth={2.25} />
         </button>
         <button
           className={tab === "insights" ? "active" : ""}
           onClick={() => setTab("insights")}
         >
-          <span className="ico">✨</span>
+          <InsightsIcon className="ico" size={22} />
           Insights
         </button>
       </nav>
@@ -199,19 +210,21 @@ export default function App() {
 }
 
 function ActionItem({
-  icon,
+  icon: Icon,
   title,
   sub,
   onClick,
 }: {
-  icon: string;
+  icon: ComponentType<IconProps>;
   title: string;
   sub: string;
   onClick: () => void;
 }) {
   return (
     <button className="action-item" onClick={onClick}>
-      <span className="ai-ico">{icon}</span>
+      <span className="ai-ico">
+        <Icon size={24} />
+      </span>
       <div>
         <div className="ai-title">{title}</div>
         <div className="ai-sub">{sub}</div>
