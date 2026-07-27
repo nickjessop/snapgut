@@ -1,16 +1,29 @@
-/** Send a photo to the backend and get back a list of detected food items. */
-export async function recognizeFood(imageBlob: Blob): Promise<string[]> {
-  const base64 = await blobToBase64(imageBlob);
+import type { MealAnalysis, Ingredient } from "./db";
+import type { EvidenceSummary } from "./insights";
+
+function buildHeaders(): Record<string, string> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   const token = import.meta.env.VITE_APP_TOKEN;
   if (token) headers["x-app-token"] = token;
+  return headers;
+}
 
+/**
+ * Send a photo (and optional user note for extra context) to the backend and get
+ * back a structured meal: dish name + confident/maybe ingredients.
+ */
+export async function recognizeMeal(
+  imageBlob: Blob,
+  note?: string
+): Promise<MealAnalysis> {
+  const base64 = await blobToBase64(imageBlob);
   const res = await fetch("/api/recognize", {
     method: "POST",
-    headers,
+    headers: buildHeaders(),
     body: JSON.stringify({
       image: base64,
       mimeType: imageBlob.type || "image/jpeg",
+      note: note || undefined,
     }),
   });
 
@@ -19,23 +32,25 @@ export async function recognizeFood(imageBlob: Blob): Promise<string[]> {
     throw new Error(`Recognition failed (${res.status}): ${text}`);
   }
 
-  const data = (await res.json()) as { foods?: string[] };
-  return Array.isArray(data.foods) ? data.foods : [];
+  const data = (await res.json()) as Partial<MealAnalysis>;
+  const ingredients: Ingredient[] = Array.isArray(data.ingredients)
+    ? data.ingredients
+        .filter((i): i is Ingredient => !!i && typeof i.name === "string")
+        .map((i) => ({
+          name: i.name,
+          confidence: i.confidence === "maybe" ? "maybe" : "confident",
+        }))
+    : [];
+  return { dish: data.dish || "Meal", ingredients };
 }
-
-import type { EvidenceSummary } from "./insights";
 
 /** Send the on-device evidence summary and get back a narrated insight. */
 export async function getInsights(
   summary: EvidenceSummary
 ): Promise<{ headline: string; body: string; redFlag?: string }> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  const token = import.meta.env.VITE_APP_TOKEN;
-  if (token) headers["x-app-token"] = token;
-
   const res = await fetch("/api/insights", {
     method: "POST",
-    headers,
+    headers: buildHeaders(),
     body: JSON.stringify({ summary }),
   });
   if (!res.ok) {

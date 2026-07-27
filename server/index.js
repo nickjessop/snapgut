@@ -19,12 +19,30 @@ const APP_TOKEN = process.env.APP_TOKEN;
 const app = new Hono();
 
 const MOCK_MEALS = [
-  ["Grilled chicken", "White rice", "Broccoli"],
-  ["Margherita pizza", "Side salad"],
-  ["Avocado toast", "Poached egg", "Black coffee"],
-  ["Beef burger", "Fries", "Ketchup"],
-  ["Salmon", "Quinoa", "Asparagus"],
-  ["Oatmeal", "Blueberries", "Banana"],
+  {
+    dish: "Ramen bowl",
+    confident: ["Wheat noodles", "Egg", "Kale", "Green onion"],
+    maybe: ["Soy sauce", "Sesame oil"],
+    maybeFromNote: ["Palm oil", "MSG", "Dried vegetables"],
+  },
+  {
+    dish: "Grilled chicken plate",
+    confident: ["Grilled chicken", "White rice", "Broccoli"],
+    maybe: ["Olive oil", "Garlic"],
+    maybeFromNote: ["Butter", "Salt"],
+  },
+  {
+    dish: "Avocado toast",
+    confident: ["Avocado", "Sourdough bread", "Poached egg"],
+    maybe: ["Chili flakes", "Olive oil"],
+    maybeFromNote: ["Wheat", "Butter"],
+  },
+  {
+    dish: "Burger and fries",
+    confident: ["Beef patty", "Burger bun", "Fries", "Lettuce"],
+    maybe: ["Cheese", "Ketchup"],
+    maybeFromNote: ["Onion", "Vegetable oil"],
+  },
 ];
 
 let model = null;
@@ -45,12 +63,58 @@ function getModel() {
   return model;
 }
 
-const PROMPT = `You are a food recognition assistant. Look at the photo and list the
-distinct food and drink items you can see on the plate.
+function recognizePrompt(note) {
+  return `You are a food recognition assistant for a gut-health app. Analyze the meal photo
+and identify the dish and its ingredients, separated by how sure you are.
+
+${note ? `The user added this context about the meal: "${note}". Use it to correct the dish name and to add likely ingredients that aren't visible (e.g. an instant ramen pack implies wheat noodles, palm oil, MSG, dried vegetables).` : ""}
+
+Return ONLY compact JSON in exactly this shape:
+{
+  "dish": "short dish name",
+  "ingredients": [
+    { "name": "ingredient", "confidence": "confident" | "maybe" }
+  ]
+}
+
 Rules:
-- Return ONLY compact JSON: {"foods": ["item", ...]}
-- Use short, common names (e.g. "Grilled chicken", "White rice", "Broccoli").
-- Max 6 items. If there is no food, return {"foods": []}.`;
+- "confident" = clearly visible in the photo OR explicitly implied by the user's note.
+- "maybe" = plausible given the dish/context but not clearly visible.
+- Use short, common, singular ingredient names (e.g. "Egg", "Kale", "Wheat noodles").
+- Max 10 ingredients total. If there is no food, return {"dish":"","ingredients":[]}.`;
+}
+
+function sanitizeMeal(parsed) {
+  const dish = typeof parsed?.dish === "string" && parsed.dish ? parsed.dish : "Meal";
+  const ingredients = Array.isArray(parsed?.ingredients)
+    ? parsed.ingredients
+        .filter((i) => i && typeof i.name === "string")
+        .map((i) => ({
+          name: i.name,
+          confidence: i.confidence === "maybe" ? "maybe" : "confident",
+        }))
+        .slice(0, 10)
+    : [];
+  return { dish, ingredients };
+}
+
+// Mock: derive a plausible structured meal, folding the note into "maybe" items.
+function mockMeal(note) {
+  const base = MOCK_MEALS[Math.floor(Math.random() * MOCK_MEALS.length)];
+  const meal = {
+    dish: base.dish,
+    ingredients: base.confident.map((name) => ({ name, confidence: "confident" })),
+  };
+  if (note) {
+    base.maybeFromNote.forEach((name) =>
+      meal.ingredients.push({ name, confidence: "maybe" })
+    );
+    if (/ramen|instant|packet|pack/i.test(note)) meal.dish = "Instant ramen";
+  } else {
+    base.maybe.forEach((name) => meal.ingredients.push({ name, confidence: "maybe" }));
+  }
+  return meal;
+}
 
 app.post("/api/recognize", async (c) => {
   try {
@@ -58,13 +122,12 @@ app.post("/api/recognize", async (c) => {
       return c.json({ error: "unauthorized" }, 401);
     }
 
-    const { image, mimeType } = await c.req.json();
+    const { image, mimeType, note } = await c.req.json();
     if (!image) return c.json({ error: "missing image" }, 400);
 
     if (MOCK_AI) {
       await new Promise((r) => setTimeout(r, 700)); // simulate latency
-      const foods = MOCK_MEALS[Math.floor(Math.random() * MOCK_MEALS.length)];
-      return c.json({ foods });
+      return c.json(mockMeal(note));
     }
 
     const result = await getModel().generateContent({
@@ -72,7 +135,7 @@ app.post("/api/recognize", async (c) => {
         {
           role: "user",
           parts: [
-            { text: PROMPT },
+            { text: recognizePrompt(note) },
             { inlineData: { mimeType: mimeType || "image/jpeg", data: image } },
           ],
         },
@@ -81,16 +144,13 @@ app.post("/api/recognize", async (c) => {
 
     const text =
       result.response?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
-    let foods = [];
+    let meal = { dish: "Meal", ingredients: [] };
     try {
-      const parsed = JSON.parse(text);
-      if (Array.isArray(parsed.foods)) {
-        foods = parsed.foods.filter((x) => typeof x === "string").slice(0, 6);
-      }
+      meal = sanitizeMeal(JSON.parse(text));
     } catch {
-      // model returned non-JSON; leave foods empty
+      // model returned non-JSON; leave default
     }
-    return c.json({ foods });
+    return c.json(meal);
   } catch (err) {
     console.error("recognize error:", err);
     return c.json({ error: String(err?.message || err) }, 500);

@@ -2,7 +2,7 @@
 // logs. The summary (not raw logs) is what we send to the AI to narrate, keeping
 // cost low and grounding the model. See docs/research-and-insights.md.
 
-import type { Entry } from "./db";
+import { confidentNames, type Entry } from "./db";
 import { getSymptom, type Severity } from "./symptoms";
 import { tagFood, TRIGGER_LABELS, IS_FODMAP, type TriggerGroup } from "./fodmap";
 
@@ -69,7 +69,7 @@ export function computeEvidence(entries: Entry[]): EvidenceSummary {
   const groupTotals = new Map<TriggerGroup, { total: number; withSym: number }>();
   for (const e of entries) {
     const groups = new Set<TriggerGroup>();
-    e.foods.forEach((f) => tagFood(f).forEach((g) => groups.add(g)));
+    confidentNames(e).forEach((f) => tagFood(f).forEach((g) => groups.add(g)));
     const hasSym = e.symptoms.some((s) => isNegative(s.id));
     for (const g of groups) {
       const cur = groupTotals.get(g) ?? { total: 0, withSym: 0 };
@@ -92,7 +92,7 @@ export function computeEvidence(entries: Entry[]): EvidenceSummary {
   const groupOccur = new Map<TriggerGroup, number>();
   for (const e of entries) {
     const groups = new Set<TriggerGroup>();
-    e.foods.forEach((f) => tagFood(f).forEach((g) => groups.add(g)));
+    confidentNames(e).forEach((f) => tagFood(f).forEach((g) => groups.add(g)));
     groups.forEach((g) => groupOccur.set(g, (groupOccur.get(g) ?? 0) + 1));
     const negSyms = e.symptoms.filter((s) => isNegative(s.id));
     for (const g of groups) {

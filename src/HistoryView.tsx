@@ -78,13 +78,17 @@ function EntryRow({ entry }: { entry: Entry }) {
         .join(", ")
     : "No symptoms logged";
 
+  const confident = entry.ingredients
+    .filter((i) => i.confidence === "confident")
+    .map((i) => i.name)
+    .join(", ");
+
   return (
     <div className="entry">
       {url && <img src={url} alt="" />}
       <div className="meta">
-        <div className="foods-line">
-          {entry.foods.length ? entry.foods.join(", ") : "Meal"}
-        </div>
+        <div className="foods-line">{entry.dish || "Meal"}</div>
+        {confident && <div className="sub">{confident}</div>}
         <div className="sub">{symptomText}</div>
         <div className="sub">{when}</div>
       </div>

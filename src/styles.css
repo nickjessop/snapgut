@@ -522,3 +522,67 @@ body {
   line-height: 1.45;
   margin-bottom: 14px;
 }
+
+/* ---------- Photo + note ---------- */
+.photo-wrap {
+  position: relative;
+  cursor: pointer;
+}
+.tap-hint {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+.note-caption {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+  line-height: 1.4;
+}
+.note-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.note-editor .search {
+  margin: 0;
+  resize: none;
+  font-family: inherit;
+}
+
+.dish-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 700;
+  padding: 2px 0;
+  border-bottom: 1px solid #2a2a2c;
+}
+.dish-input:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+}
+
+.chip.maybe {
+  background: transparent;
+  border: 1.5px dashed #6a6a6e;
+  color: var(--muted);
+}
+.chip.maybe .x {
+  margin-left: 2px;
+  padding: 0 4px;
+}
