@@ -1,6 +1,7 @@
 import { useState } from "react";
 import CameraView from "./CameraView";
-import MealReview from "./MealReview";
+import CapturePreview from "./CapturePreview";
+import MealDetails from "./MealDetails";
 import SymptomLogView from "./SymptomLogView";
 import BowelLogView from "./BowelLogView";
 import CheckinLogView from "./CheckinLogView";
@@ -9,13 +10,14 @@ import InsightsView from "./InsightsView";
 import type { LogEvent } from "./db";
 
 type Tab = "camera" | "logs" | "insights";
-type Flow = null | "meal-review" | "symptom" | "bowel" | "checkin";
+type Flow = null | "capture" | "meal-details" | "symptom" | "bowel" | "checkin";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("camera");
   const [flow, setFlow] = useState<Flow>(null);
   const [editing, setEditing] = useState<LogEvent | null>(null);
   const [photo, setPhoto] = useState<Blob | null>(null);
+  const [mealNote, setMealNote] = useState("");
   const [plusOpen, setPlusOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -23,6 +25,7 @@ export default function App() {
     setFlow(null);
     setEditing(null);
     setPhoto(null);
+    setMealNote("");
   }
   function finishFlow() {
     resetFlow();
@@ -30,7 +33,7 @@ export default function App() {
     setTab("logs");
   }
   function cancelFlow() {
-    const wasNewMeal = flow === "meal-review" && !editing;
+    const wasNewMeal = flow === "capture" || (flow === "meal-details" && !editing);
     resetFlow();
     if (wasNewMeal) setTab("camera");
   }
@@ -39,21 +42,42 @@ export default function App() {
     setEditing(event);
     if (event.type === "meal") {
       setPhoto(event.photo ?? null);
-      setFlow("meal-review");
+      setMealNote(event.note ?? "");
+      setFlow("meal-details");
     } else if (event.type === "symptom") setFlow("symptom");
     else if (event.type === "bowel") setFlow("bowel");
     else if (event.type === "checkin") setFlow("checkin");
   }
 
-  // ---- Full-screen logging flows ----
-  if (flow === "meal-review" && photo) {
+  // ---- Meal flow: capture (screen 1) → details (screen 2) ----
+  if (flow === "capture" && photo) {
     return (
       <div className="app">
-        <MealReview
+        <CapturePreview
           photo={photo}
-          editing={editing?.type === "meal" ? editing : undefined}
-          onDone={finishFlow}
+          initialNote={mealNote}
+          onProceed={(note) => {
+            setMealNote(note);
+            setFlow("meal-details");
+          }}
           onRetake={cancelFlow}
+        />
+      </div>
+    );
+  }
+  if (flow === "meal-details" && photo) {
+    return (
+      <div className="app">
+        <MealDetails
+          photo={photo}
+          initialNote={mealNote}
+          editing={editing?.type === "meal" ? editing : undefined}
+          onSaved={finishFlow}
+          onBack={() => {
+            // new meal → back to caption screen; editing → cancel out
+            if (editing) cancelFlow();
+            else setFlow("capture");
+          }}
         />
       </div>
     );
@@ -99,7 +123,8 @@ export default function App() {
         <CameraView
           onCapture={(p) => {
             setPhoto(p);
-            setFlow("meal-review");
+            setMealNote("");
+            setFlow("capture");
           }}
         />
       )}
