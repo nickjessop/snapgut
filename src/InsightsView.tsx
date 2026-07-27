@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getEntries } from "./db";
+import { getEvents } from "./db";
 import { computeEvidence, type EvidenceSummary } from "./insights";
 import { getInsights } from "./api";
 
@@ -18,8 +18,8 @@ export default function InsightsView() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const entries = await getEntries();
-      const ev = computeEvidence(entries);
+      const events = await getEvents();
+      const ev = computeEvidence(events);
       if (cancelled) return;
       setSummary(ev);
       try {
@@ -47,16 +47,16 @@ export default function InsightsView() {
       {summary && (
         <div className="stat-cards">
           <div className="stat-card">
-            <div className="n">{summary.entryCount}</div>
+            <div className="n">{summary.mealCount}</div>
             <div className="l">meals logged</div>
+          </div>
+          <div className="stat-card">
+            <div className="n">{summary.symptomCount}</div>
+            <div className="l">symptom check-ins</div>
           </div>
           <div className="stat-card">
             <div className="n">{summary.dayCount}</div>
             <div className="l">days tracked</div>
-          </div>
-          <div className="stat-card">
-            <div className="n">{summary.symptomEntryCount}</div>
-            <div className="l">with symptoms</div>
           </div>
           <div className="stat-card">
             <div className="n" style={{ fontSize: 16 }}>
@@ -87,6 +87,10 @@ export default function InsightsView() {
         <>
           <p className="section-title" style={{ marginTop: 20 }}>
             Possible associations
+          </p>
+          <p className="disclaimer" style={{ marginBottom: 10 }}>
+            Symptoms logged within {summary.lagWindowHours}h after a meal are linked
+            back to it. Count = how often it followed; % = how reliably.
           </p>
           {summary.associations.map((a, i) => (
             <div className="assoc" key={i}>

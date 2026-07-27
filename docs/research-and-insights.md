@@ -127,12 +127,14 @@ difficulty swallowing, anemia, new symptoms over age 50 → "please see a doctor
 
 ## 6. Roadmap / what we're missing (backlog)
 
-- [ ] Redesign symptom capture: searchable horizontal picker + severity  ← doing now
-- [ ] Timestamped, meal-independent symptom logging
-- [ ] FODMAP tagging of foods (client keyword → later AI-returned tags)
-- [ ] Bristol Stool Scale for bowel movements
+- [x] Redesign symptom capture: searchable horizontal picker + severity
+- [x] Timestamped, meal-independent symptom logging (event model + timeline)
+- [x] FODMAP tagging of foods (client keyword → later AI-returned tags)
+- [x] Bristol Stool Scale for bowel movements (own log type)
+- [x] Lag-window correlation (symptoms linked to meals in prior 24h)
+- [x] Backdating events (WhenPicker) for accurate timelines
 - [ ] Stress / sleep quick input (gut-brain axis)
-- [ ] Insights tab: on-device stats + layered AI narration  ← scaffolding now
+- [x] Insights tab: on-device stats + layered AI narration
 - [ ] "Best vs worst days" view
 - [ ] Guided 3-phase FODMAP mode (elimination → reintroduction → personalization)
 - [ ] n-of-1 self-experiment ("test this trigger") flow

@@ -202,7 +202,7 @@ function mockInsight(summary) {
   const templates = {
     "insufficient-data": {
       headline: "Keep logging — patterns are coming",
-      body: `You've logged ${s.entryCount ?? 0} meals so far. A few more days of snaps and symptom check-ins will let me surface reliable food–symptom associations. Aim for logging each main meal plus how your gut feels a few hours later.`,
+      body: `You've logged ${s.mealCount ?? 0} meals and ${s.symptomCount ?? 0} symptom check-ins so far. A few more days will let me line up meals against the symptoms that follow them and surface reliable associations.`,
     },
     "fodmap-suspect": {
       headline: assoc

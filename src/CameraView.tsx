@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from "react";
 
 interface Props {
   onCapture: (photo: Blob) => void;
-  onOpenHistory: () => void;
+  onClose: () => void;
 }
 
-export default function CameraView({ onCapture, onOpenHistory }: Props) {
+export default function CameraView({ onCapture, onClose }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -79,10 +79,10 @@ export default function CameraView({ onCapture, onOpenHistory }: Props) {
       )}
 
       <div className="top-bar">
-        <span />
-        <button className="icon-btn" onClick={onOpenHistory}>
-          Log
+        <button className="circle-btn" onClick={onClose} aria-label="Close">
+          ✕
         </button>
+        <span />
       </div>
 
       <div className="camera-controls">
