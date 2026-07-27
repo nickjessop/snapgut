@@ -189,13 +189,13 @@ function TimelineRow({ event, onClick }: { event: LogEvent; onClick: () => void 
 }
 
 function MealBody({ event }: { event: MealEvent }) {
-  const url = useMemo(
-    () => (event.photo ? URL.createObjectURL(event.photo) : null),
-    [event.photo]
-  );
-  useEffect(() => () => {
-    if (url) URL.revokeObjectURL(url);
-  }, [url]);
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!event.photo) return;
+    const u = URL.createObjectURL(event.photo);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [event.photo]);
 
   const confident = event.ingredients
     .filter((i) => i.confidence === "confident")

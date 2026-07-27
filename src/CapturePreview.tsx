@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 interface Props {
   photo: Blob;
@@ -13,10 +13,14 @@ interface Props {
  * the next screen so it can infer hidden ingredients.
  */
 export default function CapturePreview({ photo, initialNote = "", onProceed, onRetake }: Props) {
-  const photoUrl = useMemo(() => URL.createObjectURL(photo), [photo]);
+  const [photoUrl, setPhotoUrl] = useState("");
   const [note, setNote] = useState(initialNote);
 
-  useEffect(() => () => URL.revokeObjectURL(photoUrl), [photoUrl]);
+  useEffect(() => {
+    const url = URL.createObjectURL(photo);
+    setPhotoUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [photo]);
 
   return (
     <div className="capture">

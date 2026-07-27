@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { recognizeMeal } from "./api";
 import { addEvent, type Ingredient, type MealEvent } from "./db";
 
@@ -16,7 +16,7 @@ interface Props {
  * changing it lets you re-analyze.
  */
 export default function MealDetails({ photo, initialNote = "", editing, onSaved, onBack }: Props) {
-  const photoUrl = useMemo(() => URL.createObjectURL(photo), [photo]);
+  const [photoUrl, setPhotoUrl] = useState("");
   const [dish, setDish] = useState(editing?.dish ?? "");
   const [ingredients, setIngredients] = useState<Ingredient[]>(editing?.ingredients ?? []);
   const [note, setNote] = useState(editing?.note ?? initialNote);
@@ -27,7 +27,13 @@ export default function MealDetails({ photo, initialNote = "", editing, onSaved,
   const [enlarged, setEnlarged] = useState(false);
   const [editingNote, setEditingNote] = useState(false);
 
-  useEffect(() => () => URL.revokeObjectURL(photoUrl), [photoUrl]);
+  // Create the object URL inside an effect so it survives StrictMode's
+  // mount/unmount/mount and each instance revokes its own URL.
+  useEffect(() => {
+    const url = URL.createObjectURL(photo);
+    setPhotoUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [photo]);
 
   async function analyze(withNote: string) {
     setAnalyzing(true);
@@ -181,15 +187,14 @@ export default function MealDetails({ photo, initialNote = "", editing, onSaved,
       <div className="spacer" />
 
       {/* Small photo thumbnail — tap to enlarge */}
-      <div className="mini-photo-row">
+      {photoUrl && (
         <img
           className="mini-photo"
           src={photoUrl}
           alt="Meal"
           onClick={() => setEnlarged(true)}
         />
-        <span className="mini-hint">Tap photo to enlarge</span>
-      </div>
+      )}
 
       <button className="primary" disabled={saving || analyzing} onClick={save}>
         {saving ? "Saving…" : editing ? "Update" : "Save meal"}
