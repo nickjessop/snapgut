@@ -63,24 +63,32 @@ export default function FoodsTab({ reloadKey = 0 }: { reloadKey?: number }) {
 
 function FoodRow({ food, color }: { food: FoodScore; color: string }) {
   const showRate = food.rank !== "insufficient";
+  const elevated = food.rank === "avoid" || food.rank === "reduce";
+  const liftLabel =
+    food.lift === Infinity ? "only follows this" : `${food.lift.toFixed(1)}× your usual`;
+
   return (
     <div className="food-row">
       <FoodImage name={food.name} />
       <div className="food-meta">
-        <div className="food-name">{food.name}</div>
+        <div className="food-name">
+          {food.name}
+          {showRate && food.confidence === "low" && (
+            <span className="conf-tag">low confidence</span>
+          )}
+        </div>
         <div className="sub">
           Eaten {food.eaten}×
-          {showRate && ` · symptoms ${Math.round(food.symptomRate * 100)}% of the time`}
+          {showRate && ` · symptoms ${Math.round(food.foodRate * 100)}% of the time`}
+          {elevated && ` · ${liftLabel}`}
         </div>
         {food.topSymptoms.length > 0 && (
-          <div className="food-symptoms">
-            {food.topSymptoms.map((s) => s.label).join(", ")}
-          </div>
+          <div className="food-symptoms">{food.topSymptoms.map((s) => s.label).join(", ")}</div>
         )}
       </div>
       {showRate && (
         <div className="food-rate" style={{ color }}>
-          {Math.round(food.symptomRate * 100)}%
+          {Math.round(food.foodRate * 100)}%
         </div>
       )}
     </div>

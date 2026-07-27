@@ -952,3 +952,16 @@ body {
   font-size: 15px;
   flex: 0 0 auto;
 }
+
+.conf-tag {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  background: var(--card-2);
+  border-radius: 6px;
+  padding: 2px 6px;
+  margin-left: 8px;
+  vertical-align: middle;
+}

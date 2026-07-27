@@ -169,10 +169,20 @@ Ranks (need ≥3 exposures first):
 - **Avoid** ≥ 60% · **Reduce** 35–60% · **Neutral** 20–35% · **Agrees with you** ≤ 20%
 - **Need more data** if eaten < 3
 
-Caveat (by design): overlapping 24h windows can co-attribute an innocent food
-eaten shortly before a symptom caused by something else. More data + varied meal
-combinations separate true triggers over time; this is why it's framed as
-"patterns," min-exposure gated, and never presented as an allergy test.
+**Baseline-relative attribution (v2):** instead of raw follow-rate, each food is
+compared against your personal baseline — the symptom-follow rate for meals that
+*don't* contain it — via a lift ratio (`foodRate / baselineRate`). This:
+- down-weights foods you often eat *without* symptoms (they lower their own rate), and
+- won't flag a food whose rate merely matches your overall average (lift ≈ 1 → Neutral).
+
+Gates before "Avoid": eaten ≥ 4, symptom-follows ≥ 3, foodRate ≥ 60%, lift ≥ 1.6×,
+and ≥ 3 comparison meals without the food (so a food present in nearly every meal
+can't be blamed — it stays Neutral). "Reduce" is a softer version; "Agrees" needs a
+low rate at/below baseline. Confidence (low/med/high) scales with exposure count.
+
+Caveat that remains (by design): two foods that *always* co-occur can't be told
+apart until you eat one without the other. Framed as "patterns," gated, never an
+allergy test.
 
 ## 7. Sources
 
