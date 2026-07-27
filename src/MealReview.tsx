@@ -4,17 +4,20 @@ import { addEvent, type Ingredient, type MealEvent } from "./db";
 
 interface Props {
   photo: Blob;
+  editing?: MealEvent;
   onDone: () => void;
   onRetake: () => void;
 }
 
-export default function MealReview({ photo, onDone, onRetake }: Props) {
+export default function MealReview({ photo, editing, onDone, onRetake }: Props) {
   const photoUrl = useMemo(() => URL.createObjectURL(photo), [photo]);
-  const [dish, setDish] = useState("");
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [analyzing, setAnalyzing] = useState(true);
+  const [dish, setDish] = useState(editing?.dish ?? "");
+  const [ingredients, setIngredients] = useState<Ingredient[]>(
+    editing?.ingredients ?? []
+  );
+  const [analyzing, setAnalyzing] = useState(!editing);
   const [error, setError] = useState<string | null>(null);
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(editing?.note ?? "");
   const [editingNote, setEditingNote] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -35,7 +38,7 @@ export default function MealReview({ photo, onDone, onRetake }: Props) {
   }
 
   useEffect(() => {
-    analyze();
+    if (!editing) analyze(); // don't re-run AI when editing an existing meal
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -60,9 +63,9 @@ export default function MealReview({ photo, onDone, onRetake }: Props) {
   async function save() {
     setSaving(true);
     const event: MealEvent = {
-      id: crypto.randomUUID(),
+      id: editing?.id ?? crypto.randomUUID(),
       type: "meal",
-      createdAt: Date.now(),
+      createdAt: editing?.createdAt ?? Date.now(),
       dish: dish || "Meal",
       ingredients,
       note: note.trim() || undefined,
@@ -76,9 +79,9 @@ export default function MealReview({ photo, onDone, onRetake }: Props) {
     <div className="sheet">
       <div className="log-header">
         <button className="link-btn" onClick={onRetake}>
-          ‹ Retake
+          {editing ? "Cancel" : "‹ Retake"}
         </button>
-        <span className="log-title">Log a meal</span>
+        <span className="log-title">{editing ? "Edit meal" : "Log a meal"}</span>
         <span style={{ width: 60 }} />
       </div>
 

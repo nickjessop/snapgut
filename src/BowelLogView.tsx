@@ -6,15 +6,18 @@ import { addEvent, type BowelEvent, type LoggedSymptom } from "./db";
 import type { Severity } from "./symptoms";
 
 interface Props {
+  editing?: BowelEvent;
   onDone: () => void;
   onCancel: () => void;
 }
 
-export default function BowelLogView({ onDone, onCancel }: Props) {
-  const [bristol, setBristol] = useState<number | null>(null);
-  const [selected, setSelected] = useState<Map<string, Severity>>(new Map());
-  const [when, setWhen] = useState<number>(Date.now());
-  const [note, setNote] = useState("");
+export default function BowelLogView({ editing, onDone, onCancel }: Props) {
+  const [bristol, setBristol] = useState<number | null>(editing?.bristol ?? null);
+  const [selected, setSelected] = useState<Map<string, Severity>>(
+    () => new Map((editing?.symptoms ?? []).map((s) => [s.id, s.severity]))
+  );
+  const [when, setWhen] = useState<number>(editing?.createdAt ?? Date.now());
+  const [note, setNote] = useState(editing?.note ?? "");
   const [saving, setSaving] = useState(false);
 
   async function save() {
@@ -25,9 +28,9 @@ export default function BowelLogView({ onDone, onCancel }: Props) {
       severity,
     }));
     const event: BowelEvent = {
-      id: crypto.randomUUID(),
+      id: editing?.id ?? crypto.randomUUID(),
       type: "bowel",
-      createdAt: when,
+      createdAt: editing ? editing.createdAt : when,
       bristol,
       symptoms: symptoms.length ? symptoms : undefined,
       note: note.trim() || undefined,
@@ -66,7 +69,7 @@ export default function BowelLogView({ onDone, onCancel }: Props) {
         <SymptomPicker selected={selected} onChange={setSelected} />
       </div>
 
-      <WhenPicker onChange={setWhen} />
+      {!editing && <WhenPicker onChange={setWhen} />}
 
       <div>
         <p className="section-title">Note (optional)</p>
@@ -81,7 +84,7 @@ export default function BowelLogView({ onDone, onCancel }: Props) {
 
       <div className="spacer" />
       <button className="primary" disabled={saving || bristol == null} onClick={save}>
-        {saving ? "Saving…" : "Save"}
+        {saving ? "Saving…" : editing ? "Update" : "Save"}
       </button>
     </div>
   );

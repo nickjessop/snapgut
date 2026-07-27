@@ -5,14 +5,17 @@ import { addEvent, type LoggedSymptom, type SymptomEvent } from "./db";
 import type { Severity } from "./symptoms";
 
 interface Props {
+  editing?: SymptomEvent;
   onDone: () => void;
   onCancel: () => void;
 }
 
-export default function SymptomLogView({ onDone, onCancel }: Props) {
-  const [selected, setSelected] = useState<Map<string, Severity>>(new Map());
-  const [when, setWhen] = useState<number>(Date.now());
-  const [note, setNote] = useState("");
+export default function SymptomLogView({ editing, onDone, onCancel }: Props) {
+  const [selected, setSelected] = useState<Map<string, Severity>>(
+    () => new Map((editing?.symptoms ?? []).map((s) => [s.id, s.severity]))
+  );
+  const [when, setWhen] = useState<number>(editing?.createdAt ?? Date.now());
+  const [note, setNote] = useState(editing?.note ?? "");
   const [saving, setSaving] = useState(false);
 
   async function save() {
@@ -22,9 +25,9 @@ export default function SymptomLogView({ onDone, onCancel }: Props) {
       severity,
     }));
     const event: SymptomEvent = {
-      id: crypto.randomUUID(),
+      id: editing?.id ?? crypto.randomUUID(),
       type: "symptom",
-      createdAt: when,
+      createdAt: editing ? editing.createdAt : when,
       symptoms,
       note: note.trim() || undefined,
     };
@@ -44,7 +47,7 @@ export default function SymptomLogView({ onDone, onCancel }: Props) {
 
       <SymptomPicker selected={selected} onChange={setSelected} />
 
-      <WhenPicker onChange={setWhen} />
+      {!editing && <WhenPicker onChange={setWhen} />}
 
       <div>
         <p className="section-title">Note (optional)</p>
@@ -59,7 +62,7 @@ export default function SymptomLogView({ onDone, onCancel }: Props) {
 
       <div className="spacer" />
       <button className="primary" disabled={saving || selected.size === 0} onClick={save}>
-        {saving ? "Saving…" : "Save symptoms"}
+        {saving ? "Saving…" : editing ? "Update" : "Save symptoms"}
       </button>
     </div>
   );

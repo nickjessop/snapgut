@@ -133,8 +133,10 @@ difficulty swallowing, anemia, new symptoms over age 50 → "please see a doctor
 - [x] Bristol Stool Scale for bowel movements (own log type)
 - [x] Lag-window correlation (symptoms linked to meals in prior 24h)
 - [x] Backdating events (WhenPicker) for accurate timelines
-- [ ] Stress / sleep quick input (gut-brain axis)
+- [x] Stress / sleep quick input (gut-brain axis) — check-in event type
 - [x] Insights tab: on-device stats + layered AI narration
+- [x] Edit / delete any timeline event
+- [x] Camera-as-home (snap-first default view)
 - [ ] "Best vs worst days" view
 - [ ] Guided 3-phase FODMAP mode (elimination → reintroduction → personalization)
 - [ ] n-of-1 self-experiment ("test this trigger") flow

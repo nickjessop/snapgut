@@ -9,7 +9,7 @@ interface AiInsight {
   redFlag?: string;
 }
 
-export default function InsightsView() {
+export default function InsightsView({ reloadKey = 0 }: { reloadKey?: number }) {
   const [summary, setSummary] = useState<EvidenceSummary | null>(null);
   const [ai, setAi] = useState<AiInsight | null>(null);
   const [loading, setLoading] = useState(true);
@@ -17,6 +17,7 @@ export default function InsightsView() {
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
     (async () => {
       const events = await getEvents();
       const ev = computeEvidence(events);
@@ -34,7 +35,7 @@ export default function InsightsView() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadKey]);
 
   return (
     <div className="insights">

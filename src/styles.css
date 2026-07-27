@@ -767,3 +767,51 @@ body {
   object-fit: cover;
   flex: 0 0 auto;
 }
+
+/* camera nav button active ring */
+.tabbar .fab.active {
+  box-shadow: 0 0 0 3px rgba(255, 214, 10, 0.35), 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+
+/* floating + for symptom / bowel / check-in */
+.add-fab {
+  position: fixed;
+  right: 18px;
+  bottom: calc(84px + var(--safe-bottom));
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--card-2);
+  color: #fff;
+  border: 1px solid #3a3a3c;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 5;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.add-fab.on-camera {
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+}
+.add-fab:active {
+  transform: scale(0.94);
+}
+
+/* timeline detail sheet */
+.detail-title {
+  text-align: center;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 4px 0 12px;
+  font-size: 14px;
+}
+.action-item.danger .ai-title {
+  color: #ff6b6b;
+}
+.tl-row[role="button"] {
+  cursor: pointer;
+}

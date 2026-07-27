@@ -7,6 +7,7 @@ import {
   confidentNames,
   type LogEvent,
   type MealEvent,
+  type CheckinEvent,
   type LoggedSymptom,
 } from "./db";
 import { getSymptom, type Severity } from "./symptoms";
@@ -45,6 +46,8 @@ export interface EvidenceSummary {
   topTriggerGroups: { group: string; count: number; symptomRate: number }[];
   associations: Association[];
   lateNightSymptomRate: number | null;
+  // Of high-stress check-ins, share followed by symptoms within the lag window.
+  highStressSymptomRate: number | null;
   focus: Focus;
 }
 
@@ -147,7 +150,30 @@ export function computeEvidence(events: LogEvent[]): EvidenceSummary {
 
   const lateNightSymptomRate = lateMeals ? +(lateMealsWithSymptom / lateMeals).toFixed(2) : null;
 
-  const focus = route({ meals, symptomMoments, topTriggerGroups, associations, lateNightSymptomRate });
+  // --- stress → symptom signal (gut-brain axis) ---
+  const highStress = events.filter(
+    (e): e is CheckinEvent => e.type === "checkin" && e.stress === "high"
+  );
+  let highStressFollowed = 0;
+  for (const c of highStress) {
+    const followed = symptomMoments.some((m) => {
+      const dt = m.time - c.createdAt;
+      return dt > 0 && dt <= LAG_WINDOW_MS && m.symptoms.some((s) => isNegative(s.id));
+    });
+    if (followed) highStressFollowed += 1;
+  }
+  const highStressSymptomRate = highStress.length
+    ? +(highStressFollowed / highStress.length).toFixed(2)
+    : null;
+
+  const focus = route({
+    meals,
+    symptomMoments,
+    topTriggerGroups,
+    associations,
+    lateNightSymptomRate,
+    highStressSymptomRate,
+  });
 
   return {
     mealCount: meals.length,
@@ -158,6 +184,7 @@ export function computeEvidence(events: LogEvent[]): EvidenceSummary {
     topTriggerGroups,
     associations,
     lateNightSymptomRate,
+    highStressSymptomRate,
     focus,
   };
 }
@@ -168,8 +195,12 @@ function route(x: {
   topTriggerGroups: { group: string; count: number; symptomRate: number }[];
   associations: Association[];
   lateNightSymptomRate: number | null;
+  highStressSymptomRate: number | null;
 }): Focus {
   if (x.meals.length < 4 || x.symptomMoments.length < 2) return "insufficient-data";
+
+  // A strong stress→symptom link points to the gut-brain axis over food.
+  if ((x.highStressSymptomRate ?? 0) >= 0.6 && x.associations.length === 0) return "gut-brain";
 
   const systemicShare =
     x.symptomMoments.filter((m) => m.symptoms.some((s) => HISTAMINE_HINT.has(s.id))).length /

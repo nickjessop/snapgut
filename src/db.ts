@@ -52,7 +52,18 @@ export interface BowelEvent extends BaseEvent {
   symptoms?: LoggedSymptom[]; // optional (e.g. urgency)
 }
 
-export type LogEvent = MealEvent | SymptomEvent | BowelEvent;
+export type StressLevel = "low" | "medium" | "high";
+export type SleepQuality = "poor" | "ok" | "good";
+
+// Gut-brain axis: stress and sleep influence gut symptoms, so we capture them
+// as their own lightweight check-in event.
+export interface CheckinEvent extends BaseEvent {
+  type: "checkin";
+  stress?: StressLevel;
+  sleep?: SleepQuality;
+}
+
+export type LogEvent = MealEvent | SymptomEvent | BowelEvent | CheckinEvent;
 
 // ---- Helpers ----
 
@@ -120,6 +131,8 @@ export function toCSV(events: LogEvent[], labelFor: (id: string) => string): str
     "maybe_ingredients",
     "symptoms",
     "bristol",
+    "stress",
+    "sleep",
     "note",
   ];
 
@@ -133,6 +146,8 @@ export function toCSV(events: LogEvent[], labelFor: (id: string) => string): str
     let maybe = "";
     let symptoms = "";
     let bristol = "";
+    let stress = "";
+    let sleep = "";
 
     if (e.type === "meal") {
       dish = e.dish;
@@ -143,9 +158,12 @@ export function toCSV(events: LogEvent[], labelFor: (id: string) => string): str
     } else if (e.type === "bowel") {
       bristol = String(e.bristol);
       symptoms = symptomsText(e.symptoms);
+    } else if (e.type === "checkin") {
+      stress = e.stress ?? "";
+      sleep = e.sleep ?? "";
     }
 
-    return [dt, e.type, dish, confident, maybe, symptoms, bristol, e.note ?? ""].map(csvEscape);
+    return [dt, e.type, dish, confident, maybe, symptoms, bristol, stress, sleep, e.note ?? ""].map(csvEscape);
   });
 
   return [header, ...rows].map((r) => r.join(",")).join("\r\n");

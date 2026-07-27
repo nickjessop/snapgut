@@ -2,10 +2,9 @@ import { useEffect, useRef, useState } from "react";
 
 interface Props {
   onCapture: (photo: Blob) => void;
-  onClose: () => void;
 }
 
-export default function CameraView({ onCapture, onClose }: Props) {
+export default function CameraView({ onCapture }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -77,13 +76,6 @@ export default function CameraView({ onCapture, onClose }: Props) {
       ) : (
         <video ref={videoRef} autoPlay playsInline muted />
       )}
-
-      <div className="top-bar">
-        <button className="circle-btn" onClick={onClose} aria-label="Close">
-          ✕
-        </button>
-        <span />
-      </div>
 
       <div className="camera-controls">
         {error === "live" ? (

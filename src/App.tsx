@@ -3,59 +3,91 @@ import CameraView from "./CameraView";
 import MealReview from "./MealReview";
 import SymptomLogView from "./SymptomLogView";
 import BowelLogView from "./BowelLogView";
+import CheckinLogView from "./CheckinLogView";
 import LogsView from "./LogsView";
 import InsightsView from "./InsightsView";
+import type { LogEvent } from "./db";
 
-type Tab = "logs" | "insights";
-type Flow = null | "camera" | "meal-review" | "symptom" | "bowel";
+type Tab = "camera" | "logs" | "insights";
+type Flow = null | "meal-review" | "symptom" | "bowel" | "checkin";
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>("logs");
+  const [tab, setTab] = useState<Tab>("camera");
   const [flow, setFlow] = useState<Flow>(null);
-  const [plusOpen, setPlusOpen] = useState(false);
+  const [editing, setEditing] = useState<LogEvent | null>(null);
   const [photo, setPhoto] = useState<Blob | null>(null);
+  const [plusOpen, setPlusOpen] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  function closeFlow() {
+  function resetFlow() {
     setFlow(null);
+    setEditing(null);
     setPhoto(null);
   }
   function finishFlow() {
-    closeFlow();
+    resetFlow();
+    setReloadKey((k) => k + 1);
     setTab("logs");
   }
-
-  // ---- Full-screen logging flows (over the tab shell) ----
-  if (flow === "camera") {
-    return (
-      <div className="app">
-        <CameraView
-          onCapture={(p) => {
-            setPhoto(p);
-            setFlow("meal-review");
-          }}
-          onClose={closeFlow}
-        />
-      </div>
-    );
+  function cancelFlow() {
+    const wasNewMeal = flow === "meal-review" && !editing;
+    resetFlow();
+    if (wasNewMeal) setTab("camera");
   }
+
+  function startEdit(event: LogEvent) {
+    setEditing(event);
+    if (event.type === "meal") {
+      setPhoto(event.photo ?? null);
+      setFlow("meal-review");
+    } else if (event.type === "symptom") setFlow("symptom");
+    else if (event.type === "bowel") setFlow("bowel");
+    else if (event.type === "checkin") setFlow("checkin");
+  }
+
+  // ---- Full-screen logging flows ----
   if (flow === "meal-review" && photo) {
     return (
       <div className="app">
-        <MealReview photo={photo} onDone={finishFlow} onRetake={() => setFlow("camera")} />
+        <MealReview
+          photo={photo}
+          editing={editing?.type === "meal" ? editing : undefined}
+          onDone={finishFlow}
+          onRetake={cancelFlow}
+        />
       </div>
     );
   }
   if (flow === "symptom") {
     return (
       <div className="app">
-        <SymptomLogView onDone={finishFlow} onCancel={closeFlow} />
+        <SymptomLogView
+          editing={editing?.type === "symptom" ? editing : undefined}
+          onDone={finishFlow}
+          onCancel={cancelFlow}
+        />
       </div>
     );
   }
   if (flow === "bowel") {
     return (
       <div className="app">
-        <BowelLogView onDone={finishFlow} onCancel={closeFlow} />
+        <BowelLogView
+          editing={editing?.type === "bowel" ? editing : undefined}
+          onDone={finishFlow}
+          onCancel={cancelFlow}
+        />
+      </div>
+    );
+  }
+  if (flow === "checkin") {
+    return (
+      <div className="app">
+        <CheckinLogView
+          editing={editing?.type === "checkin" ? editing : undefined}
+          onDone={finishFlow}
+          onCancel={cancelFlow}
+        />
       </div>
     );
   }
@@ -63,52 +95,64 @@ export default function App() {
   // ---- Tab shell ----
   return (
     <div className="app">
-      {tab === "logs" && <LogsView />}
-      {tab === "insights" && <InsightsView />}
+      {tab === "camera" && (
+        <CameraView
+          onCapture={(p) => {
+            setPhoto(p);
+            setFlow("meal-review");
+          }}
+        />
+      )}
+      {tab === "logs" && <LogsView onEdit={startEdit} reloadKey={reloadKey} />}
+      {tab === "insights" && <InsightsView reloadKey={reloadKey} />}
+
+      {/* Floating + for the non-photo log types */}
+      {tab !== "camera" && (
+        <button className="add-fab" onClick={() => setPlusOpen(true)} aria-label="Add log">
+          ＋
+        </button>
+      )}
+      {tab === "camera" && (
+        <button
+          className="add-fab on-camera"
+          onClick={() => setPlusOpen(true)}
+          aria-label="Add log"
+        >
+          ＋
+        </button>
+      )}
 
       {plusOpen && (
         <div className="sheet-backdrop" onClick={() => setPlusOpen(false)}>
           <div className="action-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="action-grip" />
-            <button
-              className="action-item"
-              onClick={() => {
-                setPlusOpen(false);
-                setFlow("camera");
-              }}
-            >
-              <span className="ai-ico">📷</span>
-              <div>
-                <div className="ai-title">Food snap</div>
-                <div className="ai-sub">Photo → AI ingredients</div>
-              </div>
-            </button>
-            <button
-              className="action-item"
+            <ActionItem
+              icon="🩺"
+              title="Symptom"
+              sub="How your gut feels, right now or earlier"
               onClick={() => {
                 setPlusOpen(false);
                 setFlow("symptom");
               }}
-            >
-              <span className="ai-ico">🩺</span>
-              <div>
-                <div className="ai-title">Symptom</div>
-                <div className="ai-sub">How your gut feels, right now or earlier</div>
-              </div>
-            </button>
-            <button
-              className="action-item"
+            />
+            <ActionItem
+              icon="🚽"
+              title="Bowel movement"
+              sub="Bristol scale + optional symptoms"
               onClick={() => {
                 setPlusOpen(false);
                 setFlow("bowel");
               }}
-            >
-              <span className="ai-ico">🚽</span>
-              <div>
-                <div className="ai-title">Bowel movement</div>
-                <div className="ai-sub">Bristol scale + optional symptoms</div>
-              </div>
-            </button>
+            />
+            <ActionItem
+              icon="🧠"
+              title="Stress & sleep"
+              sub="Gut-brain check-in"
+              onClick={() => {
+                setPlusOpen(false);
+                setFlow("checkin");
+              }}
+            />
             <button className="action-cancel" onClick={() => setPlusOpen(false)}>
               Cancel
             </button>
@@ -121,8 +165,12 @@ export default function App() {
           <span className="ico">📖</span>
           Logs
         </button>
-        <button className="fab" onClick={() => setPlusOpen(true)} aria-label="Add log">
-          ＋
+        <button
+          className={`fab${tab === "camera" ? " active" : ""}`}
+          onClick={() => setTab("camera")}
+          aria-label="Camera"
+        >
+          📷
         </button>
         <button
           className={tab === "insights" ? "active" : ""}
@@ -133,5 +181,27 @@ export default function App() {
         </button>
       </nav>
     </div>
+  );
+}
+
+function ActionItem({
+  icon,
+  title,
+  sub,
+  onClick,
+}: {
+  icon: string;
+  title: string;
+  sub: string;
+  onClick: () => void;
+}) {
+  return (
+    <button className="action-item" onClick={onClick}>
+      <span className="ai-ico">{icon}</span>
+      <div>
+        <div className="ai-title">{title}</div>
+        <div className="ai-sub">{sub}</div>
+      </div>
+    </button>
   );
 }
