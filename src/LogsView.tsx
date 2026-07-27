@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getEvents,
   deleteEvent,
@@ -8,29 +8,36 @@ import {
 } from "./db";
 import { getSymptom, BRISTOL } from "./symptoms";
 import {
-  MealIcon,
-  SymptomIcon,
-  BowelIcon,
-  CheckinIcon,
-  NoteIcon,
-  EditIcon,
-  DeleteIcon,
-  type IconProps,
-} from "./icons";
-import type { ComponentType } from "react";
+  exportBackup,
+  importBackup,
+  isBackupDue,
+  getLastBackupAt,
+  daysSince,
+  snoozeReminder,
+} from "./backup";
 
 interface Props {
   onEdit: (event: LogEvent) => void;
-  reloadKey: number; // bump to force a reload after edits elsewhere
+  onChanged: () => void; // bump global reload (e.g. after a restore)
+  reloadKey: number;
 }
 
-export default function LogsView({ onEdit, reloadKey }: Props) {
+export default function LogsView({ onEdit, onChanged, reloadKey }: Props) {
   const [events, setEvents] = useState<LogEvent[]>([]);
   const [detail, setDetail] = useState<LogEvent | null>(null);
+  const [dataSheet, setDataSheet] = useState(false);
+  const [nudgeDismissed, setNudgeDismissed] = useState(false);
+  const [lastBackup, setLastBackup] = useState<number | null>(getLastBackupAt());
+  const [busy, setBusy] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     getEvents().then(setEvents);
   }, [reloadKey]);
+
+  const hasEvents = events.length > 0;
+  const due = hasEvents && !nudgeDismissed && isBackupDue(true);
 
   async function remove(id: string) {
     await deleteEvent(id);
@@ -46,6 +53,7 @@ export default function LogsView({ onEdit, reloadKey }: Props) {
     if (nav.share && nav.canShare?.({ files: [file] })) {
       try {
         await nav.share({ files: [file], title: "Food Snap export" });
+        setDataSheet(false);
         return;
       } catch {
         /* fall through */
@@ -57,7 +65,46 @@ export default function LogsView({ onEdit, reloadKey }: Props) {
     a.download = "food-snap.csv";
     a.click();
     URL.revokeObjectURL(url);
+    setDataSheet(false);
   }
+
+  async function doBackup() {
+    setBusy("Preparing backup…");
+    try {
+      const n = await exportBackup();
+      setLastBackup(getLastBackupAt());
+      setNudgeDismissed(true);
+      setToast(`Backup ready · ${n} item${n === 1 ? "" : "s"}`);
+    } catch {
+      setToast("Couldn't create the backup.");
+    }
+    setBusy(null);
+    setDataSheet(false);
+  }
+
+  async function onFilePicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking same file
+    if (!file) return;
+    setBusy("Restoring…");
+    try {
+      const n = await importBackup(file);
+      const ev = await getEvents();
+      setEvents(ev);
+      onChanged();
+      setToast(`Restored ${n} item${n === 1 ? "" : "s"}`);
+    } catch (err) {
+      setToast((err as Error).message);
+    }
+    setBusy(null);
+    setDataSheet(false);
+  }
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const groups = useMemo(() => {
     const map = new Map<string, LogEvent[]>();
@@ -70,19 +117,47 @@ export default function LogsView({ onEdit, reloadKey }: Props) {
     return [...map.entries()];
   }, [events]);
 
+  const statusText =
+    lastBackup === null
+      ? "Never backed up"
+      : daysSince(lastBackup) === 0
+      ? "Backed up today"
+      : `Last backup ${daysSince(lastBackup)}d ago`;
+
   return (
     <div className="history">
       <div className="history-header">
         <h1>Timeline</h1>
-        {events.length > 0 && (
-          <button className="link-btn" onClick={exportCSV}>
-            Export CSV
-          </button>
-        )}
+        <button className="icon-round" onClick={() => setDataSheet(true)} aria-label="Data & backup">
+          ⚙︎
+        </button>
       </div>
 
+      {due && (
+        <div className="nudge">
+          <div className="nudge-text">
+            Your log lives only on this device. Back it up so you don't lose it.
+            <div className="nudge-sub">{statusText}</div>
+          </div>
+          <div className="nudge-actions">
+            <button className="chip selected" onClick={doBackup}>
+              Back up
+            </button>
+            <button
+              className="link-btn"
+              onClick={() => {
+                snoozeReminder();
+                setNudgeDismissed(true);
+              }}
+            >
+              Later
+            </button>
+          </div>
+        </div>
+      )}
+
       {events.length === 0 ? (
-        <p className="empty">Nothing logged yet. Tap + or snap a meal to start.</p>
+        <p className="empty">Nothing logged yet. Tap ＋ or snap a meal to start.</p>
       ) : (
         groups.map(([day, dayEvents]) => (
           <div key={day} className="day-group">
@@ -94,13 +169,40 @@ export default function LogsView({ onEdit, reloadKey }: Props) {
         ))
       )}
 
+      {/* hidden import picker */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="application/json,.json"
+        style={{ display: "none" }}
+        onChange={onFilePicked}
+      />
+
+      {toast && <div className="toast">{toast}</div>}
+      {busy && <div className="toast">{busy}</div>}
+
+      {/* Data & backup sheet */}
+      {dataSheet && (
+        <div className="sheet-backdrop" onClick={() => setDataSheet(false)}>
+          <div className="action-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="action-grip" />
+            <div className="detail-title">Data & backup · {statusText}</div>
+            <ActionItem icon="⬆️" title="Back up data" sub="Save a full backup (with photos) to Files/iCloud" onClick={doBackup} />
+            <ActionItem icon="⬇️" title="Restore from backup" sub="Import a backup file — merges into your log" onClick={() => fileRef.current?.click()} />
+            <ActionItem icon="📄" title="Export as CSV" sub="Spreadsheet of your timeline" onClick={exportCSV} />
+            <button className="action-cancel" onClick={() => setDataSheet(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* event detail sheet */}
       {detail && (
         <div className="sheet-backdrop" onClick={() => setDetail(null)}>
           <div className="action-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="action-grip" />
-            <div className="detail-title">
-              <EventLabel event={detail} /> · {formatTime(detail.createdAt)}
-            </div>
+            <div className="detail-title">{describe(detail)}</div>
             <button
               className="action-item"
               onClick={() => {
@@ -109,15 +211,11 @@ export default function LogsView({ onEdit, reloadKey }: Props) {
                 onEdit(e);
               }}
             >
-              <span className="ai-ico">
-                <EditIcon size={22} />
-              </span>
+              <span className="ai-ico">✏️</span>
               <div className="ai-title">Edit</div>
             </button>
             <button className="action-item danger" onClick={() => remove(detail.id)}>
-              <span className="ai-ico">
-                <DeleteIcon size={22} />
-              </span>
+              <span className="ai-ico">🗑️</span>
               <div className="ai-title">Delete</div>
             </button>
             <button className="action-cancel" onClick={() => setDetail(null)}>
@@ -130,32 +228,44 @@ export default function LogsView({ onEdit, reloadKey }: Props) {
   );
 }
 
-const KIND: Record<LogEvent["type"], { Icon: ComponentType<IconProps>; label: string }> = {
-  meal: { Icon: MealIcon, label: "Meal" },
-  symptom: { Icon: SymptomIcon, label: "Symptoms" },
-  bowel: { Icon: BowelIcon, label: "Bowel movement" },
-  checkin: { Icon: CheckinIcon, label: "Stress & sleep" },
-};
-
-/** Inline icon + text label for a log event (used in headers/titles). */
-function EventLabel({ event }: { event: LogEvent }) {
-  const { Icon, label } = KIND[event.type];
-  const text = event.type === "meal" ? event.dish || "Meal" : label;
+function ActionItem({
+  icon,
+  title,
+  sub,
+  onClick,
+}: {
+  icon: string;
+  title: string;
+  sub: string;
+  onClick: () => void;
+}) {
   return (
-    <span className="evt-label">
-      <Icon size={16} />
-      {text}
-    </span>
+    <button className="action-item" onClick={onClick}>
+      <span className="ai-ico">{icon}</span>
+      <div>
+        <div className="ai-title">{title}</div>
+        <div className="ai-sub">{sub}</div>
+      </div>
+    </button>
   );
 }
 
-function formatTime(ts: number): string {
-  return new Date(ts).toLocaleString(undefined, {
+function describe(e: LogEvent): string {
+  const time = new Date(e.createdAt).toLocaleString(undefined, {
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
   });
+  const kind =
+    e.type === "meal"
+      ? `🍽️ ${e.dish || "Meal"}`
+      : e.type === "symptom"
+      ? "🩺 Symptoms"
+      : e.type === "bowel"
+      ? "🚽 Bowel movement"
+      : "🧠 Stress & sleep";
+  return `${kind} · ${time}`;
 }
 
 function formatDay(dateStr: string): string {
@@ -181,43 +291,30 @@ function TimelineRow({ event, onClick }: { event: LogEvent; onClick: () => void 
         {event.type === "meal" && <MealBody event={event} />}
         {event.type === "symptom" && (
           <>
-            <div className="tl-title">
-              <SymptomIcon size={16} /> Symptoms
-            </div>
+            <div className="tl-title">🩺 Symptoms</div>
             <div className="sub">{symptomLine(event.symptoms)}</div>
           </>
         )}
         {event.type === "bowel" && (
           <>
             <div className="tl-title">
-              <BowelIcon size={16} /> Bowel movement · type {event.bristol}{" "}
+              🚽 Bowel movement · type {event.bristol}{" "}
               {BRISTOL.find((b) => b.type === event.bristol)?.emoji}
             </div>
-            {event.symptoms?.length ? (
-              <div className="sub">{symptomLine(event.symptoms)}</div>
-            ) : null}
+            {event.symptoms?.length ? <div className="sub">{symptomLine(event.symptoms)}</div> : null}
           </>
         )}
         {event.type === "checkin" && (
           <>
-            <div className="tl-title">
-              <CheckinIcon size={16} /> Stress & sleep
-            </div>
+            <div className="tl-title">🧠 Stress & sleep</div>
             <div className="sub">
-              {[
-                event.stress && `Stress: ${event.stress}`,
-                event.sleep && `Sleep: ${event.sleep}`,
-              ]
+              {[event.stress && `Stress: ${event.stress}`, event.sleep && `Sleep: ${event.sleep}`]
                 .filter(Boolean)
                 .join(" · ")}
             </div>
           </>
         )}
-        {event.note && (
-          <div className="sub note">
-            <NoteIcon size={13} /> {event.note}
-          </div>
-        )}
+        {event.note && <div className="sub note">📝 {event.note}</div>}
       </div>
     </div>
   );
@@ -241,9 +338,7 @@ function MealBody({ event }: { event: MealEvent }) {
     <div className="meal-body">
       {url && <img src={url} alt="" className="tl-thumb" />}
       <div>
-        <div className="tl-title">
-          <MealIcon size={16} /> {event.dish || "Meal"}
-        </div>
+        <div className="tl-title">🍽️ {event.dish || "Meal"}</div>
         {confident && <div className="sub">{confident}</div>}
       </div>
     </div>

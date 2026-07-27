@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import CameraView from "./CameraView";
 import CapturePreview from "./CapturePreview";
 import MealDetails from "./MealDetails";
@@ -7,6 +7,7 @@ import BowelLogView from "./BowelLogView";
 import CheckinLogView from "./CheckinLogView";
 import LogsView from "./LogsView";
 import InsightsView from "./InsightsView";
+import { requestPersistentStorage } from "./backup";
 import {
   CameraIcon,
   SymptomIcon,
@@ -31,6 +32,11 @@ export default function App() {
   const [mealNote, setMealNote] = useState("");
   const [plusOpen, setPlusOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+
+  // Ask the browser to keep our storage (guards against eviction under pressure).
+  useEffect(() => {
+    requestPersistentStorage();
+  }, []);
 
   function resetFlow() {
     setFlow(null);
@@ -139,7 +145,13 @@ export default function App() {
           }}
         />
       )}
-      {tab === "logs" && <LogsView onEdit={startEdit} reloadKey={reloadKey} />}
+      {tab === "logs" && (
+        <LogsView
+          onEdit={startEdit}
+          reloadKey={reloadKey}
+          onChanged={() => setReloadKey((k) => k + 1)}
+        />
+      )}
       {tab === "insights" && <InsightsView reloadKey={reloadKey} />}
 
       {plusOpen && (
