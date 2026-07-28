@@ -1189,13 +1189,43 @@ body {
   letter-spacing: 0.04em;
   margin: 8px 0 10px;
 }
-/* Stepper timeline: [day circle] [time] [icon + content], no connecting line */
+/* Stepper timeline: [day circle / dot on a connecting rail] [time] [icon + content] */
 .tl-row {
   display: grid;
   grid-template-columns: 34px auto 1fr;
-  align-items: start;
+  align-items: stretch;
   gap: 10px;
   padding-bottom: 18px;
+}
+/* marker column: a vertical rail with the day circle (or a dot) sitting on it */
+.tl-marker {
+  position: relative;
+  width: 34px;
+  display: flex;
+  justify-content: center;
+}
+.tl-marker::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--card-3);
+  z-index: 0;
+}
+/* last event of a month has nothing below it — no trailing rail */
+.day-group .tl-row:last-child .tl-marker::before {
+  display: none;
+}
+.tl-node {
+  position: relative;
+  z-index: 1;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .tl-daynum {
   width: 34px;
@@ -1206,9 +1236,8 @@ body {
   justify-content: center;
   font-size: 14px;
   font-weight: var(--fw-bold);
-  background: transparent;
-  /* other days: a lighter outline */
-  border: 2px solid var(--card-3);
+  background: var(--bg); /* cover the rail behind the circle */
+  border: 2px solid var(--card-3); /* other days: lighter outline */
   color: var(--muted);
 }
 /* active (today) day: a stronger green outline + text */
@@ -1216,10 +1245,13 @@ body {
   border-color: var(--accent);
   color: var(--accent);
 }
-/* subsequent events on the same day keep the column but hide the circle */
-.tl-daynum-spacer {
-  width: 34px;
-  height: 1px;
+/* subsequent events on the same day: a small dot on the rail */
+.tl-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--card-3);
+  box-shadow: 0 0 0 4px var(--bg); /* separate the dot from the rail */
 }
 .tl-time {
   font-size: 12px;

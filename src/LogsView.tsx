@@ -283,13 +283,17 @@ function TimelineRow({
 
   return (
     <div className="tl-row" onClick={onClick} role="button">
-      {showDay ? (
-        <span className={`tl-daynum${isToday(event.createdAt) ? " today" : ""}`}>
-          {d.getDate()}
-        </span>
-      ) : (
-        <span className="tl-daynum-spacer" />
-      )}
+      <div className="tl-marker">
+        <div className="tl-node">
+          {showDay ? (
+            <span className={`tl-daynum${isToday(event.createdAt) ? " today" : ""}`}>
+              {d.getDate()}
+            </span>
+          ) : (
+            <span className="tl-dot" />
+          )}
+        </div>
+      </div>
       <span className="tl-time">{time}</span>
       <div className="tl-item">
         <span className="tl-ico">{iconFor(event.type)}</span>
