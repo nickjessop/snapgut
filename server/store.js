@@ -19,7 +19,14 @@ export const FREE_AI_LIMIT = Number(process.env.FREE_AI_LIMIT ?? 10);
 const norm = (email) => String(email || "").trim().toLowerCase();
 
 function newUser(email) {
-  return { email: norm(email), pro: false, proUntil: null, freeAiUsed: 0, createdAt: Date.now() };
+  return {
+    email: norm(email),
+    pro: false,
+    proUntil: null,
+    freeAiUsed: 0,
+    stripeCustomerId: null,
+    createdAt: Date.now(),
+  };
 }
 
 /** True if the user currently has Pro (lifetime = null proUntil; else not expired). */
@@ -56,11 +63,12 @@ function memoryStore() {
       }
       return u;
     },
-    async setPro(email, proUntil) {
+    async setPro(email, proUntil, customerId) {
       const u = users.get(norm(email));
       if (!u) return null;
       u.pro = true;
       u.proUntil = proUntil ?? null;
+      if (customerId) u.stripeCustomerId = customerId;
       return u;
     },
     async incFreeAi(email) {
@@ -68,6 +76,11 @@ function memoryStore() {
       if (!u) return 0;
       u.freeAiUsed += 1;
       return u.freeAiUsed;
+    },
+    async deleteUser(email) {
+      const key = norm(email);
+      users.delete(key);
+      codes.delete(key);
     },
     async getCode(email) {
       return codes.get(norm(email)) || null;
@@ -102,6 +115,7 @@ async function supabaseStore() {
       pro: !!r.pro,
       proUntil: r.pro_until ?? null,
       freeAiUsed: r.free_ai_used ?? 0,
+      stripeCustomerId: r.stripe_customer_id ?? null,
       createdAt: r.created_at,
     };
 
@@ -119,13 +133,20 @@ async function supabaseStore() {
       await sb.from("users").upsert(row, { onConflict: "email", ignoreDuplicates: true });
       return (await this.getUser(key2)) || mapUser(row);
     },
-    async setPro(email, proUntil) {
-      await sb.from("users").update({ pro: true, pro_until: proUntil ?? null }).eq("email", norm(email));
+    async setPro(email, proUntil, customerId) {
+      const patch = { pro: true, pro_until: proUntil ?? null };
+      if (customerId) patch.stripe_customer_id = customerId;
+      await sb.from("users").update(patch).eq("email", norm(email));
       return this.getUser(email);
     },
     async incFreeAi(email) {
       const { data } = await sb.rpc("inc_free_ai", { p_email: norm(email) });
       return data ?? 0;
+    },
+    async deleteUser(email) {
+      const key2 = norm(email);
+      await sb.from("users").delete().eq("email", key2);
+      await sb.from("auth_codes").delete().eq("email", key2);
     },
     async getCode(email) {
       const { data } = await sb.from("auth_codes").select("*").eq("email", norm(email)).maybeSingle();
@@ -172,15 +193,22 @@ async function firestoreStore() {
       await ref.set(u);
       return u;
     },
-    async setPro(email, proUntil) {
+    async setPro(email, proUntil, customerId) {
       const ref = usersCol.doc(norm(email));
-      await ref.set({ pro: true, proUntil: proUntil ?? null }, { merge: true });
+      const patch = { pro: true, proUntil: proUntil ?? null };
+      if (customerId) patch.stripeCustomerId = customerId;
+      await ref.set(patch, { merge: true });
       return (await ref.get()).data();
     },
     async incFreeAi(email) {
       const ref = usersCol.doc(norm(email));
       await ref.update({ freeAiUsed: FieldValue.increment(1) });
       return (await ref.get()).data()?.freeAiUsed ?? 0;
+    },
+    async deleteUser(email) {
+      const key = norm(email);
+      await usersCol.doc(key).delete();
+      await codesCol.doc(key).delete();
     },
     async getCode(email) {
       const snap = await codesCol.doc(norm(email)).get();

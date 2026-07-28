@@ -76,3 +76,13 @@ export function checkout(
 ): Promise<{ simulated?: boolean; url?: string } & Partial<Entitlement>> {
   return post("/api/billing/checkout", { plan });
 }
+
+/** Delete the server-side account (entitlement). Caller wipes local data + token. */
+export function deleteAccount(): Promise<{ ok: boolean }> {
+  return post("/api/account/delete");
+}
+
+/** Open the Stripe billing portal (manage/cancel subscription). Returns { url }. */
+export function openPortal(): Promise<{ url?: string }> {
+  return post("/api/billing/portal");
+}

@@ -9,8 +9,11 @@ create table if not exists public.users (
   pro           boolean not null default false,
   pro_until     bigint,                       -- epoch ms; null = lifetime / none
   free_ai_used  integer not null default 0,
+  stripe_customer_id text,                     -- Stripe customer id (for billing portal)
   created_at    bigint  not null
 );
+-- If upgrading an existing deployment:
+--   alter table public.users add column if not exists stripe_customer_id text;
 
 -- ---- passwordless verification codes (one active per email) ----
 create table if not exists public.auth_codes (

@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   getEvents,
   deleteEvent,
-  toCSV,
   type LogEvent,
   type MealEvent,
 } from "./db";
@@ -12,7 +11,6 @@ import type { Entitlement } from "./session";
 import InstallHint from "./InstallHint";
 import {
   exportBackup,
-  importBackup,
   isBackupDue,
   getLastBackupAt,
   daysSince,
@@ -21,21 +19,25 @@ import {
 
 interface Props {
   onEdit: (event: LogEvent) => void;
-  onChanged: () => void; // bump global reload (e.g. after a restore)
   reloadKey: number;
   entitlement: Entitlement | null;
   onUpgrade: () => void;
+  onOpenSettings: () => void;
 }
 
-export default function LogsView({ onEdit, onChanged, reloadKey, entitlement, onUpgrade }: Props) {
+export default function LogsView({
+  onEdit,
+  reloadKey,
+  entitlement,
+  onUpgrade,
+  onOpenSettings,
+}: Props) {
   const [events, setEvents] = useState<LogEvent[]>([]);
   const [detail, setDetail] = useState<LogEvent | null>(null);
-  const [dataSheet, setDataSheet] = useState(false);
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
   const [lastBackup, setLastBackup] = useState<number | null>(getLastBackupAt());
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     getEvents().then(setEvents);
@@ -50,29 +52,6 @@ export default function LogsView({ onEdit, onChanged, reloadKey, entitlement, on
     setDetail(null);
   }
 
-  async function exportCSV() {
-    const csv = toCSV(events, (id) => getSymptom(id)?.label ?? id);
-    const blob = new Blob([csv], { type: "text/csv" });
-    const file = new File([blob], "snapgut.csv", { type: "text/csv" });
-    const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
-    if (nav.share && nav.canShare?.({ files: [file] })) {
-      try {
-        await nav.share({ files: [file], title: "SnapGut export" });
-        setDataSheet(false);
-        return;
-      } catch {
-        /* fall through */
-      }
-    }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "snapgut.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-    setDataSheet(false);
-  }
-
   async function doBackup() {
     setBusy("Preparing backup…");
     try {
@@ -84,25 +63,6 @@ export default function LogsView({ onEdit, onChanged, reloadKey, entitlement, on
       setToast("Couldn't create the backup.");
     }
     setBusy(null);
-    setDataSheet(false);
-  }
-
-  async function onFilePicked(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-picking same file
-    if (!file) return;
-    setBusy("Restoring…");
-    try {
-      const n = await importBackup(file);
-      const ev = await getEvents();
-      setEvents(ev);
-      onChanged();
-      setToast(`Restored ${n} item${n === 1 ? "" : "s"}`);
-    } catch (err) {
-      setToast((err as Error).message);
-    }
-    setBusy(null);
-    setDataSheet(false);
   }
 
   useEffect(() => {
@@ -155,7 +115,7 @@ export default function LogsView({ onEdit, onChanged, reloadKey, entitlement, on
                 ✨ {Math.max(0, entitlement.freeAiLimit - entitlement.freeAiUsed)} free
               </button>
             ))}
-          <button className="icon-round" onClick={() => setDataSheet(true)} aria-label="Data & backup">
+          <button className="icon-round" onClick={onOpenSettings} aria-label="Settings">
             ⚙︎
           </button>
         </div>
@@ -205,33 +165,8 @@ export default function LogsView({ onEdit, onChanged, reloadKey, entitlement, on
         ))
       )}
 
-      {/* hidden import picker */}
-      <input
-        ref={fileRef}
-        type="file"
-        accept="application/json,.json"
-        style={{ display: "none" }}
-        onChange={onFilePicked}
-      />
-
       {toast && <div className="toast">{toast}</div>}
       {busy && <div className="toast">{busy}</div>}
-
-      {/* Data & backup sheet */}
-      {dataSheet && (
-        <div className="sheet-backdrop" onClick={() => setDataSheet(false)}>
-          <div className="action-sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="action-grip" />
-            <div className="detail-title">Data & backup · {statusText}</div>
-            <ActionItem icon="⬆️" title="Back up data" sub="Save a full backup (with photos) to Files/iCloud" onClick={doBackup} />
-            <ActionItem icon="⬇️" title="Restore from backup" sub="Import a backup file — merges into your log" onClick={() => fileRef.current?.click()} />
-            <ActionItem icon="📄" title="Export as CSV" sub="Spreadsheet of your timeline" onClick={exportCSV} />
-            <button className="action-cancel" onClick={() => setDataSheet(false)}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* event detail sheet */}
       {detail && (
@@ -261,28 +196,6 @@ export default function LogsView({ onEdit, onChanged, reloadKey, entitlement, on
         </div>
       )}
     </div>
-  );
-}
-
-function ActionItem({
-  icon,
-  title,
-  sub,
-  onClick,
-}: {
-  icon: string;
-  title: string;
-  sub: string;
-  onClick: () => void;
-}) {
-  return (
-    <button className="action-item" onClick={onClick}>
-      <span className="ai-ico">{icon}</span>
-      <div>
-        <div className="ai-title">{title}</div>
-        <div className="ai-sub">{sub}</div>
-      </div>
-    </button>
   );
 }
 

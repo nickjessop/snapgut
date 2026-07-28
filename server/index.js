@@ -448,6 +448,16 @@ app.get("/api/me", async (c) => {
   return c.json({ email: user.email, ...entitlement(user) });
 });
 
+// Delete the user's server-side account (entitlement + auth code). Local device
+// data (IndexedDB, token) is wiped client-side after this succeeds.
+app.post("/api/account/delete", async (c) => {
+  const email = sessionEmail(c);
+  if (!email) return c.json({ error: "unauthorized" }, 401);
+  const store = await getStore();
+  await store.deleteUser(email);
+  return c.json({ ok: true });
+});
+
 // ---- Billing (Stripe; dev-simulated without keys) ----
 
 function proUntilFor(plan) {
@@ -494,6 +504,26 @@ app.post("/api/billing/checkout", async (c) => {
   return c.json({ url: session.url });
 });
 
+// Stripe customer billing portal (manage/cancel a subscription). Requires a live
+// Stripe key and a stored customer id (set the first time a real checkout completes).
+app.post("/api/billing/portal", async (c) => {
+  const email = sessionEmail(c);
+  if (!email) return c.json({ error: "unauthorized" }, 401);
+  if (!STRIPE_SECRET) return c.json({ error: "billing_disabled" }, 400);
+
+  const store = await getStore();
+  const user = await store.getUser(email);
+  if (!user?.stripeCustomerId) return c.json({ error: "no_customer" }, 400);
+
+  const origin = c.req.header("origin") || `https://${c.req.header("host")}`;
+  const s = await getStripe();
+  const session = await s.billingPortal.sessions.create({
+    customer: user.stripeCustomerId,
+    return_url: `${origin}/`,
+  });
+  return c.json({ url: session.url });
+});
+
 app.post("/api/billing/webhook", async (c) => {
   if (!STRIPE_SECRET) return c.json({ error: "billing_disabled" }, 400);
   const sig = c.req.header("stripe-signature");
@@ -507,8 +537,9 @@ app.post("/api/billing/webhook", async (c) => {
   }
   const store = await getStore();
   if (evt.type === "checkout.session.completed") {
-    const m = evt.data.object.metadata || {};
-    if (m.email) await store.setPro(m.email, proUntilFor(m.plan));
+    const obj = evt.data.object;
+    const m = obj.metadata || {};
+    if (m.email) await store.setPro(m.email, proUntilFor(m.plan), obj.customer || undefined);
   }
   // NOTE: for recurring plans, also handle invoice.paid (extend proUntil) and
   // customer.subscription.deleted (revoke). See docs/auth-and-credits.md.

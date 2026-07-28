@@ -7,6 +7,7 @@ import BowelLogView from "./BowelLogView";
 import CheckinLogView from "./CheckinLogView";
 import LogsView from "./LogsView";
 import InsightsView from "./InsightsView";
+import SettingsView from "./SettingsView";
 import Intro, { ONBOARDED_KEY } from "./Intro";
 import AuthGate from "./AuthGate";
 import Paywall from "./Paywall";
@@ -26,7 +27,7 @@ import type { LogEvent } from "./db";
 import type { ComponentType } from "react";
 
 type Tab = "camera" | "logs" | "insights";
-type Flow = null | "capture" | "meal-details" | "symptom" | "bowel" | "checkin";
+type Flow = null | "capture" | "meal-details" | "symptom" | "bowel" | "checkin" | "settings";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("camera");
@@ -189,6 +190,24 @@ export default function App() {
     );
   }
 
+  if (flow === "settings") {
+    return (
+      <div className="app">
+        <SettingsView
+          entitlement={ent}
+          onClose={() => setFlow(null)}
+          onUpgrade={() => setPaywall("upsell")}
+          onSignedOut={() => {
+            resetFlow();
+            signOut();
+          }}
+          onChanged={() => setReloadKey((k) => k + 1)}
+        />
+        {paywallEl}
+      </div>
+    );
+  }
+
   // ---- Tab shell ----
   return (
     <div className="app">
@@ -205,9 +224,9 @@ export default function App() {
         <LogsView
           onEdit={startEdit}
           reloadKey={reloadKey}
-          onChanged={() => setReloadKey((k) => k + 1)}
           entitlement={ent}
           onUpgrade={() => setPaywall("upsell")}
+          onOpenSettings={() => setFlow("settings")}
         />
       )}
       {tab === "insights" && (
