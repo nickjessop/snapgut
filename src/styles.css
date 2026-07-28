@@ -548,9 +548,12 @@ body {
 
 .severity {
   display: inline-flex;
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
   background: var(--card-2);
+}
+.sev {
+  transition: background 0.12s ease, color 0.12s ease;
 }
 .sev {
   border: none;
@@ -750,9 +753,10 @@ body {
   border: none;
   background: transparent;
   color: var(--text);
-  font-size: 22px;
-  font-weight: 700;
-  padding: 2px 0;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  padding: 2px 0 6px;
   border-bottom: 1px solid #2a2a2c;
 }
 .dish-input:focus {
@@ -1332,4 +1336,38 @@ body {
     animation-duration: 0.001ms !important;
     transition-duration: 0.001ms !important;
   }
+}
+
+/* ---------- Micro-interactions ---------- */
+.tl-row {
+  border-radius: 12px;
+  transition: background 0.12s ease;
+}
+.tl-row:active {
+  background: rgba(255, 255, 255, 0.045);
+}
+.icon-round {
+  transition: transform 0.16s var(--spring), background 0.15s ease;
+}
+.icon-round:active {
+  transform: scale(0.9);
+  background: var(--card-3);
+}
+.link-btn {
+  transition: opacity 0.12s ease;
+}
+.link-btn:active {
+  opacity: 0.55;
+}
+.action-cancel {
+  transition: opacity 0.12s ease;
+}
+.action-cancel:active {
+  opacity: 0.55;
+}
+.seg-btn {
+  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+.assoc {
+  transition: background 0.12s ease;
 }
