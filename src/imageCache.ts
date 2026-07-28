@@ -1,8 +1,13 @@
-// Remembers which ingredient images TheMealDB doesn't have, so we render the
-// letter-avatar immediately instead of re-requesting a known 404 every session.
+// Remembers which foods have no image available, so we render the letter-avatar
+// immediately instead of re-requesting a known 404 every session.
 // (Successful images are cached by the service worker; see vite.config.ts.)
+//
+// The key is versioned by PACK_VERSION: bump it whenever the illustration pack
+// gains new images, so previously-"missing" foods get re-checked.
 
-const KEY = "food-img-missing";
+export const PACK_VERSION = 1;
+
+const KEY = `food-img-missing-v${PACK_VERSION}`;
 let cache: Set<string> | null = null;
 
 function load(): Set<string> {

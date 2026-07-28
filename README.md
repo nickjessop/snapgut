@@ -44,9 +44,28 @@ on :8080.
 ## One-time GCP setup
 
 ```bash
+gcloud auth login                        # CLI access
+gcloud auth application-default login    # credentials the app/scripts use locally
 gcloud config set project YOUR_PROJECT_ID
 gcloud services enable aiplatform.googleapis.com run.googleapis.com
 ```
+
+## Food illustration pack (one-time, offline)
+
+Food thumbnails come from our **own** Imagen-generated botanical illustrations in
+`public/foods/` — generated once, committed, then served as static assets (no runtime
+AI cost, no third-party image licensing). See `docs/security-and-infra-todo.md`.
+
+```bash
+node scripts/gen-food-images.mjs --dry-run     # list + cost estimate (~$5 for 247)
+node scripts/gen-food-images.mjs --limit 5     # sanity-check the style first
+node scripts/gen-food-images.mjs               # generate everything missing
+```
+
+Resumable and idempotent (existing files are skipped; `--force` overwrites). Edit the
+food list in `scripts/food-list.txt` and the art direction via `STYLE` in the script —
+keep `STYLE` fixed so the set stays visually cohesive. Bump `PACK_VERSION` in
+`src/imageCache.ts` after adding images so clients re-check previously-missing foods.
 
 ## Deploy to Cloud Run (single container)
 

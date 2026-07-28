@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { isMissing, markMissing } from "./imageCache";
+import { packUrl, mealDbUrl, slugify, MEALDB_FALLBACK } from "./foodImages";
 
-// Deterministic pastel background for the fallback letter-avatar.
+// Deterministic background for the fallback letter-avatar.
 function colorFor(name: string): string {
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
@@ -9,17 +10,18 @@ function colorFor(name: string): string {
 }
 
 /**
- * Ingredient thumbnail from TheMealDB's free static image CDN, with a generated
- * letter-avatar fallback when the image isn't found (no broken-image icons).
- * See docs/research-and-insights.md for the DB research.
+ * Ingredient thumbnail. Tries our own illustration pack first, then (in dev only)
+ * TheMealDB, then falls back to a generated letter-avatar so we never render a
+ * broken-image icon. See src/foodImages.ts for why the order matters.
  */
 export default function FoodImage({ name }: { name: string }) {
-  const slug = name.trim().replace(/\s+/g, "_");
-  // Skip the network entirely for images we've already learned are missing.
-  const [failed, setFailed] = useState(() => isMissing(slug));
-  const url = `https://www.themealdb.com/images/ingredients/${encodeURIComponent(slug)}-small.png`;
+  const slug = slugify(name);
+  const sources = [packUrl(name), ...(MEALDB_FALLBACK ? [mealDbUrl(name)] : [])];
 
-  if (failed) {
+  // Skip straight to the avatar for foods we've already learned have no image.
+  const [idx, setIdx] = useState(() => (isMissing(slug) ? sources.length : 0));
+
+  if (idx >= sources.length) {
     return (
       <div className="food-avatar" style={{ background: colorFor(name) }}>
         {name.trim().charAt(0).toUpperCase() || "?"}
@@ -30,12 +32,13 @@ export default function FoodImage({ name }: { name: string }) {
   return (
     <img
       className="food-img"
-      src={url}
+      src={sources[idx]}
       alt=""
       loading="lazy"
       onError={() => {
-        markMissing(slug);
-        setFailed(true);
+        const next = idx + 1;
+        if (next >= sources.length) markMissing(slug); // exhausted every source
+        setIdx(next);
       }}
     />
   );

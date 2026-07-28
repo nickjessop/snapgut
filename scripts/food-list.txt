@@ -1,0 +1,274 @@
+# SnapGut food illustration pack — one food per line.
+# Lines starting with # and blank lines are ignored.
+# Slug = lowercase, non-alphanumerics -> "-" (e.g. "Greek yogurt" -> greek-yogurt.png)
+#
+# Curated toward FODMAP/IBS relevance: common triggers, staples, and safe foods.
+
+# --- grains & starches ---
+Wheat bread
+Sourdough bread
+White rice
+Brown rice
+Oats
+Pasta
+Wheat noodles
+Rice noodles
+Quinoa
+Corn tortilla
+Potato
+Sweet potato
+Couscous
+Barley
+Rye bread
+
+# --- alliums & high-FODMAP vegetables ---
+Onion
+Red onion
+Garlic
+Leek
+Shallot
+Spring onion
+Cauliflower
+Broccoli
+Cabbage
+Brussels sprouts
+Asparagus
+Artichoke
+Mushroom
+Snow peas
+Beetroot
+Celery
+Sweetcorn
+
+# --- low-FODMAP vegetables ---
+Carrot
+Zucchini
+Cucumber
+Bell pepper
+Spinach
+Kale
+Lettuce
+Tomato
+Eggplant
+Green beans
+Bok choy
+Radish
+Pumpkin
+Parsnip
+Turnip
+
+# --- fruit ---
+Apple
+Pear
+Banana
+Ripe banana
+Watermelon
+Mango
+Cherries
+Peach
+Nectarine
+Plum
+Apricot
+Blueberries
+Strawberries
+Raspberries
+Blackberries
+Orange
+Mandarin
+Lemon
+Lime
+Grapes
+Kiwi
+Pineapple
+Cantaloupe
+Avocado
+Dried apricots
+Raisins
+Dates
+Prunes
+Figs
+
+# --- dairy & alternatives ---
+Milk
+Skim milk
+Lactose-free milk
+Cream
+Butter
+Cheddar cheese
+Parmesan cheese
+Feta cheese
+Mozzarella
+Ricotta
+Cottage cheese
+Cream cheese
+Greek yogurt
+Yogurt
+Ice cream
+Almond milk
+Oat milk
+Soy milk
+Coconut milk
+Kefir
+
+# --- protein ---
+Egg
+Chicken
+Grilled chicken
+Beef
+Beef patty
+Pork
+Bacon
+Ham
+Sausage
+Salami
+Turkey
+Lamb
+Salmon
+Tuna
+Shrimp
+Cod
+Tofu
+Tempeh
+Chickpeas
+Black beans
+Kidney beans
+Lentils
+Baked beans
+Peanuts
+Almonds
+Cashews
+Walnuts
+Pistachios
+Pecans
+Hazelnuts
+Peanut butter
+Sunflower seeds
+Pumpkin seeds
+Chia seeds
+Flaxseed
+
+# --- fats, condiments & seasonings ---
+Olive oil
+Vegetable oil
+Coconut oil
+Palm oil
+Sesame oil
+Soy sauce
+Fish sauce
+Ketchup
+Mustard
+Mayonnaise
+Vinegar
+Balsamic vinegar
+Hot sauce
+Chili flakes
+Black pepper
+Salt
+Ginger
+Turmeric
+Cumin
+Cinnamon
+Basil
+Parsley
+Cilantro
+Mint
+Rosemary
+Thyme
+Oregano
+Bay leaf
+Paprika
+Curry powder
+MSG
+Tahini
+Hummus
+Pesto
+Salsa
+
+# --- sweeteners ---
+Sugar
+Honey
+Maple syrup
+High-fructose corn syrup
+Agave syrup
+Sorbitol
+Xylitol
+Mannitol
+Stevia
+Artificial sweetener
+Molasses
+
+# --- drinks ---
+Coffee
+Espresso
+Black tea
+Green tea
+Peppermint tea
+Chamomile tea
+Beer
+Wine
+Red wine
+White wine
+Whiskey
+Vodka
+Cider
+Kombucha
+Soda
+Diet soda
+Energy drink
+Orange juice
+Apple juice
+Sparkling water
+
+# --- fermented & aged (histamine-relevant) ---
+Sauerkraut
+Kimchi
+Miso
+Pickles
+Aged cheese
+Cured meat
+Anchovies
+Olives
+Vinegar pickles
+
+# --- prepared / composite dishes ---
+Pizza
+Burger
+Fries
+Sandwich
+Ramen
+Instant ramen
+Sushi
+Curry
+Stir fry
+Salad
+Soup
+Omelette
+Pancakes
+Cereal
+Granola
+Muesli
+Toast
+Bagel
+Croissant
+Muffin
+Cookie
+Cake
+Chocolate
+Dark chocolate
+Milk chocolate
+Chips
+Popcorn
+Pretzels
+Protein bar
+Smoothie
+Scrambled eggs
+Poached egg
+Fried rice
+Mac and cheese
+Lasagna
+Tacos
+Burrito
+Pad thai
+Pho
+Dumplings
+Spring rolls
