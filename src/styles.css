@@ -24,8 +24,8 @@
        500  #37966f   <- ref 500  100  #ecd2c4
        300  #7cc3a3
        100  #b9e4c9   <- ref 100  Neutral · Cream / Ink
-        50  #e4f1e9               cream-50  #fffbea  <- ref 50
-                                  cream-100 #f4edd2
+        50  #e4f1e9               cream-50  #fdfcf6  (bright warm off-white)
+                                  cream-100 #f3efe0
                                   ink-900   #14261f
                                   ink-700   #1f3a30  (light text)
                                   ink-300   #5e7a6e  (muted text)
@@ -45,8 +45,8 @@
   --terracotta-300: #cd8560;
   --terracotta-100: #ecd2c4;
 
-  --cream-50: #fffbea;
-  --cream-100: #f4edd2;
+  --cream-50: #fdfcf6; /* bright warm off-white */
+  --cream-100: #f3efe0;
   --ink-900: #14261f;
   --ink-700: #1f3a30;
   --ink-300: #5e7a6e;

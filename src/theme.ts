@@ -6,7 +6,7 @@ export type ThemePref = "light" | "dark" | "auto";
 export type ResolvedTheme = "light" | "dark";
 
 const KEY = "snapgut-theme";
-const THEME_COLOR = { light: "#fffbea", dark: "#0f1a16" } as const;
+const THEME_COLOR = { light: "#fdfcf6", dark: "#0f1a16" } as const;
 
 export function getThemePref(): ThemePref {
   const v = localStorage.getItem(KEY);
