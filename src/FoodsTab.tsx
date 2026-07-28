@@ -8,6 +8,7 @@ import {
   type FoodRank,
 } from "./foodScores";
 import FoodImage from "./FoodImage";
+import { InsightsIcon as SparklesIcon } from "./icons";
 
 export default function FoodsTab({ reloadKey = 0 }: { reloadKey?: number }) {
   const [events, setEvents] = useState<LogEvent[]>([]);
@@ -37,7 +38,13 @@ export default function FoodsTab({ reloadKey = 0 }: { reloadKey?: number }) {
       </p>
 
       {!hasMeals ? (
-        <p className="empty">Log a few meals and symptoms to start ranking foods.</p>
+        <div className="empty-state">
+          <div className="empty-badge">
+            <SparklesIcon size={34} strokeWidth={1.75} />
+          </div>
+          <h2 className="empty-title">Nothing to rank yet</h2>
+          <p className="empty-sub">Log a few meals and symptoms and we'll surface which foods agree with you.</p>
+        </div>
       ) : (
         RANK_ORDER.map((rank) => {
           const items = grouped.get(rank);

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { CameraIcon } from "./icons";
 
 interface Props {
   onCapture: (photo: Blob) => void;
@@ -68,28 +69,28 @@ export default function CameraView({ onCapture }: Props) {
   return (
     <div className="camera">
       {error === "live" ? (
-        <div className="sheet" style={{ justifyContent: "center" }}>
-          <p className="status">
-            Camera preview isn't available here. Tap below to take a photo.
+        <div className="camera-fallback">
+          <div className="cam-badge">
+            <CameraIcon size={40} strokeWidth={1.75} />
+          </div>
+          <h2 className="cam-title">Snap your meal</h2>
+          <p className="cam-sub">
+            Take a photo and we'll pull out the ingredients automatically.
           </p>
-        </div>
-      ) : (
-        <video ref={videoRef} autoPlay playsInline muted />
-      )}
-
-      <div className="camera-controls">
-        {error === "live" ? (
-          <button className="primary" onClick={() => fileRef.current?.click()}>
+          <button className="primary cam-cta" onClick={() => fileRef.current?.click()}>
             Take photo
           </button>
-        ) : (
-          <button
-            className="shutter"
-            aria-label="Take photo"
-            onClick={snap}
-          />
-        )}
-      </div>
+        </div>
+      ) : (
+        <>
+          <video ref={videoRef} autoPlay playsInline muted />
+          <div className="camera-scrim" />
+          <div className="camera-hint">Point at your plate</div>
+          <div className="camera-controls">
+            <button className="shutter" aria-label="Take photo" onClick={snap} />
+          </div>
+        </>
+      )}
 
       <input
         ref={fileRef}

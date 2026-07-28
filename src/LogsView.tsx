@@ -7,6 +7,7 @@ import {
   type MealEvent,
 } from "./db";
 import { getSymptom, BRISTOL } from "./symptoms";
+import { MealIcon } from "./icons";
 import InstallHint from "./InstallHint";
 import {
   exportBackup,
@@ -160,7 +161,13 @@ export default function LogsView({ onEdit, onChanged, reloadKey }: Props) {
       )}
 
       {events.length === 0 ? (
-        <p className="empty">Nothing logged yet. Tap ＋ or snap a meal to start.</p>
+        <div className="empty-state">
+          <div className="empty-badge">
+            <MealIcon size={34} strokeWidth={1.75} />
+          </div>
+          <h2 className="empty-title">No logs yet</h2>
+          <p className="empty-sub">Snap a meal or tap ＋ to start tracking how food makes you feel.</p>
+        </div>
       ) : (
         groups.map(([day, dayEvents]) => (
           <div key={day} className="day-group">
