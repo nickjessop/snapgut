@@ -98,22 +98,15 @@ app.use("/api/*", async (c, next) => {
   return next();
 });
 
-// ---- rate limiting (per-process; move to shared store for multi-instance) ----
-const rlHits = new Map();
-function rateLimit(key, max, windowMs) {
-  const now = Date.now();
-  const arr = (rlHits.get(key) || []).filter((t) => now - t < windowMs);
-  arr.push(now);
-  rlHits.set(key, arr);
-  return arr.length <= max;
-}
+// ---- rate limiting (shared via the store, so it holds across instances) ----
 function clientIp(c) {
   return (c.req.header("x-forwarded-for") || "").split(",")[0].trim() || "local";
 }
 
 // Cap auth abuse (email bombing / code brute force) per IP.
 app.use("/api/auth/*", async (c, next) => {
-  if (!rateLimit(`auth:${clientIp(c)}`, 20, 60_000)) {
+  const store = await getStore();
+  if (!(await store.rateLimit(`auth-ip:${clientIp(c)}`, 20, 60_000))) {
     return c.json({ error: "rate_limited" }, 429);
   }
   return next();
@@ -121,7 +114,6 @@ app.use("/api/auth/*", async (c, next) => {
 
 // ---- auth helpers ----
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const requestThrottle = new Map(); // email -> lastSentAt (per-process)
 
 function bearer(c) {
   const h = c.req.header("authorization") || "";
@@ -403,12 +395,13 @@ app.post("/api/auth/request", async (c) => {
     if (!email || !EMAIL_RE.test(email)) return c.json({ error: "invalid_email" }, 400);
     const key = email.trim().toLowerCase();
 
-    const last = requestThrottle.get(key) || 0;
-    if (Date.now() - last < 30_000) return c.json({ error: "too_soon" }, 429);
-    requestThrottle.set(key, Date.now());
+    const store = await getStore();
+    // Per-email throttle (shared): at most one code request per 30s.
+    if (!(await store.rateLimit(`auth-email:${key}`, 1, 30_000))) {
+      return c.json({ error: "too_soon" }, 429);
+    }
 
     const code = generateCode();
-    const store = await getStore();
     await store.setCode(key, {
       hash: hashCode(code),
       expiresAt: Date.now() + 10 * 60_000,

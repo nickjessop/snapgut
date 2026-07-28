@@ -1,11 +1,19 @@
-// Data store for users, entitlement, and auth codes.
-// - dev (default): in-memory (resets on restart) — fine for local testing.
-// - prod: Firestore when USERS_BACKEND=firestore (uses ADC like Vertex AI).
+// Data store for users, entitlement, auth codes, and rate limits.
+// Backends (USERS_BACKEND): "memory" (dev, default) | "supabase" | "firestore".
 //
 // Entitlement model (no credits): a user is either Pro (unlimited AI) or on a
 // free trial of FREE_AI_LIMIT AI actions shared across snaps + insight generations.
+//
+// rateLimit() lives in the store so limits/throttles are SHARED across Cloud Run
+// instances (in-memory backend is per-process and only suitable for local dev).
 
-const BACKEND = process.env.USERS_BACKEND === "firestore" ? "firestore" : "memory";
+const BACKEND =
+  process.env.USERS_BACKEND === "supabase"
+    ? "supabase"
+    : process.env.USERS_BACKEND === "firestore"
+    ? "firestore"
+    : "memory";
+
 export const FREE_AI_LIMIT = Number(process.env.FREE_AI_LIMIT ?? 10);
 
 const norm = (email) => String(email || "").trim().toLowerCase();
@@ -30,10 +38,11 @@ export function entitlement(user) {
   };
 }
 
-// ---- in-memory ----
+// ---- in-memory (dev) ----
 function memoryStore() {
   const users = new Map();
   const codes = new Map();
+  const rl = new Map(); // key -> timestamps[]
   return {
     async getUser(email) {
       return users.get(norm(email)) || null;
@@ -51,7 +60,7 @@ function memoryStore() {
       const u = users.get(norm(email));
       if (!u) return null;
       u.pro = true;
-      u.proUntil = proUntil ?? null; // null = lifetime
+      u.proUntil = proUntil ?? null;
       return u;
     },
     async incFreeAi(email) {
@@ -69,15 +78,87 @@ function memoryStore() {
     async clearCode(email) {
       codes.delete(norm(email));
     },
+    async rateLimit(key, max, windowMs) {
+      const now = Date.now();
+      const arr = (rl.get(key) || []).filter((t) => now - t < windowMs);
+      arr.push(now);
+      rl.set(key, arr);
+      return arr.length <= max;
+    },
   };
 }
 
-// ---- Firestore ----
+// ---- Supabase (prod) ----
+async function supabaseStore() {
+  const { createClient } = await import("@supabase/supabase-js");
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
+  const sb = createClient(url, key, { auth: { persistSession: false } });
+
+  const mapUser = (r) =>
+    r && {
+      email: r.email,
+      pro: !!r.pro,
+      proUntil: r.pro_until ?? null,
+      freeAiUsed: r.free_ai_used ?? 0,
+      createdAt: r.created_at,
+    };
+
+  return {
+    async getUser(email) {
+      const { data } = await sb.from("users").select("*").eq("email", norm(email)).maybeSingle();
+      return mapUser(data);
+    },
+    async upsertUser(email) {
+      const key2 = norm(email);
+      const existing = await this.getUser(key2);
+      if (existing) return existing;
+      const row = { email: key2, pro: false, pro_until: null, free_ai_used: 0, created_at: Date.now() };
+      // ignoreDuplicates handles a race where another instance inserted first
+      await sb.from("users").upsert(row, { onConflict: "email", ignoreDuplicates: true });
+      return (await this.getUser(key2)) || mapUser(row);
+    },
+    async setPro(email, proUntil) {
+      await sb.from("users").update({ pro: true, pro_until: proUntil ?? null }).eq("email", norm(email));
+      return this.getUser(email);
+    },
+    async incFreeAi(email) {
+      const { data } = await sb.rpc("inc_free_ai", { p_email: norm(email) });
+      return data ?? 0;
+    },
+    async getCode(email) {
+      const { data } = await sb.from("auth_codes").select("*").eq("email", norm(email)).maybeSingle();
+      return data && { hash: data.hash, expiresAt: data.expires_at, attempts: data.attempts };
+    },
+    async setCode(email, rec) {
+      await sb.from("auth_codes").upsert(
+        { email: norm(email), hash: rec.hash, expires_at: rec.expiresAt, attempts: rec.attempts },
+        { onConflict: "email" }
+      );
+    },
+    async clearCode(email) {
+      await sb.from("auth_codes").delete().eq("email", norm(email));
+    },
+    async rateLimit(key2, max, windowMs) {
+      const { data, error } = await sb.rpc("rate_limit_hit", {
+        p_key: key2,
+        p_max: max,
+        p_window_seconds: Math.ceil(windowMs / 1000),
+      });
+      if (error) return true; // fail-open on limiter errors (don't lock users out)
+      return data === true;
+    },
+  };
+}
+
+// ---- Firestore (alt prod) ----
 async function firestoreStore() {
   const { Firestore, FieldValue } = await import("@google-cloud/firestore");
   const db = new Firestore();
   const usersCol = db.collection("users");
   const codesCol = db.collection("authCodes");
+  const rlCol = db.collection("rateLimits");
   return {
     async getUser(email) {
       const snap = await usersCol.doc(norm(email)).get();
@@ -111,13 +192,29 @@ async function firestoreStore() {
     async clearCode(email) {
       await codesCol.doc(norm(email)).delete();
     },
+    async rateLimit(key, max, windowMs) {
+      const bucket = Math.floor(Date.now() / windowMs);
+      const ref = rlCol.doc(`${key}:${bucket}`);
+      const count = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        const n = (snap.data()?.count ?? 0) + 1;
+        tx.set(ref, { count: n, expireAt: Date.now() + windowMs }, { merge: true });
+        return n;
+      });
+      return count <= max;
+    },
   };
 }
 
 let storePromise = null;
 export function getStore() {
   if (!storePromise) {
-    storePromise = BACKEND === "firestore" ? firestoreStore() : Promise.resolve(memoryStore());
+    storePromise =
+      BACKEND === "supabase"
+        ? supabaseStore()
+        : BACKEND === "firestore"
+        ? firestoreStore()
+        : Promise.resolve(memoryStore());
   }
   return storePromise;
 }
