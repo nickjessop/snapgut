@@ -1206,13 +1206,13 @@ body {
   justify-content: center;
   font-size: 14px;
   font-weight: var(--fw-bold);
-  color: var(--text);
-  background: var(--card-2);
-  border: 2px solid transparent;
-}
-/* today's date is circled (only rendered when today actually has an event) */
-.tl-daynum.today {
   background: transparent;
+  /* other days: a lighter outline */
+  border: 2px solid var(--card-3);
+  color: var(--muted);
+}
+/* active (today) day: a stronger green outline + text */
+.tl-daynum.today {
   border-color: var(--accent);
   color: var(--accent);
 }
