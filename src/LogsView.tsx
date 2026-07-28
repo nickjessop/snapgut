@@ -6,7 +6,7 @@ import {
   type MealEvent,
 } from "./db";
 import { getSymptom, BRISTOL } from "./symptoms";
-import { MealIcon } from "./icons";
+import { MealIcon, SettingsIcon, EditIcon, DeleteIcon } from "./icons";
 import type { Entitlement } from "./session";
 import InstallHint from "./InstallHint";
 import {
@@ -116,7 +116,7 @@ export default function LogsView({
               </button>
             ))}
           <button className="icon-round" onClick={onOpenSettings} aria-label="Settings">
-            ⚙︎
+            <SettingsIcon size={20} />
           </button>
         </div>
       </div>
@@ -182,11 +182,15 @@ export default function LogsView({
                 onEdit(e);
               }}
             >
-              <span className="ai-ico">✏️</span>
+              <span className="ai-ico">
+                <EditIcon size={22} />
+              </span>
               <div className="ai-title">Edit</div>
             </button>
             <button className="action-item danger" onClick={() => remove(detail.id)}>
-              <span className="ai-ico">🗑️</span>
+              <span className="ai-ico">
+                <DeleteIcon size={22} />
+              </span>
               <div className="ai-title">Delete</div>
             </button>
             <button className="action-cancel" onClick={() => setDetail(null)}>

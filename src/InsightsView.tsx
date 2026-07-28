@@ -172,7 +172,7 @@ function PatternsTab({
                 Get an AI read on your patterns. Uses 1 of your {freeLeft} free AI
                 {freeLeft === 1 ? " use" : " uses"}.
               </p>
-              <button className="primary" onClick={() => generate(summary)}>
+              <button className="primary reveal" onClick={() => generate(summary)}>
                 Reveal AI insight
               </button>
             </>

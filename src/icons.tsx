@@ -13,6 +13,16 @@ import {
   TriangleAlert,
   X,
   ChevronLeft,
+  ChevronRight,
+  Settings,
+  CreditCard,
+  Upload,
+  Download,
+  FileText,
+  LogOut,
+  Sun,
+  Moon,
+  SunMoon,
   type LucideProps,
 } from "lucide-react";
 
@@ -44,3 +54,13 @@ export const NoteIcon = (p: IconProps) => <StickyNote {...base} {...p} />;
 export const WarningIcon = (p: IconProps) => <TriangleAlert {...base} {...p} />;
 export const CloseIcon = (p: IconProps) => <X {...base} {...p} />;
 export const BackIcon = (p: IconProps) => <ChevronLeft {...base} {...p} />;
+export const ChevronIcon = (p: IconProps) => <ChevronRight {...base} {...p} />;
+export const SettingsIcon = (p: IconProps) => <Settings {...base} {...p} />;
+export const BillingIcon = (p: IconProps) => <CreditCard {...base} {...p} />;
+export const BackupIcon = (p: IconProps) => <Upload {...base} {...p} />;
+export const RestoreIcon = (p: IconProps) => <Download {...base} {...p} />;
+export const CsvIcon = (p: IconProps) => <FileText {...base} {...p} />;
+export const SignOutIcon = (p: IconProps) => <LogOut {...base} {...p} />;
+export const LightIcon = (p: IconProps) => <Sun {...base} {...p} />;
+export const DarkIcon = (p: IconProps) => <Moon {...base} {...p} />;
+export const AutoThemeIcon = (p: IconProps) => <SunMoon {...base} {...p} />;
