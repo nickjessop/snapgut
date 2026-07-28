@@ -174,7 +174,7 @@ export default function LogsView({ onEdit, onChanged, reloadKey, entitlement, on
               Back up
             </button>
             <button
-              className="link-btn"
+              className="chip"
               onClick={() => {
                 snoozeReminder();
                 setNudgeDismissed(true);

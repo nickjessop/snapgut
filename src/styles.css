@@ -1225,7 +1225,7 @@ body {
 
 .nudge {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 12px;
   background: var(--card);
   border: 1px solid #3a3a2c;
@@ -1235,7 +1235,6 @@ body {
   margin-bottom: 16px;
 }
 .nudge-text {
-  flex: 1;
   font-size: 14px;
   line-height: 1.4;
 }
@@ -1246,10 +1245,11 @@ body {
 }
 .nudge-actions {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  flex: 0 0 auto;
+  gap: 10px;
+}
+.nudge-actions .chip {
+  flex: 1;
+  justify-content: center;
 }
 
 .toast {
@@ -1272,7 +1272,7 @@ body {
 /* ---------- Install hint ---------- */
 .install-hint {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 12px;
   background: var(--card);
   border: 1px solid #2a3340;
@@ -1295,10 +1295,11 @@ body {
 }
 .install-actions {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  flex: 0 0 auto;
+  gap: 10px;
+}
+.install-actions .chip {
+  flex: 1;
+  justify-content: center;
 }
 
 /* ---------- Motion polish ---------- */

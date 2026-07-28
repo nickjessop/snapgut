@@ -70,7 +70,7 @@ export default function InstallHint() {
             Install
           </button>
         )}
-        <button className="link-btn" onClick={dismiss}>
+        <button className="chip" onClick={dismiss}>
           Dismiss
         </button>
       </div>
