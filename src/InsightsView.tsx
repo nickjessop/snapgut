@@ -32,17 +32,33 @@ export default function InsightsView({
 
   return (
     <div className="insights">
-      <h1>Insights</h1>
+      <div className="insights-header">
+        <h1>Insights</h1>
+        {entitlement &&
+          (entitlement.pro ? (
+            <span className="pro-badge" title="SnapGut Pro">
+              ✨ PRO
+            </span>
+          ) : (
+            <button
+              className="credits-pill"
+              onClick={onNeedUpgrade}
+              title="Unlock unlimited AI"
+            >
+              ✨ {Math.max(0, entitlement.freeAiLimit - entitlement.freeAiUsed)} free
+            </button>
+          ))}
+      </div>
 
-      <div className="seg">
+      <div className="tabs">
         <button
-          className={`seg-btn${tab === "patterns" ? " on" : ""}`}
+          className={`tab-btn${tab === "patterns" ? " on" : ""}`}
           onClick={() => setTab("patterns")}
         >
           Patterns
         </button>
         <button
-          className={`seg-btn${tab === "foods" ? " on" : ""}`}
+          className={`tab-btn${tab === "foods" ? " on" : ""}`}
           onClick={() => setTab("foods")}
         >
           Foods
