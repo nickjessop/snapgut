@@ -22,9 +22,11 @@ interface Props {
   onEdit: (event: LogEvent) => void;
   onChanged: () => void; // bump global reload (e.g. after a restore)
   reloadKey: number;
+  credits: number | null;
+  onOpenPaywall: () => void;
 }
 
-export default function LogsView({ onEdit, onChanged, reloadKey }: Props) {
+export default function LogsView({ onEdit, onChanged, reloadKey, credits, onOpenPaywall }: Props) {
   const [events, setEvents] = useState<LogEvent[]>([]);
   const [detail, setDetail] = useState<LogEvent | null>(null);
   const [dataSheet, setDataSheet] = useState(false);
@@ -137,6 +139,15 @@ export default function LogsView({ onEdit, onChanged, reloadKey }: Props) {
             <span className="streak" title={`${streak}-day logging streak`}>
               🔥 {streak}
             </span>
+          )}
+          {credits !== null && (
+            <button
+              className="credits-pill"
+              onClick={onOpenPaywall}
+              title="Buy AI credits"
+            >
+              🪙 {credits}
+            </button>
           )}
           <button className="icon-round" onClick={() => setDataSheet(true)} aria-label="Data & backup">
             ⚙︎

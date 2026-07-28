@@ -1518,3 +1518,80 @@ body {
   padding: 6px 12px;
   animation: pop 0.4s var(--spring) both;
 }
+
+/* ---------- Auth gate ---------- */
+.auth-gate {
+  justify-content: space-between;
+}
+.auth-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+}
+.auth-input {
+  width: 100%;
+  max-width: 340px;
+  text-align: center;
+  margin: 6px 0 0;
+  font-size: 17px;
+}
+.code-input {
+  letter-spacing: 0.5em;
+  font-weight: 800;
+  font-size: 26px;
+  padding-left: 0.5em;
+}
+.dev-hint {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+/* ---------- Credits pill ---------- */
+.credits-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+  background: var(--card-2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: transform 0.16s var(--spring), background 0.15s ease;
+}
+.credits-pill:active {
+  transform: scale(0.94);
+  background: var(--card-3);
+}
+
+/* ---------- Paywall ---------- */
+.paywall-head {
+  text-align: center;
+  padding: 4px 8px 12px;
+}
+.paywall-title {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.paywall-sub {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+.action-item.pack {
+  justify-content: space-between;
+}
+.pack-price {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--accent);
+}

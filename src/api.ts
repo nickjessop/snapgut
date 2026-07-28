@@ -1,21 +1,29 @@
 import type { MealAnalysis, Ingredient } from "./db";
 import type { EvidenceSummary } from "./insights";
+import { authHeaders, clearToken } from "./session";
+
+export class AuthError extends Error {}
+export class NoCreditsError extends Error {}
 
 function buildHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  const token = import.meta.env.VITE_APP_TOKEN;
-  if (token) headers["x-app-token"] = token;
-  return headers;
+  return { "Content-Type": "application/json", ...authHeaders() };
 }
 
-/**
- * Send a photo (and optional user note for extra context) to the backend and get
- * back a structured meal: dish name + confident/maybe ingredients.
- */
+function handleAuthStatus(status: number) {
+  if (status === 401) {
+    clearToken();
+    throw new AuthError("Session expired");
+  }
+  if (status === 402) {
+    throw new NoCreditsError("Out of credits");
+  }
+}
+
+/** Recognize a meal photo. Returns dish + ingredients (+ remaining credits). */
 export async function recognizeMeal(
   imageBlob: Blob,
   note?: string
-): Promise<MealAnalysis> {
+): Promise<MealAnalysis & { credits?: number }> {
   const base64 = await blobToBase64(imageBlob);
   const res = await fetch("/api/recognize", {
     method: "POST",
@@ -27,12 +35,13 @@ export async function recognizeMeal(
     }),
   });
 
+  handleAuthStatus(res.status);
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`Recognition failed (${res.status}): ${text}`);
   }
 
-  const data = (await res.json()) as Partial<MealAnalysis>;
+  const data = (await res.json()) as Partial<MealAnalysis> & { credits?: number };
   const ingredients: Ingredient[] = Array.isArray(data.ingredients)
     ? data.ingredients
         .filter((i): i is Ingredient => !!i && typeof i.name === "string")
@@ -41,7 +50,7 @@ export async function recognizeMeal(
           confidence: i.confidence === "maybe" ? "maybe" : "confident",
         }))
     : [];
-  return { dish: data.dish || "Meal", ingredients };
+  return { dish: data.dish || "Meal", ingredients, credits: data.credits };
 }
 
 /** Send the on-device evidence summary and get back a narrated insight. */
@@ -53,6 +62,7 @@ export async function getInsights(
     headers: buildHeaders(),
     body: JSON.stringify({ summary }),
   });
+  handleAuthStatus(res.status);
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`Insights failed (${res.status}): ${text}`);
@@ -65,7 +75,6 @@ function blobToBase64(blob: Blob): Promise<string> {
     const reader = new FileReader();
     reader.onloadend = () => {
       const result = reader.result as string;
-      // strip the "data:<mime>;base64," prefix
       resolve(result.slice(result.indexOf(",") + 1));
     };
     reader.onerror = reject;

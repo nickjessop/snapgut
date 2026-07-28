@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { recognizeMeal } from "./api";
+import { recognizeMeal, NoCreditsError, AuthError } from "./api";
 import { addEvent, type Ingredient, type MealEvent } from "./db";
 import { NoteIcon, AddIcon, BackIcon } from "./icons";
 
@@ -9,6 +9,9 @@ interface Props {
   editing?: MealEvent;
   onSaved: () => void;
   onBack: () => void;
+  onCredits?: (n?: number) => void;
+  onNeedCredits?: () => void;
+  onSignedOut?: () => void;
 }
 
 /**
@@ -16,7 +19,16 @@ interface Props {
  * thumbnail at the bottom (tap to enlarge). The context note stays editable, and
  * changing it lets you re-analyze.
  */
-export default function MealDetails({ photo, initialNote = "", editing, onSaved, onBack }: Props) {
+export default function MealDetails({
+  photo,
+  initialNote = "",
+  editing,
+  onSaved,
+  onBack,
+  onCredits,
+  onNeedCredits,
+  onSignedOut,
+}: Props) {
   const [photoUrl, setPhotoUrl] = useState("");
   const [dish, setDish] = useState(editing?.dish ?? "");
   const [ingredients, setIngredients] = useState<Ingredient[]>(editing?.ingredients ?? []);
@@ -44,8 +56,16 @@ export default function MealDetails({ photo, initialNote = "", editing, onSaved,
       setDish(meal.dish);
       setIngredients(meal.ingredients);
       setAnalyzedNote(withNote);
+      onCredits?.(meal.credits);
     } catch (e) {
-      setError((e as Error).message);
+      if (e instanceof NoCreditsError) {
+        setError("You're out of AI credits — add ingredients manually below, or get more.");
+        onNeedCredits?.();
+      } else if (e instanceof AuthError) {
+        onSignedOut?.();
+      } else {
+        setError((e as Error).message);
+      }
     } finally {
       setAnalyzing(false);
     }

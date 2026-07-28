@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getEvents } from "./db";
 import { computeEvidence, type EvidenceSummary } from "./insights";
-import { getInsights } from "./api";
+import { getInsights, AuthError } from "./api";
 import FoodsTab from "./FoodsTab";
 import { WarningIcon } from "./icons";
 
@@ -13,7 +13,13 @@ interface AiInsight {
   redFlag?: string;
 }
 
-export default function InsightsView({ reloadKey = 0 }: { reloadKey?: number }) {
+export default function InsightsView({
+  reloadKey = 0,
+  onSignedOut,
+}: {
+  reloadKey?: number;
+  onSignedOut?: () => void;
+}) {
   const [tab, setTab] = useState<InsightTab>("patterns");
 
   return (
@@ -35,12 +41,22 @@ export default function InsightsView({ reloadKey = 0 }: { reloadKey?: number }) 
         </button>
       </div>
 
-      {tab === "patterns" ? <PatternsTab reloadKey={reloadKey} /> : <FoodsTab reloadKey={reloadKey} />}
+      {tab === "patterns" ? (
+        <PatternsTab reloadKey={reloadKey} onSignedOut={onSignedOut} />
+      ) : (
+        <FoodsTab reloadKey={reloadKey} />
+      )}
     </div>
   );
 }
 
-function PatternsTab({ reloadKey }: { reloadKey: number }) {
+function PatternsTab({
+  reloadKey,
+  onSignedOut,
+}: {
+  reloadKey: number;
+  onSignedOut?: () => void;
+}) {
   const [summary, setSummary] = useState<EvidenceSummary | null>(null);
   const [ai, setAi] = useState<AiInsight | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,7 +74,8 @@ function PatternsTab({ reloadKey }: { reloadKey: number }) {
         const insight = await getInsights(ev);
         if (!cancelled) setAi(insight);
       } catch (e) {
-        if (!cancelled) setError((e as Error).message);
+        if (e instanceof AuthError) onSignedOut?.();
+        else if (!cancelled) setError((e as Error).message);
       } finally {
         if (!cancelled) setLoading(false);
       }

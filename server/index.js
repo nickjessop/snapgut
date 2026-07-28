@@ -2,6 +2,15 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { VertexAI } from "@google-cloud/vertexai";
+import { getStore } from "./store.js";
+import {
+  signToken,
+  verifyToken,
+  generateCode,
+  hashCode,
+  safeEqualHex,
+} from "./auth.js";
+import { sendCode } from "./email.js";
 
 const PORT = Number(process.env.PORT) || 8080;
 const PROJECT = process.env.GOOGLE_CLOUD_PROJECT;
@@ -12,11 +21,37 @@ const MODEL = process.env.VERTEX_MODEL || "gemini-2.5-flash-lite";
 // Auto-on when MOCK_AI=1 or when no project is configured.
 const MOCK_AI = process.env.MOCK_AI === "1" || !PROJECT;
 
-// Optional shared-secret gate. If APP_TOKEN is set, requests must send a
-// matching "x-app-token" header. Leave unset locally.
-const APP_TOKEN = process.env.APP_TOKEN;
+const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY;
+
+// Credit packs (used by /api/billing). In prod, set the matching Stripe price IDs.
+const PACKS = {
+  small: { credits: 50, price: 500, label: "50 credits", priceEnv: "STRIPE_PRICE_SMALL" },
+  medium: { credits: 150, price: 1200, label: "150 credits", priceEnv: "STRIPE_PRICE_MEDIUM" },
+  large: { credits: 400, price: 2500, label: "400 credits", priceEnv: "STRIPE_PRICE_LARGE" },
+};
 
 const app = new Hono();
+
+// ---- auth helpers ----
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const requestThrottle = new Map(); // email -> lastSentAt (per-process)
+
+function bearer(c) {
+  const h = c.req.header("authorization") || "";
+  return h.startsWith("Bearer ") ? h.slice(7) : null;
+}
+function sessionEmail(c) {
+  return verifyToken(bearer(c));
+}
+
+let stripe = null;
+async function getStripe() {
+  if (!stripe) {
+    const Stripe = (await import("stripe")).default;
+    stripe = new Stripe(STRIPE_SECRET);
+  }
+  return stripe;
+}
 
 const MOCK_MEALS = [
   {
@@ -118,39 +153,43 @@ function mockMeal(note) {
 
 app.post("/api/recognize", async (c) => {
   try {
-    if (APP_TOKEN && c.req.header("x-app-token") !== APP_TOKEN) {
-      return c.json({ error: "unauthorized" }, 401);
-    }
+    const email = sessionEmail(c);
+    if (!email) return c.json({ error: "unauthorized" }, 401);
+
+    const store = await getStore();
+    const user = (await store.getUser(email)) || (await store.upsertUser(email));
+    if (user.credits <= 0) return c.json({ error: "no_credits" }, 402);
 
     const { image, mimeType, note } = await c.req.json();
     if (!image) return c.json({ error: "missing image" }, 400);
 
+    let meal;
     if (MOCK_AI) {
       await new Promise((r) => setTimeout(r, 700)); // simulate latency
-      return c.json(mockMeal(note));
+      meal = mockMeal(note);
+    } else {
+      const result = await getModel().generateContent({
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: recognizePrompt(note) },
+              { inlineData: { mimeType: mimeType || "image/jpeg", data: image } },
+            ],
+          },
+        ],
+      });
+      const text = result.response?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+      meal = { dish: "Meal", ingredients: [] };
+      try {
+        meal = sanitizeMeal(JSON.parse(text));
+      } catch {
+        // model returned non-JSON; leave default
+      }
     }
 
-    const result = await getModel().generateContent({
-      contents: [
-        {
-          role: "user",
-          parts: [
-            { text: recognizePrompt(note) },
-            { inlineData: { mimeType: mimeType || "image/jpeg", data: image } },
-          ],
-        },
-      ],
-    });
-
-    const text =
-      result.response?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
-    let meal = { dish: "Meal", ingredients: [] };
-    try {
-      meal = sanitizeMeal(JSON.parse(text));
-    } catch {
-      // model returned non-JSON; leave default
-    }
-    return c.json(meal);
+    const credits = await store.deductCredit(email); // charge on success
+    return c.json({ ...meal, credits });
   } catch (err) {
     console.error("recognize error:", err);
     return c.json({ error: String(err?.message || err) }, 500);
@@ -228,9 +267,7 @@ function mockInsight(summary) {
 
 app.post("/api/insights", async (c) => {
   try {
-    if (APP_TOKEN && c.req.header("x-app-token") !== APP_TOKEN) {
-      return c.json({ error: "unauthorized" }, 401);
-    }
+    if (!sessionEmail(c)) return c.json({ error: "unauthorized" }, 401);
     const { summary } = await c.req.json();
 
     if (MOCK_AI) {
@@ -257,6 +294,126 @@ app.post("/api/insights", async (c) => {
     console.error("insights error:", err);
     return c.json({ error: String(err?.message || err) }, 500);
   }
+});
+
+// ---- Auth (email + verification code) ----
+
+app.post("/api/auth/request", async (c) => {
+  try {
+    const { email } = await c.req.json();
+    if (!email || !EMAIL_RE.test(email)) return c.json({ error: "invalid_email" }, 400);
+    const key = email.trim().toLowerCase();
+
+    const last = requestThrottle.get(key) || 0;
+    if (Date.now() - last < 30_000) return c.json({ error: "too_soon" }, 429);
+    requestThrottle.set(key, Date.now());
+
+    const code = generateCode();
+    const store = await getStore();
+    await store.setCode(key, {
+      hash: hashCode(code),
+      expiresAt: Date.now() + 10 * 60_000,
+      attempts: 0,
+    });
+    const res = await sendCode(key, code);
+    // In dev (no Resend), return the code so the client can auto-fill.
+    return c.json({ ok: true, dev: res.dev === true, code: res.dev ? res.code : undefined });
+  } catch (err) {
+    console.error("auth/request error:", err);
+    return c.json({ error: "server_error" }, 500);
+  }
+});
+
+app.post("/api/auth/verify", async (c) => {
+  try {
+    const { email, code } = await c.req.json();
+    if (!email || !code) return c.json({ error: "missing" }, 400);
+    const key = email.trim().toLowerCase();
+    const store = await getStore();
+    const rec = await store.getCode(key);
+    if (!rec || Date.now() > rec.expiresAt) return c.json({ error: "expired" }, 400);
+    if (rec.attempts >= 5) return c.json({ error: "too_many_attempts" }, 429);
+
+    if (!safeEqualHex(rec.hash, hashCode(code))) {
+      await store.setCode(key, { ...rec, attempts: rec.attempts + 1 });
+      return c.json({ error: "wrong_code" }, 400);
+    }
+
+    await store.clearCode(key);
+    const user = await store.upsertUser(key);
+    return c.json({ token: signToken(key), email: key, credits: user.credits });
+  } catch (err) {
+    console.error("auth/verify error:", err);
+    return c.json({ error: "server_error" }, 500);
+  }
+});
+
+app.get("/api/me", async (c) => {
+  const email = sessionEmail(c);
+  if (!email) return c.json({ error: "unauthorized" }, 401);
+  const store = await getStore();
+  const user = (await store.getUser(email)) || (await store.upsertUser(email));
+  return c.json({ email: user.email, credits: user.credits });
+});
+
+// ---- Billing (Stripe; dev-simulated without keys) ----
+
+app.get("/api/billing/packs", (c) =>
+  c.json(
+    Object.entries(PACKS).map(([id, p]) => ({
+      id,
+      credits: p.credits,
+      price: p.price,
+      label: p.label,
+    }))
+  )
+);
+
+app.post("/api/billing/checkout", async (c) => {
+  const email = sessionEmail(c);
+  if (!email) return c.json({ error: "unauthorized" }, 401);
+  const { pack } = await c.req.json().catch(() => ({}));
+  const chosen = PACKS[pack] || PACKS.small;
+  const store = await getStore();
+
+  if (!STRIPE_SECRET) {
+    // Dev: simulate a successful purchase.
+    const credits = await store.addCredits(email, chosen.credits);
+    return c.json({ simulated: true, credits });
+  }
+
+  const origin = c.req.header("origin") || `https://${c.req.header("host")}`;
+  const s = await getStripe();
+  const session = await s.checkout.sessions.create({
+    mode: "payment",
+    customer_email: email,
+    line_items: [{ price: process.env[chosen.priceEnv], quantity: 1 }],
+    success_url: `${origin}/?paid=1`,
+    cancel_url: `${origin}/?paid=0`,
+    metadata: { email, credits: String(chosen.credits) },
+  });
+  return c.json({ url: session.url });
+});
+
+app.post("/api/billing/webhook", async (c) => {
+  if (!STRIPE_SECRET) return c.json({ error: "billing_disabled" }, 400);
+  const sig = c.req.header("stripe-signature");
+  const raw = await c.req.text();
+  let evt;
+  try {
+    const s = await getStripe();
+    evt = s.webhooks.constructEvent(raw, sig, process.env.STRIPE_WEBHOOK_SECRET);
+  } catch {
+    return c.text("bad signature", 400);
+  }
+  if (evt.type === "checkout.session.completed") {
+    const m = evt.data.object.metadata || {};
+    if (m.email && m.credits) {
+      const store = await getStore();
+      await store.addCredits(m.email, Number(m.credits));
+    }
+  }
+  return c.json({ received: true });
 });
 
 app.get("/api/health", (c) => c.json({ ok: true }));

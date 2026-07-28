@@ -8,6 +8,9 @@ import CheckinLogView from "./CheckinLogView";
 import LogsView from "./LogsView";
 import InsightsView from "./InsightsView";
 import Intro, { ONBOARDED_KEY } from "./Intro";
+import AuthGate from "./AuthGate";
+import Paywall from "./Paywall";
+import { getToken, fetchMe } from "./session";
 import { requestPersistentStorage } from "./backup";
 import {
   CameraIcon,
@@ -36,16 +39,56 @@ export default function App() {
   const [introDone, setIntroDone] = useState(
     () => localStorage.getItem(ONBOARDED_KEY) === "1"
   );
+  const [authChecked, setAuthChecked] = useState(false);
+  const [authed, setAuthed] = useState(false);
+  const [credits, setCredits] = useState<number | null>(null);
+  const [paywall, setPaywall] = useState<null | "out" | "topup">(null);
 
-  // Ask the browser to keep our storage (guards against eviction under pressure).
   useEffect(() => {
     requestPersistentStorage();
+    (async () => {
+      if (getToken()) {
+        const me = await fetchMe();
+        if (me) {
+          setAuthed(true);
+          setCredits(me.credits);
+        }
+      }
+      setAuthChecked(true);
+    })();
   }, []);
 
-  // First-run: branded splash + short intro (returning users skip straight in).
+  const signOut = () => {
+    setAuthed(false);
+    setCredits(null);
+  };
+
+  // Gate order: validate session → sign in → first-run intro → app.
+  if (!authChecked) return <div className="app" />;
+  if (!authed) {
+    return (
+      <AuthGate
+        onAuthed={(c) => {
+          setAuthed(true);
+          setCredits(c);
+        }}
+      />
+    );
+  }
   if (!introDone) {
     return <Intro onFinish={() => setIntroDone(true)} />;
   }
+
+  const paywallEl = paywall && (
+    <Paywall
+      reason={paywall}
+      onClose={() => setPaywall(null)}
+      onPurchased={(c) => {
+        setCredits(c);
+        setPaywall(null);
+      }}
+    />
+  );
 
   function resetFlow() {
     setFlow(null);
@@ -99,12 +142,16 @@ export default function App() {
           initialNote={mealNote}
           editing={editing?.type === "meal" ? editing : undefined}
           onSaved={finishFlow}
+          onCredits={(n) => typeof n === "number" && setCredits(n)}
+          onNeedCredits={() => setPaywall("out")}
+          onSignedOut={signOut}
           onBack={() => {
             // new meal → back to caption screen; editing → cancel out
             if (editing) cancelFlow();
             else setFlow("capture");
           }}
         />
+        {paywallEl}
       </div>
     );
   }
@@ -159,9 +206,13 @@ export default function App() {
           onEdit={startEdit}
           reloadKey={reloadKey}
           onChanged={() => setReloadKey((k) => k + 1)}
+          credits={credits}
+          onOpenPaywall={() => setPaywall("topup")}
         />
       )}
-      {tab === "insights" && <InsightsView reloadKey={reloadKey} />}
+      {tab === "insights" && (
+        <InsightsView reloadKey={reloadKey} onSignedOut={signOut} />
+      )}
 
       {plusOpen && (
         <div className="sheet-backdrop" onClick={() => setPlusOpen(false)}>
@@ -226,6 +277,8 @@ export default function App() {
           Insights
         </button>
       </nav>
+
+      {paywallEl}
     </div>
   );
 }
