@@ -119,6 +119,8 @@ export default function LogsView({ onEdit, onChanged, reloadKey }: Props) {
     return [...map.entries()];
   }, [events]);
 
+  const streak = useMemo(() => computeStreak(events), [events]);
+
   const statusText =
     lastBackup === null
       ? "Never backed up"
@@ -130,9 +132,16 @@ export default function LogsView({ onEdit, onChanged, reloadKey }: Props) {
     <div className="history">
       <div className="history-header">
         <h1>Timeline</h1>
-        <button className="icon-round" onClick={() => setDataSheet(true)} aria-label="Data & backup">
-          ⚙︎
-        </button>
+        <div className="header-right">
+          {streak >= 2 && (
+            <span className="streak" title={`${streak}-day logging streak`}>
+              🔥 {streak}
+            </span>
+          )}
+          <button className="icon-round" onClick={() => setDataSheet(true)} aria-label="Data & backup">
+            ⚙︎
+          </button>
+        </div>
       </div>
 
       <InstallHint />
@@ -346,11 +355,9 @@ function MealBody({ event }: { event: MealEvent }) {
 
   return (
     <div className="meal-body">
-      {url && <img src={url} alt="" className="tl-thumb" />}
-      <div>
-        <div className="tl-title">🍽️ {event.dish || "Meal"}</div>
-        {confident && <div className="sub">{confident}</div>}
-      </div>
+      <div className="tl-title">🍽️ {event.dish || "Meal"}</div>
+      {url && <img src={url} alt="" className="tl-photo" />}
+      {confident && <div className="sub">{confident}</div>}
     </div>
   );
 }
@@ -359,4 +366,19 @@ function symptomLine(symptoms: { id: string; severity: string }[]): string {
   return symptoms
     .map((s) => `${getSymptom(s.id)?.emoji ?? ""} ${getSymptom(s.id)?.label ?? s.id} (${s.severity})`)
     .join(", ");
+}
+
+/** Consecutive days (ending today or yesterday) with at least one log. */
+function computeStreak(events: LogEvent[]): number {
+  if (events.length === 0) return 0;
+  const days = new Set(events.map((e) => new Date(e.createdAt).toDateString()));
+  const cursor = new Date();
+  // Don't break the streak just because today isn't logged yet.
+  if (!days.has(cursor.toDateString())) cursor.setDate(cursor.getDate() - 1);
+  let streak = 0;
+  while (days.has(cursor.toDateString())) {
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
 }

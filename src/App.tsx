@@ -7,6 +7,7 @@ import BowelLogView from "./BowelLogView";
 import CheckinLogView from "./CheckinLogView";
 import LogsView from "./LogsView";
 import InsightsView from "./InsightsView";
+import Intro, { ONBOARDED_KEY } from "./Intro";
 import { requestPersistentStorage } from "./backup";
 import {
   CameraIcon,
@@ -32,11 +33,19 @@ export default function App() {
   const [mealNote, setMealNote] = useState("");
   const [plusOpen, setPlusOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [introDone, setIntroDone] = useState(
+    () => localStorage.getItem(ONBOARDED_KEY) === "1"
+  );
 
   // Ask the browser to keep our storage (guards against eviction under pressure).
   useEffect(() => {
     requestPersistentStorage();
   }, []);
+
+  // First-run: branded splash + short intro (returning users skip straight in).
+  if (!introDone) {
+    return <Intro onFinish={() => setIntroDone(true)} />;
+  }
 
   function resetFlow() {
     setFlow(null);
