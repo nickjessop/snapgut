@@ -143,7 +143,10 @@
   --grip: rgba(45, 93, 77, 0.25);
 
   /* components */
-  --tabbar-bg: rgba(255, 251, 234, 0.86);
+  --tabbar-bg: rgba(31, 58, 48, 0.92); /* dark basil green, even in light mode */
+  --tabbar-fg: rgba(255, 251, 234, 0.62);
+  --tabbar-active: #8fd6b1;
+  --tabbar-border: rgba(255, 255, 255, 0.08);
   --glow: rgba(185, 228, 201, 0.55);
   --toast-bg: var(--green-800);
   --toast-text: var(--cream-50);
@@ -202,7 +205,10 @@
   --grip: rgba(255, 255, 255, 0.28);
 
   /* components */
-  --tabbar-bg: rgba(15, 26, 22, 0.86);
+  --tabbar-bg: rgba(8, 15, 12, 0.92); /* darker still for dark mode */
+  --tabbar-fg: rgba(234, 243, 236, 0.55);
+  --tabbar-active: #57c896;
+  --tabbar-border: rgba(255, 255, 255, 0.06);
   --glow: rgba(55, 150, 111, 0.16);
   --toast-bg: rgba(31, 51, 42, 0.97);
   --toast-text: #eaf3ec;
@@ -243,7 +249,10 @@
     --hairline: var(--hairline);
     --row-active: rgba(255, 255, 255, 0.05);
     --grip: rgba(255, 255, 255, 0.28);
-    --tabbar-bg: rgba(15, 26, 22, 0.86);
+    --tabbar-bg: rgba(8, 15, 12, 0.92);
+    --tabbar-fg: rgba(234, 243, 236, 0.55);
+    --tabbar-active: #57c896;
+    --tabbar-border: rgba(255, 255, 255, 0.06);
     --glow: rgba(55, 150, 111, 0.16);
     --toast-bg: rgba(31, 51, 42, 0.97);
     --toast-text: #eaf3ec;
@@ -839,7 +848,7 @@ body {
 /* ---------- Bottom tab bar ---------- */
 .tabbar {
   display: flex;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--tabbar-border);
   background: var(--tabbar-bg);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
@@ -849,7 +858,7 @@ body {
   flex: 1;
   background: none;
   border: none;
-  color: var(--muted);
+  color: var(--tabbar-fg);
   padding: 10px 0 8px;
   font-size: 11px;
   font-weight: 600;
@@ -863,7 +872,7 @@ body {
   display: block;
 }
 .tabbar button.active {
-  color: var(--accent);
+  color: var(--tabbar-active);
 }
 
 /* ---------- Insights ---------- */
