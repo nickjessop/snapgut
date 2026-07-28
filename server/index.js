@@ -55,7 +55,69 @@ const PLANS = {
   },
 };
 
+const IS_PROD = process.env.NODE_ENV === "production";
+
+// Fail fast: a forgeable session secret in production is critical.
+if (IS_PROD && !process.env.SESSION_SECRET) {
+  throw new Error("SESSION_SECRET must be set in production (tokens are otherwise forgeable).");
+}
+
 const app = new Hono();
+
+// ---- security middleware ----
+const MAX_BODY = 8 * 1024 * 1024; // 8 MB (a downscaled meal photo is ~1–2 MB base64)
+
+const CSP = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "img-src 'self' data: blob: https://www.themealdb.com",
+  "style-src 'self' 'unsafe-inline'", // React inline style attributes
+  "script-src 'self'",
+  "connect-src 'self'",
+  "worker-src 'self'",
+  "manifest-src 'self'",
+].join("; ");
+
+app.use("*", async (c, next) => {
+  await next();
+  c.header("X-Content-Type-Options", "nosniff");
+  c.header("X-Frame-Options", "DENY");
+  c.header("Referrer-Policy", "strict-origin-when-cross-origin");
+  c.header("Permissions-Policy", "camera=(self), microphone=(), geolocation=()");
+  c.header("Content-Security-Policy", CSP);
+  if (IS_PROD) c.header("Strict-Transport-Security", "max-age=63072000; includeSubDomains");
+});
+
+// Reject oversized payloads early (mainly guards /api/recognize image uploads).
+app.use("/api/*", async (c, next) => {
+  if (Number(c.req.header("content-length") || 0) > MAX_BODY) {
+    return c.json({ error: "payload_too_large" }, 413);
+  }
+  return next();
+});
+
+// ---- rate limiting (per-process; move to shared store for multi-instance) ----
+const rlHits = new Map();
+function rateLimit(key, max, windowMs) {
+  const now = Date.now();
+  const arr = (rlHits.get(key) || []).filter((t) => now - t < windowMs);
+  arr.push(now);
+  rlHits.set(key, arr);
+  return arr.length <= max;
+}
+function clientIp(c) {
+  return (c.req.header("x-forwarded-for") || "").split(",")[0].trim() || "local";
+}
+
+// Cap auth abuse (email bombing / code brute force) per IP.
+app.use("/api/auth/*", async (c, next) => {
+  if (!rateLimit(`auth:${clientIp(c)}`, 20, 60_000)) {
+    return c.json({ error: "rate_limited" }, 429);
+  }
+  return next();
+});
 
 // ---- auth helpers ----
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -220,7 +282,7 @@ app.post("/api/recognize", async (c) => {
     return c.json({ ...meal, entitlement: entitlement(await store.getUser(email)) });
   } catch (err) {
     console.error("recognize error:", err);
-    return c.json({ error: String(err?.message || err) }, 500);
+    return c.json({ error: "server_error" }, 500);
   }
 });
 
@@ -329,7 +391,7 @@ app.post("/api/insights", async (c) => {
     return c.json({ ...out, entitlement: entitlement(await store.getUser(email)) });
   } catch (err) {
     console.error("insights error:", err);
-    return c.json({ error: String(err?.message || err) }, 500);
+    return c.json({ error: "server_error" }, 500);
   }
 });
 
