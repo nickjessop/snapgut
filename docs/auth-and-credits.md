@@ -40,10 +40,12 @@ AI surfaces don't need separate metering. One `pro` flag covers all AI (now and 
   `checkout.session.completed` grants Pro.
 
 ## Datastore
-`server/store.js`: in-memory (dev) / **Supabase** (`USERS_BACKEND=supabase`, run
-`docs/schema.sql`) / Firestore (`USERS_BACKEND=firestore`). Rate limits + per-email
-throttle live in the store too, so they're shared across Cloud Run instances.
-Supabase uses `supabase-js` (REST) — serverless-friendly, no connection pool to exhaust.
+`server/store.js`: in-memory (dev) / **Firestore** (`USERS_BACKEND=firestore`, prod).
+Rate limits + per-email throttle live in the store too, so they're shared across
+Cloud Run instances. Firestore is serverless-friendly (no connection pool to
+exhaust) and authenticates via Application Default Credentials — no long-lived
+service key to manage — so it inherits the same GCP IAM story as Vertex AI and
+Cloud Run.
 
 ## Env / config (prod)
 | Var | Purpose |
@@ -52,8 +54,8 @@ Supabase uses `supabase-js` (REST) — serverless-friendly, no connection pool t
 | `RESEND_API_KEY`, `EMAIL_FROM` | verification emails (else dev-logs code) |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | billing |
 | `STRIPE_PRICE_ANNUAL`, `STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_LIFETIME` | plan price IDs |
-| `USERS_BACKEND` | `supabase` (recommended) or `firestore`; else in-memory dev |
-| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Supabase backend (run `docs/schema.sql`) |
+| `USERS_BACKEND` | `firestore` (prod); else in-memory dev |
+| `GOOGLE_CLOUD_PROJECT` | GCP project for Firestore (auth via ADC / Cloud Run SA) |
 | `FREE_AI_LIMIT` | free AI trial size (default 10) |
 
 ## Dev mode

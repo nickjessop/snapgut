@@ -1,5 +1,5 @@
 // Data store for users, entitlement, auth codes, and rate limits.
-// Backends (USERS_BACKEND): "memory" (dev, default) | "supabase" | "firestore".
+// Backends (USERS_BACKEND): "memory" (dev, default) | "firestore" (prod).
 //
 // Entitlement model (no credits): a user is either Pro (unlimited AI) or on a
 // free trial of FREE_AI_LIMIT AI actions shared across snaps + insight generations.
@@ -7,12 +7,7 @@
 // rateLimit() lives in the store so limits/throttles are SHARED across Cloud Run
 // instances (in-memory backend is per-process and only suitable for local dev).
 
-const BACKEND =
-  process.env.USERS_BACKEND === "supabase"
-    ? "supabase"
-    : process.env.USERS_BACKEND === "firestore"
-    ? "firestore"
-    : "memory";
+const BACKEND = process.env.USERS_BACKEND === "firestore" ? "firestore" : "memory";
 
 export const FREE_AI_LIMIT = Number(process.env.FREE_AI_LIMIT ?? 10);
 
@@ -101,79 +96,7 @@ function memoryStore() {
   };
 }
 
-// ---- Supabase (prod) ----
-async function supabaseStore() {
-  const { createClient } = await import("@supabase/supabase-js");
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
-  const sb = createClient(url, key, { auth: { persistSession: false } });
-
-  const mapUser = (r) =>
-    r && {
-      email: r.email,
-      pro: !!r.pro,
-      proUntil: r.pro_until ?? null,
-      freeAiUsed: r.free_ai_used ?? 0,
-      stripeCustomerId: r.stripe_customer_id ?? null,
-      createdAt: r.created_at,
-    };
-
-  return {
-    async getUser(email) {
-      const { data } = await sb.from("users").select("*").eq("email", norm(email)).maybeSingle();
-      return mapUser(data);
-    },
-    async upsertUser(email) {
-      const key2 = norm(email);
-      const existing = await this.getUser(key2);
-      if (existing) return existing;
-      const row = { email: key2, pro: false, pro_until: null, free_ai_used: 0, created_at: Date.now() };
-      // ignoreDuplicates handles a race where another instance inserted first
-      await sb.from("users").upsert(row, { onConflict: "email", ignoreDuplicates: true });
-      return (await this.getUser(key2)) || mapUser(row);
-    },
-    async setPro(email, proUntil, customerId) {
-      const patch = { pro: true, pro_until: proUntil ?? null };
-      if (customerId) patch.stripe_customer_id = customerId;
-      await sb.from("users").update(patch).eq("email", norm(email));
-      return this.getUser(email);
-    },
-    async incFreeAi(email) {
-      const { data } = await sb.rpc("inc_free_ai", { p_email: norm(email) });
-      return data ?? 0;
-    },
-    async deleteUser(email) {
-      const key2 = norm(email);
-      await sb.from("users").delete().eq("email", key2);
-      await sb.from("auth_codes").delete().eq("email", key2);
-    },
-    async getCode(email) {
-      const { data } = await sb.from("auth_codes").select("*").eq("email", norm(email)).maybeSingle();
-      return data && { hash: data.hash, expiresAt: data.expires_at, attempts: data.attempts };
-    },
-    async setCode(email, rec) {
-      await sb.from("auth_codes").upsert(
-        { email: norm(email), hash: rec.hash, expires_at: rec.expiresAt, attempts: rec.attempts },
-        { onConflict: "email" }
-      );
-    },
-    async clearCode(email) {
-      await sb.from("auth_codes").delete().eq("email", norm(email));
-    },
-    async rateLimit(key2, max, windowMs) {
-      const { data, error } = await sb.rpc("rate_limit_hit", {
-        p_key: key2,
-        p_max: max,
-        p_window_seconds: Math.ceil(windowMs / 1000),
-      });
-      if (error) return true; // fail-open on limiter errors (don't lock users out)
-      return data === true;
-    },
-  };
-}
-
-// ---- Firestore (alt prod) ----
+// ---- Firestore (prod) ----
 async function firestoreStore() {
   const { Firestore, FieldValue } = await import("@google-cloud/firestore");
   const db = new Firestore();
@@ -238,11 +161,7 @@ let storePromise = null;
 export function getStore() {
   if (!storePromise) {
     storePromise =
-      BACKEND === "supabase"
-        ? supabaseStore()
-        : BACKEND === "firestore"
-        ? firestoreStore()
-        : Promise.resolve(memoryStore());
+      BACKEND === "firestore" ? firestoreStore() : Promise.resolve(memoryStore());
   }
   return storePromise;
 }
