@@ -168,9 +168,21 @@ export default function LogsView({
         groups.map(([key, monthEvents]) => (
           <div key={key} className="day-group">
             <div className="day-label">{monthLabel(monthEvents[0])}</div>
-            {monthEvents.map((e) => (
-              <TimelineRow key={e.id} event={e} onClick={() => setDetail(e)} />
-            ))}
+            {monthEvents.map((e, i) => {
+              const prev = monthEvents[i - 1];
+              const showDay =
+                !prev ||
+                new Date(prev.createdAt).toDateString() !==
+                  new Date(e.createdAt).toDateString();
+              return (
+                <TimelineRow
+                  key={e.id}
+                  event={e}
+                  showDay={showDay}
+                  onClick={() => setDetail(e)}
+                />
+              );
+            })}
           </div>
         ))
       )}
@@ -251,15 +263,27 @@ function iconFor(type: LogEvent["type"]) {
   return <CheckinIcon size={size} />;
 }
 
-function TimelineRow({ event, onClick }: { event: LogEvent; onClick: () => void }) {
+function TimelineRow({
+  event,
+  showDay,
+  onClick,
+}: {
+  event: LogEvent;
+  showDay: boolean;
+  onClick: () => void;
+}) {
   const d = new Date(event.createdAt);
   const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 
   return (
     <div className="tl-row" onClick={onClick} role="button">
-      <span className={`tl-daynum${isToday(event.createdAt) ? " today" : ""}`}>
-        {d.getDate()}
-      </span>
+      {showDay ? (
+        <span className={`tl-daynum${isToday(event.createdAt) ? " today" : ""}`}>
+          {d.getDate()}
+        </span>
+      ) : (
+        <span className="tl-daynum-spacer" />
+      )}
       <span className="tl-time">{time}</span>
       <div className="tl-item">
         <span className="tl-ico">{iconFor(event.type)}</span>

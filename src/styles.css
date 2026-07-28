@@ -1216,6 +1216,11 @@ body {
   border-color: var(--accent);
   color: var(--accent);
 }
+/* subsequent events on the same day keep the column but hide the circle */
+.tl-daynum-spacer {
+  width: 34px;
+  height: 1px;
+}
 .tl-time {
   font-size: 12px;
   color: var(--muted);
