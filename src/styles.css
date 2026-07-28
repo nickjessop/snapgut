@@ -1250,8 +1250,7 @@ body {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: var(--card-3);
-  box-shadow: 0 0 0 4px var(--bg); /* separate the dot from the rail */
+  background: var(--accent); /* a filled node that the rail connects into */
 }
 .tl-time {
   font-size: 12px;
