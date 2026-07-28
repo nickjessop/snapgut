@@ -7,6 +7,7 @@ import {
   type MealEvent,
 } from "./db";
 import { getSymptom, BRISTOL } from "./symptoms";
+import InstallHint from "./InstallHint";
 import {
   exportBackup,
   importBackup,
@@ -132,6 +133,8 @@ export default function LogsView({ onEdit, onChanged, reloadKey }: Props) {
           ⚙︎
         </button>
       </div>
+
+      <InstallHint />
 
       {due && (
         <div className="nudge">

@@ -7,7 +7,7 @@ import { getEvents, addEvent, type LogEvent } from "./db";
 
 const LAST_BACKUP_KEY = "food-snap-last-backup";
 const SNOOZE_KEY = "food-snap-backup-snooze";
-export const BACKUP_REMINDER_DAYS = 7;
+export const BACKUP_REMINDER_DAYS = 3;
 const DAY_MS = 86_400_000;
 
 // ---- serialization helpers ----
