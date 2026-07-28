@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 /**
- * Generate the SnapGut food illustration pack with Vertex AI Imagen.
+ * Generate the SnapGut food illustration pack with Vertex AI (Gemini image models,
+ * a.k.a. "Nano Banana").
+ *
+ * NOTE: we deliberately do NOT use Imagen — Google deprecated the Imagen models with
+ * a shutdown date of 2026-08-17 and they already 404 on new projects. The Gemini
+ * image models are the supported path.
  *
  * Style: vintage botanical-plate illustration, locked via STYLE so the whole set
  * feels like one cohesive collection. Run OFFLINE (not at request time) and commit
@@ -22,19 +27,28 @@
  * Resumable + idempotent: existing files are skipped unless --force.
  */
 
-import { writeFile, mkdir, readFile, readdir } from "node:fs/promises";
+import { writeFile, mkdir, readFile, readdir, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { GoogleAuth } from "google-auth-library";
+
+const execFileP = promisify(execFile);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.join(ROOT, "public", "foods");
 const LIST_FILE = path.join(__dirname, "food-list.txt");
 
+// gemini-2.5-flash-image works in us-central1; gemini-3.1-flash-image is global-only.
+const MODEL = process.env.IMAGE_MODEL || "gemini-2.5-flash-image";
 const LOCATION = process.env.VERTEX_LOCATION || "us-central1";
-const MODEL = process.env.IMAGEN_MODEL || "imagen-4.0-fast-generate-001";
+const HOST =
+  LOCATION === "global"
+    ? "aiplatform.googleapis.com"
+    : `${LOCATION}-aiplatform.googleapis.com`;
 
 // ---- the locked art direction (keep identical across the whole pack) ----
 const STYLE = [
@@ -71,7 +85,13 @@ const NEGATIVE = [
 ].join(", ");
 
 function promptFor(food) {
-  return `A ${food}, illustrated as a ${STYLE}.`;
+  // Gemini image models take one natural-language instruction (no separate
+  // negativePrompt param), so the exclusions are folded into the prompt.
+  return (
+    `Generate a square illustration of ${food}.\n\n` +
+    `Style: ${STYLE}.\n\n` +
+    `Do not include: ${NEGATIVE}.`
+  );
 }
 
 // ---- helpers ----
@@ -126,36 +146,55 @@ async function resolveProject(auth) {
   return detected;
 }
 
-/** One Imagen predict call → base64 PNG. */
+/** One Gemini image generateContent call → image Buffer + mime type. */
 async function generate(client, project, food) {
   const url =
-    `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${project}` +
-    `/locations/${LOCATION}/publishers/google/models/${MODEL}:predict`;
+    `https://${HOST}/v1/projects/${project}` +
+    `/locations/${LOCATION}/publishers/google/models/${MODEL}:generateContent`;
 
   const res = await client.request({
     url,
     method: "POST",
     data: {
-      instances: [{ prompt: promptFor(food.name) }],
-      parameters: {
-        sampleCount: 1,
-        aspectRatio: "1:1",
-        negativePrompt: NEGATIVE,
-        personGeneration: "dont_allow",
-        // Deterministic-ish style across the set. Imagen rejects seed when
-        // watermarking is on, so disable it for a consistent pack.
-        addWatermark: false,
-        seed: 7,
-      },
+      contents: [{ role: "user", parts: [{ text: promptFor(food.name) }] }],
+      generationConfig: { responseModalities: ["IMAGE"], temperature: 0.2 },
     },
   });
 
-  const b64 = res.data?.predictions?.[0]?.bytesBase64Encoded;
-  if (!b64) throw new Error(`no image returned (${JSON.stringify(res.data).slice(0, 200)})`);
-  return Buffer.from(b64, "base64");
+  const parts = res.data?.candidates?.[0]?.content?.parts ?? [];
+  const img = parts.find((p) => p.inlineData?.data);
+  if (!img) {
+    const reason = res.data?.candidates?.[0]?.finishReason || "no inlineData";
+    throw new Error(`no image returned (${reason})`);
+  }
+  return {
+    buffer: Buffer.from(img.inlineData.data, "base64"),
+    mime: img.inlineData.mimeType || "image/png",
+  };
 }
 
-/** Run tasks with a small concurrency limit (Imagen has per-minute quotas). */
+/**
+ * The model returns 1024x1024 (~1.2 MB) but these render as ~46px thumbnails, so
+ * downscale to THUMB_PX to keep the committed pack small. Uses macOS `sips`; on
+ * other platforms the full-size image is kept (with a warning).
+ */
+const THUMB_PX = Number(process.env.THUMB_PX || 128);
+let sipsWarned = false;
+
+async function downscale(file) {
+  try {
+    await execFileP("sips", ["-Z", String(THUMB_PX), file, "--out", file]);
+    return true;
+  } catch {
+    if (!sipsWarned) {
+      console.warn(`  ! could not downscale (no 'sips'); keeping full-size images`);
+      sipsWarned = true;
+    }
+    return false;
+  }
+}
+
+/** Run tasks with a small concurrency limit (image models have per-minute quotas). */
 async function pool(items, limit, worker) {
   let i = 0;
   const results = [];
@@ -221,10 +260,13 @@ async function main() {
   const failures = [];
   await pool(foods, args.concurrency, async (food) => {
     try {
-      const png = await generate(client, project, food);
-      await writeFile(path.join(OUT_DIR, `${food.slug}.png`), png);
+      const { buffer } = await generate(client, project, food);
+      const file = path.join(OUT_DIR, `${food.slug}.png`);
+      await writeFile(file, buffer);
+      await downscale(file);
+      const { size } = await stat(file);
       ok++;
-      console.log(`  ✓ ${food.slug}.png`);
+      console.log(`  ✓ ${food.slug}.png  (${(size / 1024).toFixed(0)}kb)`);
     } catch (e) {
       failures.push({ food, message: e.message });
       console.warn(`  ✗ ${food.slug}: ${e.message}`);
