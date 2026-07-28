@@ -14,6 +14,7 @@ import {
   SettingsIcon,
   EditIcon,
   DeleteIcon,
+  NoteIcon,
 } from "./icons";
 import type { Entitlement } from "./session";
 import InstallHint from "./InstallHint";
@@ -316,7 +317,12 @@ function TimelineRow({
               </div>
             </>
           )}
-          {event.note && <div className="sub note">📝 {event.note}</div>}
+          {event.note && (
+            <div className="sub note">
+              <NoteIcon size={13} />
+              {event.note}
+            </div>
+          )}
         </div>
       </div>
     </div>
