@@ -6,7 +6,15 @@ import {
   type MealEvent,
 } from "./db";
 import { getSymptom, BRISTOL } from "./symptoms";
-import { MealIcon, SettingsIcon, EditIcon, DeleteIcon } from "./icons";
+import {
+  MealIcon,
+  SymptomIcon,
+  BowelIcon,
+  CheckinIcon,
+  SettingsIcon,
+  EditIcon,
+  DeleteIcon,
+} from "./icons";
 import type { Entitlement } from "./session";
 import InstallHint from "./InstallHint";
 import {
@@ -71,10 +79,12 @@ export default function LogsView({
     return () => clearTimeout(t);
   }, [toast]);
 
+  // Group the timeline into month buckets (events already arrive newest-first).
   const groups = useMemo(() => {
     const map = new Map<string, LogEvent[]>();
     for (const e of events) {
-      const key = new Date(e.createdAt).toDateString();
+      const d = new Date(e.createdAt);
+      const key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, "0")}`;
       const arr = map.get(key) ?? [];
       arr.push(e);
       map.set(key, arr);
@@ -155,10 +165,10 @@ export default function LogsView({
           <p className="empty-sub">Snap a meal or tap ＋ to start tracking how food makes you feel.</p>
         </div>
       ) : (
-        groups.map(([day, dayEvents]) => (
-          <div key={day} className="day-group">
-            <div className="day-label">{formatDay(day)}</div>
-            {dayEvents.map((e) => (
+        groups.map(([key, monthEvents]) => (
+          <div key={key} className="day-group">
+            <div className="day-label">{monthLabel(monthEvents[0])}</div>
+            {monthEvents.map((e) => (
               <TimelineRow key={e.id} event={e} onClick={() => setDetail(e)} />
             ))}
           </div>
@@ -221,59 +231,75 @@ function describe(e: LogEvent): string {
   return `${kind} · ${time}`;
 }
 
-function formatDay(dateStr: string): string {
-  const d = new Date(dateStr);
-  const today = new Date().toDateString();
-  const yest = new Date(Date.now() - 86_400_000).toDateString();
-  if (dateStr === today) return "Today";
-  if (dateStr === yest) return "Yesterday";
-  return d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+function monthLabel(e: LogEvent): string {
+  return new Date(e.createdAt).toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function isToday(ts: number): boolean {
+  return new Date(ts).toDateString() === new Date().toDateString();
+}
+
+/** Same icon set + styling as the quick-add (+) menu. */
+function iconFor(type: LogEvent["type"]) {
+  const size = 24;
+  if (type === "meal") return <MealIcon size={size} />;
+  if (type === "symptom") return <SymptomIcon size={size} />;
+  if (type === "bowel") return <BowelIcon size={size} />;
+  return <CheckinIcon size={size} />;
 }
 
 function TimelineRow({ event, onClick }: { event: LogEvent; onClick: () => void }) {
-  const time = new Date(event.createdAt).toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const d = new Date(event.createdAt);
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 
   return (
     <div className="tl-row" onClick={onClick} role="button">
-      <div className="tl-time">{time}</div>
-      <div className="tl-dot" data-type={event.type} />
-      <div className="tl-body">
-        {event.type === "meal" && <MealBody event={event} />}
-        {event.type === "symptom" && (
-          <>
-            <div className="tl-title">🩺 Symptoms</div>
-            <div className="sub">{symptomLine(event.symptoms)}</div>
-          </>
-        )}
-        {event.type === "bowel" && (
-          <>
-            <div className="tl-title">
-              🚽 Bowel movement · type {event.bristol}{" "}
-              {BRISTOL.find((b) => b.type === event.bristol)?.emoji}
-            </div>
-            {event.symptoms?.length ? <div className="sub">{symptomLine(event.symptoms)}</div> : null}
-          </>
-        )}
-        {event.type === "checkin" && (
-          <>
-            <div className="tl-title">🧠 Stress & sleep</div>
-            <div className="sub">
-              {[event.stress && `Stress: ${event.stress}`, event.sleep && `Sleep: ${event.sleep}`]
-                .filter(Boolean)
-                .join(" · ")}
-            </div>
-          </>
-        )}
-        {event.note && <div className="sub note">📝 {event.note}</div>}
+      <span className={`tl-daynum${isToday(event.createdAt) ? " today" : ""}`}>
+        {d.getDate()}
+      </span>
+      <span className="tl-time">{time}</span>
+      <div className="tl-item">
+        <span className="tl-ico">{iconFor(event.type)}</span>
+        <div className="tl-content">
+          {event.type === "meal" && <MealContent event={event} />}
+          {event.type === "symptom" && (
+            <>
+              <div className="tl-title">Symptoms</div>
+              <div className="sub">{symptomLine(event.symptoms)}</div>
+            </>
+          )}
+          {event.type === "bowel" && (
+            <>
+              <div className="tl-title">
+                Bowel movement · type {event.bristol}{" "}
+                {BRISTOL.find((b) => b.type === event.bristol)?.emoji}
+              </div>
+              {event.symptoms?.length ? (
+                <div className="sub">{symptomLine(event.symptoms)}</div>
+              ) : null}
+            </>
+          )}
+          {event.type === "checkin" && (
+            <>
+              <div className="tl-title">Stress & sleep</div>
+              <div className="sub">
+                {[event.stress && `Stress: ${event.stress}`, event.sleep && `Sleep: ${event.sleep}`]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </div>
+            </>
+          )}
+          {event.note && <div className="sub note">📝 {event.note}</div>}
+        </div>
       </div>
     </div>
   );
 }
 
-function MealBody({ event }: { event: MealEvent }) {
+function MealContent({ event }: { event: MealEvent }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     if (!event.photo) return;
@@ -288,11 +314,11 @@ function MealBody({ event }: { event: MealEvent }) {
     .join(", ");
 
   return (
-    <div className="meal-body">
-      <div className="tl-title">🍽️ {event.dish || "Meal"}</div>
-      {url && <img src={url} alt="" className="tl-photo" />}
+    <>
+      <div className="tl-title">{event.dish || "Meal"}</div>
       {confident && <div className="sub">{confident}</div>}
-    </div>
+      {url && <img src={url} alt="" className="tl-photo" />}
+    </>
   );
 }
 
