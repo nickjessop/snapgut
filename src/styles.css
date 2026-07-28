@@ -1247,10 +1247,10 @@ body {
 }
 /* subsequent events on the same day: a small dot on the rail */
 .tl-dot {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: var(--accent); /* a filled node that the rail connects into */
+  background: var(--card-3); /* same tone as the rail — a subtle node, no gap */
 }
 .tl-time {
   font-size: 12px;
