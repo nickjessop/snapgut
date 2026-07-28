@@ -16,12 +16,12 @@
   /* --------------------------------------------------------------
      1. COLOR PALETTE (raw brand ramps — theme independent)
      --------------------------------------------------------------
-     Primary · Basil Green      Secondary · Terracotta (vibrant)
-       900  #23453a               700  #c2431f
-       800  #2d5d4d               600  #d64e26
-       700  #356859   <- ref 800  500  #e85d31  <- vibrant terracotta
-       600  #2f7d5f               300  #f28a5f
-       500  #37966f   <- ref 500  100  #f9d6c6
+     Primary · Basil Green      Secondary · Terracotta (earthy clay)
+       900  #23453a               700  #7f3018
+       800  #2d5d4d               600  #9c421f
+       700  #356859   <- ref 800  500  #b45a34  <- muted clay terracotta
+       600  #2f7d5f               300  #cd8560
+       500  #37966f   <- ref 500  100  #ecd2c4
        300  #7cc3a3
        100  #b9e4c9   <- ref 100  Neutral · Cream / Ink
         50  #e4f1e9               cream-50  #fffbea  <- ref 50
@@ -39,11 +39,11 @@
   --green-100: #b9e4c9;
   --green-50: #e4f1e9;
 
-  --terracotta-700: #c2431f;
-  --terracotta-600: #d64e26;
-  --terracotta-500: #e85d31;
-  --terracotta-300: #f28a5f;
-  --terracotta-100: #f9d6c6;
+  --terracotta-700: #7f3018;
+  --terracotta-600: #9c421f;
+  --terracotta-500: #b45a34;
+  --terracotta-300: #cd8560;
+  --terracotta-100: #ecd2c4;
 
   --cream-50: #fffbea;
   --cream-100: #f4edd2;
@@ -124,10 +124,10 @@
 
   /* secondary (pop · terracotta) */
   --pop: var(--terracotta-500);
-  --pop-soft: rgba(232, 93, 49, 0.12);
-  --pop-border: rgba(232, 93, 49, 0.28);
+  --pop-soft: rgba(180, 90, 52, 0.12);
+  --pop-border: rgba(180, 90, 52, 0.3);
   --on-pop: #fffbea;
-  --pop-grad: linear-gradient(115deg, #e85d31 0%, #cf4620 40%, #f2895c 75%, #e85d31 100%);
+  --pop-grad: linear-gradient(115deg, #b45a34 0%, #97401d 45%, #c67c56 100%);
 
   /* status */
   --good: #2f8f4e;
@@ -184,12 +184,12 @@
   --accent-border: rgba(79, 185, 140, 0.3);
   --on-accent: #07130d;
 
-  /* secondary (pop · terracotta, brightened) */
-  --pop: #f47048;
-  --pop-soft: rgba(244, 112, 72, 0.18);
-  --pop-border: rgba(244, 112, 72, 0.32);
-  --on-pop: #1a0a04;
-  --pop-grad: linear-gradient(115deg, #f47048 0%, #e5501f 40%, #ff9468 75%, #f47048 100%);
+  /* secondary (pop · terracotta, slightly lifted for dark bg) */
+  --pop: #c56b45;
+  --pop-soft: rgba(197, 107, 69, 0.18);
+  --pop-border: rgba(197, 107, 69, 0.32);
+  --on-pop: #fdf1e9;
+  --pop-grad: linear-gradient(115deg, #c56b45 0%, #a44e29 45%, #d68f6b 100%);
 
   /* status */
   --good: #4caf6a;

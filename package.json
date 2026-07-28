@@ -7,12 +7,14 @@
     "dev": "concurrently -k -n web,api -c cyan,magenta \"vite\" \"node server/index.js\"",
     "build": "vite build",
     "start": "node server/index.js",
-    "preview": "npm run build && node server/index.js"
+    "preview": "npm run build && node server/index.js",
+    "test": "vitest run"
   },
   "dependencies": {
     "@google-cloud/firestore": "^8.7.0",
     "@google-cloud/vertexai": "^1.9.0",
     "@hono/node-server": "^1.13.7",
+    "@phosphor-icons/react": "^2.1.10",
     "hono": "^4.6.14",
     "idb": "^8.0.0",
     "lucide-react": "^1.27.0",
@@ -26,8 +28,11 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.0",
+    "fast-check": "^3.23.1",
+    "jsdom": "^25.0.1",
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
-    "vite-plugin-pwa": "^0.21.1"
+    "vite-plugin-pwa": "^0.21.1",
+    "vitest": "^2.1.8"
   }
 }
