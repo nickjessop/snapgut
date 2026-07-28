@@ -4,6 +4,7 @@ import { computeEvidence, type EvidenceSummary } from "./insights";
 import { getInsights, AuthError, UpgradeRequiredError } from "./api";
 import type { Entitlement } from "./session";
 import FoodsTab from "./FoodsTab";
+import { InsightsIcon } from "./icons";
 
 type InsightTab = "patterns" | "foods";
 
@@ -37,7 +38,8 @@ export default function InsightsView({
         {entitlement &&
           (entitlement.pro ? (
             <span className="pro-badge" title="SnapGut Pro">
-              ✨ PRO
+              <InsightsIcon size={13} />
+              PRO
             </span>
           ) : (
             <button
@@ -45,7 +47,8 @@ export default function InsightsView({
               onClick={onNeedUpgrade}
               title="Unlock unlimited AI"
             >
-              ✨ {Math.max(0, entitlement.freeAiLimit - entitlement.freeAiUsed)} free
+              <InsightsIcon size={13} />
+              {Math.max(0, entitlement.freeAiLimit - entitlement.freeAiUsed)} free
             </button>
           ))}
       </div>
@@ -181,7 +184,10 @@ function PatternsTab({
       {/* Free users: reveal the AI narrative on demand (or upgrade when used up) */}
       {!ai && !loading && !pro && summary && (
         <div className="ai-lock">
-          <div className="ai-lock-title">✨ AI insight</div>
+          <div className="ai-lock-title">
+            <InsightsIcon size={16} />
+            AI insight
+          </div>
           {freeLeft > 0 ? (
             <>
               <p className="ai-lock-sub">

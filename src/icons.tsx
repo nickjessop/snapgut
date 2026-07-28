@@ -23,6 +23,7 @@ import {
   Sun,
   Moon,
   CircleHalf,
+  Flame,
   type IconProps as PhosphorIconProps,
 } from "@phosphor-icons/react";
 
@@ -47,7 +48,8 @@ export const BowelIcon = (p: IconProps) => <Toilet {...base} {...p} />;
 export const CheckinIcon = (p: IconProps) => <Brain {...base} {...p} />;
 export const LogsIcon = (p: IconProps) => <Scroll {...base} {...p} />;
 export const InsightsIcon = (p: IconProps) => <Sparkle {...base} {...p} />;
-export const AddIcon = (p: IconProps) => <Plus {...base} {...p} />;
+// A clean straight "+" (not the blocky fill glyph) for the center FAB.
+export const AddIcon = (p: IconProps) => <Plus weight="bold" {...p} />;
 export const EditIcon = (p: IconProps) => <PencilSimple {...base} {...p} />;
 export const DeleteIcon = (p: IconProps) => <Trash {...base} {...p} />;
 export const NoteIcon = (p: IconProps) => <NoteBlank {...base} {...p} />;
@@ -64,3 +66,4 @@ export const SignOutIcon = (p: IconProps) => <SignOut {...base} {...p} />;
 export const LightIcon = (p: IconProps) => <Sun {...base} {...p} />;
 export const DarkIcon = (p: IconProps) => <Moon {...base} {...p} />;
 export const AutoThemeIcon = (p: IconProps) => <CircleHalf {...base} {...p} />;
+export const StreakIcon = (p: IconProps) => <Flame {...base} {...p} />;

@@ -1977,6 +1977,10 @@ body {
   font-size: 16px;
   font-weight: 800;
   color: var(--pop);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 .ai-lock-sub {
   color: var(--muted);
