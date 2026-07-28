@@ -4,6 +4,7 @@ import { computeEvidence, type EvidenceSummary } from "./insights";
 import { getInsights, AuthError, UpgradeRequiredError } from "./api";
 import type { Entitlement } from "./session";
 import FoodsTab from "./FoodsTab";
+import HeaderStats from "./HeaderStats";
 import { InsightsIcon } from "./icons";
 
 type InsightTab = "patterns" | "foods";
@@ -35,22 +36,7 @@ export default function InsightsView({
     <div className="insights">
       <div className="insights-header">
         <h1>Insights</h1>
-        {entitlement &&
-          (entitlement.pro ? (
-            <span className="pro-badge" title="SnapGut Pro">
-              <InsightsIcon size={13} />
-              PRO
-            </span>
-          ) : (
-            <button
-              className="credits-pill"
-              onClick={onNeedUpgrade}
-              title="Unlock unlimited AI"
-            >
-              <InsightsIcon size={13} />
-              {Math.max(0, entitlement.freeAiLimit - entitlement.freeAiUsed)} free
-            </button>
-          ))}
+        <HeaderStats entitlement={entitlement} onUpgrade={() => onNeedUpgrade?.()} />
       </div>
 
       <div className="tabs">

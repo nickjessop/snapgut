@@ -15,10 +15,9 @@ import {
   EditIcon,
   DeleteIcon,
   NoteIcon,
-  InsightsIcon,
-  StreakIcon,
 } from "./icons";
 import type { Entitlement } from "./session";
+import HeaderStats from "./HeaderStats";
 import InstallHint from "./InstallHint";
 import {
   exportBackup,
@@ -109,28 +108,7 @@ export default function LogsView({
       <div className="history-header">
         <h1>Timeline</h1>
         <div className="header-right">
-          {streak >= 2 && (
-            <span className="streak" title={`${streak}-day logging streak`}>
-              <StreakIcon size={14} />
-              {streak}
-            </span>
-          )}
-          {entitlement &&
-            (entitlement.pro ? (
-              <span className="pro-badge" title="SnapGut Pro">
-                <InsightsIcon size={13} />
-                PRO
-              </span>
-            ) : (
-              <button
-                className="credits-pill"
-                onClick={onUpgrade}
-                title="Unlock unlimited AI"
-              >
-                <InsightsIcon size={13} />
-                {Math.max(0, entitlement.freeAiLimit - entitlement.freeAiUsed)} free
-              </button>
-            ))}
+          <HeaderStats entitlement={entitlement} streak={streak} onUpgrade={onUpgrade} />
           <button className="icon-round" onClick={onOpenSettings} aria-label="Settings">
             <SettingsIcon size={20} />
           </button>

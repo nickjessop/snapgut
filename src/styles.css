@@ -1834,11 +1834,41 @@ body {
   gap: 4px;
   font-size: 14px;
   font-weight: 800;
+  font-family: inherit;
   color: var(--pop);
   background: var(--pop-soft);
+  border: none;
   border-radius: var(--r-sm);
   padding: 6px 12px;
+  cursor: pointer;
   animation: pop 0.4s var(--spring) both;
+  transition: transform 0.16s var(--spring);
+}
+.streak:active {
+  transform: scale(0.94);
+}
+
+/* header-stat info sheets */
+.info-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 17px;
+  font-weight: var(--fw-black);
+  padding: 4px 2px 10px;
+}
+.info-title svg {
+  color: var(--accent);
+  flex: 0 0 auto;
+}
+.info-title.streak-modal svg {
+  color: var(--pop);
+}
+.info-copy {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+  margin: 0 2px 14px;
 }
 
 /* ---------- Auth gate ---------- */
