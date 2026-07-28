@@ -18,9 +18,9 @@ export function slugify(name: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-/** Local illustration-pack URL for a food name. */
+/** Local illustration-pack URL for a food name (256px WebP with alpha). */
 export function packUrl(name: string): string {
-  return `/foods/${slugify(name)}.png`;
+  return `/foods/${slugify(name)}.webp`;
 }
 
 /**

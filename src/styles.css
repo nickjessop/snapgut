@@ -1484,6 +1484,15 @@ body {
   border-radius: 12px;
   flex: 0 0 auto;
   object-fit: cover;
+}
+/* Illustrations are transparent PNG/WebP, so the app owns the backdrop. */
+.food-img {
+  object-fit: contain;
+  padding: 2px;
+  background: var(--card-2);
+  border: 1px solid var(--border);
+}
+.food-avatar {
   background: var(--card-2);
 }
 .food-avatar {
