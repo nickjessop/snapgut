@@ -169,7 +169,7 @@ export default function App() {
             <div className="action-grip" />
             <ActionItem
               icon={CameraIcon}
-              title="Food snap"
+              title="Snap a meal"
               sub="Photo → AI ingredients"
               onClick={() => {
                 setPlusOpen(false);

@@ -49,7 +49,7 @@ export default function Intro({ onFinish }: { onFinish: () => void }) {
         <div className="intro-badge splash-badge">
           <MealIcon size={54} strokeWidth={1.75} />
         </div>
-        <div className="wordmark">Food Snap</div>
+        <div className="wordmark">SnapGut</div>
         <div className="tagline">Know what your gut is telling you</div>
       </div>
     );

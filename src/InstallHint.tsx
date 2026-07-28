@@ -55,7 +55,7 @@ export default function InstallHint() {
   return (
     <div className="install-hint">
       <div className="install-text">
-        <strong>Add Food Snap to your Home Screen</strong>
+        <strong>Add SnapGut to your Home Screen</strong>
         <div className="install-sub">
           {ios ? (
             <>Tap the Share button (the box with an ↑) in Safari, then “Add to Home Screen.” It opens like a real app and keeps your data from being cleared.</>

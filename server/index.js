@@ -267,5 +267,5 @@ app.use("/*", serveStatic({ root: "./dist" }));
 app.get("*", serveStatic({ path: "./dist/index.html" }));
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {
-  console.log(`Food Snap server on http://localhost:${info.port}`);
+  console.log(`SnapGut server on http://localhost:${info.port}`);
 });

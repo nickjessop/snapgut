@@ -9,9 +9,9 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg"],
       manifest: {
-        name: "Food Snap",
-        short_name: "FoodSnap",
-        description: "Snap your food, log how you felt.",
+        name: "SnapGut",
+        short_name: "SnapGut",
+        description: "Snap your meals, spot your triggers, feel better.",
         theme_color: "#111111",
         background_color: "#111111",
         display: "standalone",

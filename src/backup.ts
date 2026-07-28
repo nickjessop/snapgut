@@ -37,7 +37,7 @@ async function buildBackupBlob(): Promise<{ blob: Blob; count: number }> {
       out.push({ ...e });
     }
   }
-  const payload = { app: "food-snap", version: 1, exportedAt: Date.now(), events: out };
+  const payload = { app: "snapgut", version: 1, exportedAt: Date.now(), events: out };
   const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
   return { blob, count: events.length };
 }
@@ -47,13 +47,13 @@ async function buildBackupBlob(): Promise<{ blob: Blob; count: number }> {
 /** Build a backup and hand it to the OS (share sheet → Files/iCloud, or download). */
 export async function exportBackup(): Promise<number> {
   const { blob, count } = await buildBackupBlob();
-  const name = `food-snap-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  const name = `snapgut-backup-${new Date().toISOString().slice(0, 10)}.json`;
   const file = new File([blob], name, { type: "application/json" });
 
   const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
   if (nav.share && nav.canShare?.({ files: [file] })) {
     try {
-      await nav.share({ files: [file], title: "Food Snap backup" });
+      await nav.share({ files: [file], title: "SnapGut backup" });
       markBackedUp();
       return count;
     } catch (e) {
@@ -84,7 +84,7 @@ export async function importBackup(file: File): Promise<number> {
     throw new Error("That file isn't valid JSON.");
   }
   if (!data || !Array.isArray(data.events)) {
-    throw new Error("That doesn't look like a Food Snap backup.");
+    throw new Error("That doesn't look like a SnapGut backup.");
   }
 
   let n = 0;

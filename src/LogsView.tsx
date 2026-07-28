@@ -50,11 +50,11 @@ export default function LogsView({ onEdit, onChanged, reloadKey }: Props) {
   async function exportCSV() {
     const csv = toCSV(events, (id) => getSymptom(id)?.label ?? id);
     const blob = new Blob([csv], { type: "text/csv" });
-    const file = new File([blob], "food-snap.csv", { type: "text/csv" });
+    const file = new File([blob], "snapgut.csv", { type: "text/csv" });
     const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
     if (nav.share && nav.canShare?.({ files: [file] })) {
       try {
-        await nav.share({ files: [file], title: "Food Snap export" });
+        await nav.share({ files: [file], title: "SnapGut export" });
         setDataSheet(false);
         return;
       } catch {
@@ -64,7 +64,7 @@ export default function LogsView({ onEdit, onChanged, reloadKey }: Props) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "food-snap.csv";
+    a.download = "snapgut.csv";
     a.click();
     URL.revokeObjectURL(url);
     setDataSheet(false);
