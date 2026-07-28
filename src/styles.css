@@ -1210,7 +1210,7 @@ body {
   left: 50%;
   transform: translateX(-50%);
   top: 0;
-  bottom: 0;
+  bottom: -18px; /* bridge the row's padding-bottom so lines meet */
   width: 2px;
   background: var(--card-3);
   z-index: 0;
