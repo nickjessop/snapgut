@@ -85,7 +85,7 @@ body {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: calc(104px + var(--safe-bottom));
+  bottom: 60px; /* ~35–40px above the raised center + button */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -99,7 +99,7 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  height: 220px;
+  height: 100px;
   background: linear-gradient(to top, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0));
   pointer-events: none;
   z-index: 1;
@@ -778,6 +778,7 @@ body {
 .tabbar {
   position: relative;
   align-items: center;
+  z-index: 5; /* above the camera scrim (1) / controls (2), below sheets (10) */
 }
 .tabbar .fab {
   flex: 0 0 auto;
