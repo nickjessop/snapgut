@@ -1,11 +1,26 @@
 :root {
-  --bg: #111111;
-  --card: #1c1c1e;
-  --card-2: #2c2c2e;
+  --bg: #0d0d10;
+  --bg-2: #17171d;
+  --card: #1a1a20;
+  --card-2: #26262e;
+  --card-3: #33333d;
   --text: #ffffff;
-  --muted: #9a9a9e;
+  --muted: #9b9ba6;
   --accent: #ffd60a;
+  --accent-2: #ff9500;
   --accent-press: #e6c009;
+  --accent-grad: linear-gradient(135deg, #ffe14d 0%, #ffb020 100%);
+  --accent-soft: rgba(255, 200, 20, 0.14);
+  --good: #34c759;
+  --warn: #ff9f0a;
+  --bad: #ff453a;
+  --r-sm: 12px;
+  --r: 18px;
+  --r-lg: 24px;
+  --r-pill: 999px;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.42);
+  --shadow-accent: 0 8px 22px rgba(255, 176, 20, 0.34);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -29,6 +44,17 @@ body {
     Roboto, sans-serif;
   overscroll-behavior: none;
   user-select: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Subtle depth: a soft radial glow at the top of scrollable surfaces. */
+.history,
+.insights,
+.sheet {
+  background:
+    radial-gradient(140% 60% at 50% -10%, var(--bg-2) 0%, rgba(23, 23, 29, 0) 55%),
+    var(--bg);
 }
 
 .app {
@@ -67,17 +93,18 @@ body {
 }
 
 .shutter {
-  width: 76px;
-  height: 76px;
+  width: 78px;
+  height: 78px;
   border-radius: 50%;
   background: #fff;
-  border: 5px solid rgba(255, 255, 255, 0.35);
+  border: 5px solid rgba(255, 255, 255, 0.4);
   background-clip: padding-box;
   cursor: pointer;
-  transition: transform 0.08s ease;
+  transition: transform 0.16s var(--spring);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.14), 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 .shutter:active {
-  transform: scale(0.92);
+  transform: scale(0.9);
 }
 
 .top-bar {
@@ -152,33 +179,35 @@ body {
 
 .chip {
   border: none;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 12px 18px;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 15.5px;
+  font-weight: 700;
   background: var(--card-2);
   color: var(--text);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  transition: transform 0.06s ease, background 0.12s ease;
+  transition: transform 0.16s var(--spring), background 0.15s ease,
+    box-shadow 0.15s ease;
 }
 .chip:active {
-  transform: scale(0.95);
+  transform: scale(0.93);
 }
 .chip.selected {
-  background: var(--accent);
-  color: #111;
+  background: var(--accent-grad);
+  color: #1a1400;
+  box-shadow: var(--shadow-accent);
 }
 .chip .x {
-  opacity: 0.6;
-  font-weight: 700;
+  opacity: 0.55;
+  font-weight: 800;
 }
 
 .add-food {
   background: transparent;
-  border: 1.5px dashed #555;
+  border: 1.5px dashed var(--card-3);
   color: var(--muted);
 }
 
@@ -221,19 +250,23 @@ body {
 .primary {
   width: 100%;
   border: none;
-  border-radius: 16px;
+  border-radius: 20px;
   padding: 18px;
   font-size: 18px;
-  font-weight: 700;
-  background: var(--accent);
-  color: #111;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  background: var(--accent-grad);
+  color: #1a1400;
   cursor: pointer;
+  box-shadow: var(--shadow-accent);
+  transition: transform 0.16s var(--spring), box-shadow 0.15s ease, opacity 0.15s ease;
 }
 .primary:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
+  box-shadow: none;
 }
 .primary:active:not(:disabled) {
-  background: var(--accent-press);
+  transform: scale(0.975);
 }
 
 .status {
@@ -249,7 +282,9 @@ body {
   padding: calc(16px + var(--safe-top)) 20px calc(20px + var(--safe-bottom));
 }
 .history h1 {
-  font-size: 26px;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
   margin: 0 0 16px;
 }
 .history-header {
@@ -318,16 +353,22 @@ body {
 /* ---------- Symptom picker ---------- */
 .search {
   width: 100%;
-  border: none;
+  border: 1px solid transparent;
   border-radius: 14px;
   padding: 14px 16px;
   font-size: 16px;
   background: var(--card-2);
   color: var(--text);
   margin: 4px 0 14px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .search::placeholder {
   color: var(--muted);
+}
+.search:focus {
+  outline: none;
+  border-color: rgba(255, 200, 20, 0.5);
+  box-shadow: 0 0 0 4px var(--accent-soft);
 }
 
 .cat-row {
@@ -380,16 +421,17 @@ body {
 }
 .sel-chip {
   border: none;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 10px 16px;
   font-size: 15px;
-  font-weight: 600;
-  background: var(--accent);
-  color: #111;
+  font-weight: 700;
+  background: var(--accent-grad);
+  color: #1a1400;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  box-shadow: var(--shadow-accent);
 }
 .sel-chip .x {
   opacity: 0.6;
@@ -440,8 +482,10 @@ body {
 /* ---------- Bottom tab bar ---------- */
 .tabbar {
   display: flex;
-  border-top: 1px solid #2a2a2c;
-  background: var(--bg);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(16, 16, 20, 0.82);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   padding-bottom: var(--safe-bottom);
 }
 .tabbar button {
@@ -472,8 +516,10 @@ body {
   padding: calc(16px + var(--safe-top)) 20px calc(20px + var(--safe-bottom));
 }
 .insights h1 {
-  font-size: 26px;
-  margin: 0 0 4px;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 12px;
 }
 .insights .disclaimer {
   font-size: 12px;
@@ -489,12 +535,14 @@ body {
 }
 .stat-card {
   background: var(--card);
-  border-radius: 16px;
-  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--r);
+  padding: 15px 16px;
 }
 .stat-card .n {
-  font-size: 24px;
-  font-weight: 700;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 .stat-card .l {
   font-size: 12px;
@@ -502,11 +550,13 @@ body {
   margin-top: 2px;
 }
 .insight-block {
-  background: var(--card);
-  border-radius: 18px;
-  padding: 16px 18px;
+  background: linear-gradient(160deg, var(--accent-soft), rgba(255, 200, 20, 0) 55%),
+    var(--card);
+  border: 1px solid rgba(255, 200, 20, 0.14);
+  border-radius: var(--r-lg);
+  padding: 18px 18px;
   margin-bottom: 14px;
-  line-height: 1.5;
+  line-height: 1.55;
   white-space: pre-wrap;
   font-size: 15px;
 }
@@ -619,23 +669,24 @@ body {
 }
 .tabbar .fab {
   flex: 0 0 auto;
-  width: 56px;
-  height: 56px;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
-  background: var(--accent);
-  color: #111;
+  background: var(--accent-grad);
+  color: #1a1400;
   font-size: 30px;
   font-weight: 300;
   line-height: 1;
-  margin: -18px 8px 0;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  margin: -22px 8px 0;
+  box-shadow: var(--shadow-accent), 0 4px 14px rgba(0, 0, 0, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
+  transition: transform 0.16s var(--spring);
 }
 .tabbar .fab:active {
-  transform: scale(0.94);
+  transform: scale(0.9);
 }
 
 /* ---------- Action sheet (the + menu) ---------- */
@@ -655,12 +706,14 @@ body {
 .action-sheet {
   width: 100%;
   background: var(--card);
-  border-radius: 22px 22px 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 28px 28px 0 0;
   padding: 10px 16px calc(16px + var(--safe-bottom));
   display: flex;
   flex-direction: column;
   gap: 8px;
-  animation: slideup 0.2s ease;
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.5);
+  animation: slideup 0.24s var(--spring);
 }
 @keyframes slideup {
   from { transform: translateY(100%); }
@@ -679,14 +732,16 @@ body {
   gap: 14px;
   background: var(--card-2);
   border: none;
-  border-radius: 16px;
+  border-radius: var(--r);
   padding: 16px;
   cursor: pointer;
   text-align: left;
   color: var(--text);
+  transition: transform 0.16s var(--spring), background 0.15s ease;
 }
 .action-item:active {
-  background: #3a3a3c;
+  background: var(--card-3);
+  transform: scale(0.98);
 }
 .action-item .ai-ico {
   display: flex;
@@ -932,8 +987,9 @@ body {
   cursor: pointer;
 }
 .seg-btn.on {
-  background: var(--accent);
-  color: #111;
+  background: var(--accent-grad);
+  color: #1a1400;
+  box-shadow: var(--shadow-accent);
 }
 
 /* ---------- Food ranking ---------- */
@@ -1115,4 +1171,41 @@ body {
   align-items: flex-end;
   gap: 6px;
   flex: 0 0 auto;
+}
+
+/* ---------- Motion polish ---------- */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.insight-block,
+.stat-cards,
+.rank-group,
+.nudge,
+.install-hint,
+.redflag {
+  animation: fade-up 0.28s var(--spring) both;
+}
+
+/* Selected mood/chip cards get the accent gradient treatment too */
+.mood.selected {
+  background: var(--accent-grad);
+  color: #1a1400;
+  box-shadow: var(--shadow-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
 }
