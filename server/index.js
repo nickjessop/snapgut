@@ -2,7 +2,7 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { VertexAI } from "@google-cloud/vertexai";
-import { getStore } from "./store.js";
+import { getStore, isPro, entitlement, FREE_AI_LIMIT } from "./store.js";
 import {
   signToken,
   verifyToken,
@@ -22,12 +22,37 @@ const MODEL = process.env.VERTEX_MODEL || "gemini-2.5-flash-lite";
 const MOCK_AI = process.env.MOCK_AI === "1" || !PROJECT;
 
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY;
+const DAY = 86_400_000;
 
-// Credit packs (used by /api/billing). In prod, set the matching Stripe price IDs.
-const PACKS = {
-  small: { credits: 50, price: 500, label: "50 credits", priceEnv: "STRIPE_PRICE_SMALL" },
-  medium: { credits: 150, price: 1200, label: "150 credits", priceEnv: "STRIPE_PRICE_MEDIUM" },
-  large: { credits: 400, price: 2500, label: "400 credits", priceEnv: "STRIPE_PRICE_LARGE" },
+// SnapGut Pro plans. One entitlement, sold three ways. Prices in cents.
+const PLANS = {
+  annual: {
+    price: 2999,
+    label: "Annual",
+    caption: "billed yearly",
+    per: "$2.50/mo",
+    mode: "subscription",
+    priceEnv: "STRIPE_PRICE_ANNUAL",
+    durationMs: 365 * DAY,
+  },
+  monthly: {
+    price: 499,
+    label: "Monthly",
+    caption: "billed monthly",
+    per: "$4.99/mo",
+    mode: "subscription",
+    priceEnv: "STRIPE_PRICE_MONTHLY",
+    durationMs: 31 * DAY,
+  },
+  lifetime: {
+    price: 7999,
+    label: "Lifetime",
+    caption: "one-time — yours forever",
+    per: "best value",
+    mode: "payment",
+    priceEnv: "STRIPE_PRICE_LIFETIME",
+    durationMs: null, // never expires
+  },
 };
 
 const app = new Hono();
@@ -158,7 +183,10 @@ app.post("/api/recognize", async (c) => {
 
     const store = await getStore();
     const user = (await store.getUser(email)) || (await store.upsertUser(email));
-    if (user.credits <= 0) return c.json({ error: "no_credits" }, 402);
+    const pro = isPro(user);
+    if (!pro && (user.freeAiUsed ?? 0) >= FREE_AI_LIMIT) {
+      return c.json({ error: "upgrade_required", entitlement: entitlement(user) }, 402);
+    }
 
     const { image, mimeType, note } = await c.req.json();
     if (!image) return c.json({ error: "missing image" }, 400);
@@ -188,8 +216,8 @@ app.post("/api/recognize", async (c) => {
       }
     }
 
-    const credits = await store.deductCredit(email); // charge on success
-    return c.json({ ...meal, credits });
+    if (!pro) await store.incFreeAi(email); // count a free-trial use
+    return c.json({ ...meal, entitlement: entitlement(await store.getUser(email)) });
   } catch (err) {
     console.error("recognize error:", err);
     return c.json({ error: String(err?.message || err) }, 500);
@@ -267,29 +295,38 @@ function mockInsight(summary) {
 
 app.post("/api/insights", async (c) => {
   try {
-    if (!sessionEmail(c)) return c.json({ error: "unauthorized" }, 401);
+    const email = sessionEmail(c);
+    if (!email) return c.json({ error: "unauthorized" }, 401);
+
+    const store = await getStore();
+    const user = (await store.getUser(email)) || (await store.upsertUser(email));
+    const pro = isPro(user);
+    if (!pro && (user.freeAiUsed ?? 0) >= FREE_AI_LIMIT) {
+      return c.json({ error: "upgrade_required", entitlement: entitlement(user) }, 402);
+    }
+
     const { summary } = await c.req.json();
 
+    let out;
     if (MOCK_AI) {
       await new Promise((r) => setTimeout(r, 600));
-      return c.json(mockInsight(summary));
+      out = mockInsight(summary);
+    } else {
+      const focus = summary?.focus || "insufficient-data";
+      const prompt = `${BASE_INSIGHT_PROMPT}\n\n${FOCUS_PROMPTS[focus] || FOCUS_PROMPTS["insufficient-data"]}\n\nSUMMARY:\n${JSON.stringify(summary)}`;
+      const result = await getModel().generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+      });
+      const text = result.response?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+      try {
+        out = JSON.parse(text);
+      } catch {
+        out = { headline: "Insight", body: text };
+      }
     }
 
-    const focus = summary?.focus || "insufficient-data";
-    const prompt = `${BASE_INSIGHT_PROMPT}\n\n${FOCUS_PROMPTS[focus] || FOCUS_PROMPTS["insufficient-data"]}\n\nSUMMARY:\n${JSON.stringify(summary)}`;
-
-    const result = await getModel().generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-    });
-    const text =
-      result.response?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
-    let out;
-    try {
-      out = JSON.parse(text);
-    } catch {
-      out = { headline: "Insight", body: text };
-    }
-    return c.json(out);
+    if (!pro) await store.incFreeAi(email);
+    return c.json({ ...out, entitlement: entitlement(await store.getUser(email)) });
   } catch (err) {
     console.error("insights error:", err);
     return c.json({ error: String(err?.message || err) }, 500);
@@ -341,7 +378,7 @@ app.post("/api/auth/verify", async (c) => {
 
     await store.clearCode(key);
     const user = await store.upsertUser(key);
-    return c.json({ token: signToken(key), email: key, credits: user.credits });
+    return c.json({ token: signToken(key), email: key, ...entitlement(user) });
   } catch (err) {
     console.error("auth/verify error:", err);
     return c.json({ error: "server_error" }, 500);
@@ -353,18 +390,24 @@ app.get("/api/me", async (c) => {
   if (!email) return c.json({ error: "unauthorized" }, 401);
   const store = await getStore();
   const user = (await store.getUser(email)) || (await store.upsertUser(email));
-  return c.json({ email: user.email, credits: user.credits });
+  return c.json({ email: user.email, ...entitlement(user) });
 });
 
 // ---- Billing (Stripe; dev-simulated without keys) ----
 
-app.get("/api/billing/packs", (c) =>
+function proUntilFor(plan) {
+  const p = PLANS[plan];
+  return p?.durationMs == null ? null : Date.now() + p.durationMs;
+}
+
+app.get("/api/billing/plans", (c) =>
   c.json(
-    Object.entries(PACKS).map(([id, p]) => ({
+    Object.entries(PLANS).map(([id, p]) => ({
       id,
-      credits: p.credits,
       price: p.price,
       label: p.label,
+      caption: p.caption,
+      per: p.per,
     }))
   )
 );
@@ -372,25 +415,26 @@ app.get("/api/billing/packs", (c) =>
 app.post("/api/billing/checkout", async (c) => {
   const email = sessionEmail(c);
   if (!email) return c.json({ error: "unauthorized" }, 401);
-  const { pack } = await c.req.json().catch(() => ({}));
-  const chosen = PACKS[pack] || PACKS.small;
+  const { plan } = await c.req.json().catch(() => ({}));
+  const chosen = PLANS[plan] ? plan : "annual";
   const store = await getStore();
 
   if (!STRIPE_SECRET) {
-    // Dev: simulate a successful purchase.
-    const credits = await store.addCredits(email, chosen.credits);
-    return c.json({ simulated: true, credits });
+    // Dev: simulate a successful purchase → grant Pro immediately.
+    const user = await store.setPro(email, proUntilFor(chosen));
+    return c.json({ simulated: true, ...entitlement(user) });
   }
 
+  const p = PLANS[chosen];
   const origin = c.req.header("origin") || `https://${c.req.header("host")}`;
   const s = await getStripe();
   const session = await s.checkout.sessions.create({
-    mode: "payment",
+    mode: p.mode, // subscription | payment
     customer_email: email,
-    line_items: [{ price: process.env[chosen.priceEnv], quantity: 1 }],
-    success_url: `${origin}/?paid=1`,
-    cancel_url: `${origin}/?paid=0`,
-    metadata: { email, credits: String(chosen.credits) },
+    line_items: [{ price: process.env[p.priceEnv], quantity: 1 }],
+    success_url: `${origin}/?upgraded=1`,
+    cancel_url: `${origin}/?upgraded=0`,
+    metadata: { email, plan: chosen },
   });
   return c.json({ url: session.url });
 });
@@ -406,13 +450,13 @@ app.post("/api/billing/webhook", async (c) => {
   } catch {
     return c.text("bad signature", 400);
   }
+  const store = await getStore();
   if (evt.type === "checkout.session.completed") {
     const m = evt.data.object.metadata || {};
-    if (m.email && m.credits) {
-      const store = await getStore();
-      await store.addCredits(m.email, Number(m.credits));
-    }
+    if (m.email) await store.setPro(m.email, proUntilFor(m.plan));
   }
+  // NOTE: for recurring plans, also handle invoice.paid (extend proUntil) and
+  // customer.subscription.deleted (revoke). See docs/auth-and-credits.md.
   return c.json({ received: true });
 });
 

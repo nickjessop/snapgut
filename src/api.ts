@@ -1,9 +1,9 @@
 import type { MealAnalysis, Ingredient } from "./db";
 import type { EvidenceSummary } from "./insights";
-import { authHeaders, clearToken } from "./session";
+import { authHeaders, clearToken, type Entitlement } from "./session";
 
 export class AuthError extends Error {}
-export class NoCreditsError extends Error {}
+export class UpgradeRequiredError extends Error {}
 
 function buildHeaders(): Record<string, string> {
   return { "Content-Type": "application/json", ...authHeaders() };
@@ -15,15 +15,15 @@ function handleAuthStatus(status: number) {
     throw new AuthError("Session expired");
   }
   if (status === 402) {
-    throw new NoCreditsError("Out of credits");
+    throw new UpgradeRequiredError("Upgrade required");
   }
 }
 
-/** Recognize a meal photo. Returns dish + ingredients (+ remaining credits). */
+/** Recognize a meal photo. Returns dish + ingredients (+ current entitlement). */
 export async function recognizeMeal(
   imageBlob: Blob,
   note?: string
-): Promise<MealAnalysis & { credits?: number }> {
+): Promise<MealAnalysis & { entitlement?: Entitlement }> {
   const base64 = await blobToBase64(imageBlob);
   const res = await fetch("/api/recognize", {
     method: "POST",
@@ -41,7 +41,7 @@ export async function recognizeMeal(
     throw new Error(`Recognition failed (${res.status}): ${text}`);
   }
 
-  const data = (await res.json()) as Partial<MealAnalysis> & { credits?: number };
+  const data = (await res.json()) as Partial<MealAnalysis> & { entitlement?: Entitlement };
   const ingredients: Ingredient[] = Array.isArray(data.ingredients)
     ? data.ingredients
         .filter((i): i is Ingredient => !!i && typeof i.name === "string")
@@ -50,13 +50,13 @@ export async function recognizeMeal(
           confidence: i.confidence === "maybe" ? "maybe" : "confident",
         }))
     : [];
-  return { dish: data.dish || "Meal", ingredients, credits: data.credits };
+  return { dish: data.dish || "Meal", ingredients, entitlement: data.entitlement };
 }
 
 /** Send the on-device evidence summary and get back a narrated insight. */
 export async function getInsights(
   summary: EvidenceSummary
-): Promise<{ headline: string; body: string; redFlag?: string }> {
+): Promise<{ headline: string; body: string; redFlag?: string; entitlement?: Entitlement }> {
   const res = await fetch("/api/insights", {
     method: "POST",
     headers: buildHeaders(),

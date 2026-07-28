@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { requestCode, verifyCode } from "./session";
+import { requestCode, verifyCode, type Me } from "./session";
 import { MealIcon } from "./icons";
 
-/** Email + 6-digit code sign-in. Calls onAuthed with the starting credit balance. */
-export default function AuthGate({ onAuthed }: { onAuthed: (credits: number) => void }) {
+/** Email + 6-digit code sign-in. Calls onAuthed with the user's entitlement. */
+export default function AuthGate({ onAuthed }: { onAuthed: (me: Me) => void }) {
   const [phase, setPhase] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -30,7 +30,7 @@ export default function AuthGate({ onAuthed }: { onAuthed: (credits: number) => 
     setBusy(true);
     try {
       const r = await verifyCode(email.trim(), code.trim());
-      onAuthed(r.credits);
+      onAuthed(r);
     } catch (e) {
       setError(friendly((e as Error).message));
     } finally {

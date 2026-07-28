@@ -1,17 +1,39 @@
-// Data store for users, credits, and auth codes.
+// Data store for users, entitlement, and auth codes.
 // - dev (default): in-memory (resets on restart) — fine for local testing.
 // - prod: Firestore when USERS_BACKEND=firestore (uses ADC like Vertex AI).
+//
+// Entitlement model (no credits): a user is either Pro (unlimited AI) or on a
+// free trial of FREE_AI_LIMIT AI actions shared across snaps + insight generations.
 
 const BACKEND = process.env.USERS_BACKEND === "firestore" ? "firestore" : "memory";
-const FREE_CREDITS = Number(process.env.FREE_CREDITS ?? 5);
+export const FREE_AI_LIMIT = Number(process.env.FREE_AI_LIMIT ?? 10);
 
 const norm = (email) => String(email || "").trim().toLowerCase();
 
+function newUser(email) {
+  return { email: norm(email), pro: false, proUntil: null, freeAiUsed: 0, createdAt: Date.now() };
+}
+
+/** True if the user currently has Pro (lifetime = null proUntil; else not expired). */
+export function isPro(user) {
+  if (!user?.pro) return false;
+  return user.proUntil == null || user.proUntil > Date.now();
+}
+
+/** Public entitlement snapshot for the client. */
+export function entitlement(user) {
+  return {
+    pro: isPro(user),
+    proUntil: user?.proUntil ?? null,
+    freeAiUsed: user?.freeAiUsed ?? 0,
+    freeAiLimit: FREE_AI_LIMIT,
+  };
+}
+
 // ---- in-memory ----
 function memoryStore() {
-  const users = new Map(); // email -> { email, credits, createdAt }
-  const codes = new Map(); // email -> { hash, expiresAt, attempts, lastSentAt }
-
+  const users = new Map();
+  const codes = new Map();
   return {
     async getUser(email) {
       return users.get(norm(email)) || null;
@@ -20,22 +42,23 @@ function memoryStore() {
       const key = norm(email);
       let u = users.get(key);
       if (!u) {
-        u = { email: key, credits: FREE_CREDITS, createdAt: Date.now() };
+        u = newUser(key);
         users.set(key, u);
       }
       return u;
     },
-    async addCredits(email, n) {
+    async setPro(email, proUntil) {
       const u = users.get(norm(email));
       if (!u) return null;
-      u.credits += n;
-      return u.credits;
+      u.pro = true;
+      u.proUntil = proUntil ?? null; // null = lifetime
+      return u;
     },
-    async deductCredit(email) {
+    async incFreeAi(email) {
       const u = users.get(norm(email));
-      if (!u || u.credits <= 0) return null;
-      u.credits -= 1;
-      return u.credits;
+      if (!u) return 0;
+      u.freeAiUsed += 1;
+      return u.freeAiUsed;
     },
     async getCode(email) {
       return codes.get(norm(email)) || null;
@@ -55,35 +78,28 @@ async function firestoreStore() {
   const db = new Firestore();
   const usersCol = db.collection("users");
   const codesCol = db.collection("authCodes");
-
   return {
     async getUser(email) {
       const snap = await usersCol.doc(norm(email)).get();
       return snap.exists ? snap.data() : null;
     },
     async upsertUser(email) {
-      const key = norm(email);
-      const ref = usersCol.doc(key);
+      const ref = usersCol.doc(norm(email));
       const snap = await ref.get();
       if (snap.exists) return snap.data();
-      const u = { email: key, credits: FREE_CREDITS, createdAt: Date.now() };
+      const u = newUser(email);
       await ref.set(u);
       return u;
     },
-    async addCredits(email, n) {
+    async setPro(email, proUntil) {
       const ref = usersCol.doc(norm(email));
-      await ref.update({ credits: FieldValue.increment(n) });
-      return (await ref.get()).data()?.credits ?? null;
+      await ref.set({ pro: true, proUntil: proUntil ?? null }, { merge: true });
+      return (await ref.get()).data();
     },
-    async deductCredit(email) {
+    async incFreeAi(email) {
       const ref = usersCol.doc(norm(email));
-      return db.runTransaction(async (tx) => {
-        const snap = await tx.get(ref);
-        const credits = snap.data()?.credits ?? 0;
-        if (credits <= 0) return null;
-        tx.update(ref, { credits: credits - 1 });
-        return credits - 1;
-      });
+      await ref.update({ freeAiUsed: FieldValue.increment(1) });
+      return (await ref.get()).data()?.freeAiUsed ?? 0;
     },
     async getCode(email) {
       const snap = await codesCol.doc(norm(email)).get();
@@ -106,4 +122,4 @@ export function getStore() {
   return storePromise;
 }
 
-export { FREE_CREDITS, norm, BACKEND };
+export { norm, BACKEND };

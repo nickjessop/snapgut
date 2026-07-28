@@ -1,7 +1,24 @@
-// Client-side session + auth/billing API. Token is stored in localStorage and
-// attached to API calls as a Bearer header.
+// Client-side session + auth/billing. Token stored in localStorage, attached to
+// API calls as a Bearer header. Entitlement = Pro flag + free-AI trial counter.
 
 const TOKEN_KEY = "snapgut-token";
+
+export interface Entitlement {
+  pro: boolean;
+  proUntil: number | null;
+  freeAiUsed: number;
+  freeAiLimit: number;
+}
+export interface Me extends Entitlement {
+  email: string;
+}
+export interface Plan {
+  id: string;
+  price: number; // cents
+  label: string;
+  caption: string;
+  per: string;
+}
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -28,23 +45,17 @@ async function post(path: string, body?: unknown) {
   return data;
 }
 
-export interface AuthResult {
-  token: string;
-  email: string;
-  credits: number;
-}
-
 export function requestCode(email: string): Promise<{ ok: boolean; dev?: boolean; code?: string }> {
   return post("/api/auth/request", { email });
 }
 
-export async function verifyCode(email: string, code: string): Promise<AuthResult> {
-  const data = (await post("/api/auth/verify", { email, code })) as AuthResult;
+export async function verifyCode(email: string, code: string): Promise<Me> {
+  const data = (await post("/api/auth/verify", { email, code })) as Me & { token: string };
   setToken(data.token);
   return data;
 }
 
-export async function fetchMe(): Promise<{ email: string; credits: number } | null> {
+export async function fetchMe(): Promise<Me | null> {
   const res = await fetch("/api/me", { headers: authHeaders() });
   if (res.status === 401) {
     clearToken();
@@ -54,18 +65,14 @@ export async function fetchMe(): Promise<{ email: string; credits: number } | nu
   return res.json();
 }
 
-export interface Pack {
-  id: string;
-  credits: number;
-  price: number;
-  label: string;
-}
-export async function fetchPacks(): Promise<Pack[]> {
-  const res = await fetch("/api/billing/packs");
+export async function fetchPlans(): Promise<Plan[]> {
+  const res = await fetch("/api/billing/plans");
   return res.ok ? res.json() : [];
 }
 
-/** Dev: returns { simulated, credits }. Prod: returns { url } to redirect to. */
-export function checkout(pack: string): Promise<{ simulated?: boolean; credits?: number; url?: string }> {
-  return post("/api/billing/checkout", { pack });
+/** Dev: returns { simulated, ...entitlement }. Prod: returns { url } to redirect. */
+export function checkout(
+  plan: string
+): Promise<{ simulated?: boolean; url?: string } & Partial<Entitlement>> {
+  return post("/api/billing/checkout", { plan });
 }

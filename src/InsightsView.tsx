@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { getEvents } from "./db";
 import { computeEvidence, type EvidenceSummary } from "./insights";
-import { getInsights, AuthError } from "./api";
+import { getInsights, AuthError, UpgradeRequiredError } from "./api";
+import type { Entitlement } from "./session";
 import FoodsTab from "./FoodsTab";
-import { WarningIcon } from "./icons";
 
 type InsightTab = "patterns" | "foods";
 
@@ -13,13 +13,21 @@ interface AiInsight {
   redFlag?: string;
 }
 
+interface Props {
+  reloadKey?: number;
+  entitlement: Entitlement | null;
+  onEntitlement?: (e?: Entitlement) => void;
+  onNeedUpgrade?: () => void;
+  onSignedOut?: () => void;
+}
+
 export default function InsightsView({
   reloadKey = 0,
+  entitlement,
+  onEntitlement,
+  onNeedUpgrade,
   onSignedOut,
-}: {
-  reloadKey?: number;
-  onSignedOut?: () => void;
-}) {
+}: Props) {
   const [tab, setTab] = useState<InsightTab>("patterns");
 
   return (
@@ -42,7 +50,13 @@ export default function InsightsView({
       </div>
 
       {tab === "patterns" ? (
-        <PatternsTab reloadKey={reloadKey} onSignedOut={onSignedOut} />
+        <PatternsTab
+          reloadKey={reloadKey}
+          entitlement={entitlement}
+          onEntitlement={onEntitlement}
+          onNeedUpgrade={onNeedUpgrade}
+          onSignedOut={onSignedOut}
+        />
       ) : (
         <FoodsTab reloadKey={reloadKey} />
       )}
@@ -52,38 +66,58 @@ export default function InsightsView({
 
 function PatternsTab({
   reloadKey,
+  entitlement,
+  onEntitlement,
+  onNeedUpgrade,
   onSignedOut,
 }: {
   reloadKey: number;
+  entitlement: Entitlement | null;
+  onEntitlement?: (e?: Entitlement) => void;
+  onNeedUpgrade?: () => void;
   onSignedOut?: () => void;
 }) {
   const [summary, setSummary] = useState<EvidenceSummary | null>(null);
   const [ai, setAi] = useState<AiInsight | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const pro = entitlement?.pro ?? false;
+  const freeLeft = entitlement
+    ? Math.max(0, entitlement.freeAiLimit - entitlement.freeAiUsed)
+    : 0;
+
+  async function generate(ev: EvidenceSummary) {
+    setLoading(true);
+    setError(null);
+    try {
+      const insight = await getInsights(ev);
+      setAi(insight);
+      onEntitlement?.(insight.entitlement);
+    } catch (e) {
+      if (e instanceof AuthError) onSignedOut?.();
+      else if (e instanceof UpgradeRequiredError) onNeedUpgrade?.();
+      else setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    setAi(null);
     (async () => {
       const events = await getEvents();
       const ev = computeEvidence(events);
       if (cancelled) return;
       setSummary(ev);
-      try {
-        const insight = await getInsights(ev);
-        if (!cancelled) setAi(insight);
-      } catch (e) {
-        if (e instanceof AuthError) onSignedOut?.();
-        else if (!cancelled) setError((e as Error).message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      if (pro) generate(ev); // Pro: auto-narrate; free: user taps to reveal
     })();
     return () => {
       cancelled = true;
     };
-  }, [reloadKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadKey, pro]);
 
   return (
     <>
@@ -115,14 +149,9 @@ function PatternsTab({
         </div>
       )}
 
-      {ai?.redFlag && (
-        <div className="redflag">
-          <WarningIcon size={18} className="rf-ico" /> {ai.redFlag}
-        </div>
-      )}
+      {ai?.redFlag && <div className="redflag">⚠️ {ai.redFlag}</div>}
 
       {loading && <p className="status">Analyzing your patterns…</p>}
-
       {error && <div className="error-banner">Couldn't generate insights right now.</div>}
 
       {ai && (
@@ -130,6 +159,33 @@ function PatternsTab({
           <strong>{ai.headline}</strong>
           {"\n\n"}
           {ai.body}
+        </div>
+      )}
+
+      {/* Free users: reveal the AI narrative on demand (or upgrade when used up) */}
+      {!ai && !loading && !pro && summary && (
+        <div className="ai-lock">
+          <div className="ai-lock-title">✨ AI insight</div>
+          {freeLeft > 0 ? (
+            <>
+              <p className="ai-lock-sub">
+                Get an AI read on your patterns. Uses 1 of your {freeLeft} free AI
+                {freeLeft === 1 ? " use" : " uses"}.
+              </p>
+              <button className="primary" onClick={() => generate(summary)}>
+                Reveal AI insight
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="ai-lock-sub">
+                You've used your free AI. Unlock unlimited AI insights with Pro.
+              </p>
+              <button className="primary" onClick={() => onNeedUpgrade?.()}>
+                Unlock Pro
+              </button>
+            </>
+          )}
         </div>
       )}
 

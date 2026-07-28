@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { recognizeMeal, NoCreditsError, AuthError } from "./api";
+import { recognizeMeal, UpgradeRequiredError, AuthError } from "./api";
 import { addEvent, type Ingredient, type MealEvent } from "./db";
+import type { Entitlement } from "./session";
 import { NoteIcon, AddIcon, BackIcon } from "./icons";
 
 interface Props {
@@ -9,8 +10,8 @@ interface Props {
   editing?: MealEvent;
   onSaved: () => void;
   onBack: () => void;
-  onCredits?: (n?: number) => void;
-  onNeedCredits?: () => void;
+  onEntitlement?: (e?: Entitlement) => void;
+  onNeedUpgrade?: () => void;
   onSignedOut?: () => void;
 }
 
@@ -25,8 +26,8 @@ export default function MealDetails({
   editing,
   onSaved,
   onBack,
-  onCredits,
-  onNeedCredits,
+  onEntitlement,
+  onNeedUpgrade,
   onSignedOut,
 }: Props) {
   const [photoUrl, setPhotoUrl] = useState("");
@@ -56,11 +57,11 @@ export default function MealDetails({
       setDish(meal.dish);
       setIngredients(meal.ingredients);
       setAnalyzedNote(withNote);
-      onCredits?.(meal.credits);
+      onEntitlement?.(meal.entitlement);
     } catch (e) {
-      if (e instanceof NoCreditsError) {
-        setError("You're out of AI credits — add ingredients manually below, or get more.");
-        onNeedCredits?.();
+      if (e instanceof UpgradeRequiredError) {
+        setError("You've used your free AI — add ingredients manually below, or unlock Pro.");
+        onNeedUpgrade?.();
       } else if (e instanceof AuthError) {
         onSignedOut?.();
       } else {

@@ -8,6 +8,7 @@ import {
 } from "./db";
 import { getSymptom, BRISTOL } from "./symptoms";
 import { MealIcon } from "./icons";
+import type { Entitlement } from "./session";
 import InstallHint from "./InstallHint";
 import {
   exportBackup,
@@ -22,11 +23,11 @@ interface Props {
   onEdit: (event: LogEvent) => void;
   onChanged: () => void; // bump global reload (e.g. after a restore)
   reloadKey: number;
-  credits: number | null;
-  onOpenPaywall: () => void;
+  entitlement: Entitlement | null;
+  onUpgrade: () => void;
 }
 
-export default function LogsView({ onEdit, onChanged, reloadKey, credits, onOpenPaywall }: Props) {
+export default function LogsView({ onEdit, onChanged, reloadKey, entitlement, onUpgrade }: Props) {
   const [events, setEvents] = useState<LogEvent[]>([]);
   const [detail, setDetail] = useState<LogEvent | null>(null);
   const [dataSheet, setDataSheet] = useState(false);
@@ -140,15 +141,20 @@ export default function LogsView({ onEdit, onChanged, reloadKey, credits, onOpen
               🔥 {streak}
             </span>
           )}
-          {credits !== null && (
-            <button
-              className="credits-pill"
-              onClick={onOpenPaywall}
-              title="Buy AI credits"
-            >
-              🪙 {credits}
-            </button>
-          )}
+          {entitlement &&
+            (entitlement.pro ? (
+              <span className="pro-badge" title="SnapGut Pro">
+                ✨ PRO
+              </span>
+            ) : (
+              <button
+                className="credits-pill"
+                onClick={onUpgrade}
+                title="Unlock unlimited AI"
+              >
+                ✨ {Math.max(0, entitlement.freeAiLimit - entitlement.freeAiUsed)} free
+              </button>
+            ))}
           <button className="icon-round" onClick={() => setDataSheet(true)} aria-label="Data & backup">
             ⚙︎
           </button>

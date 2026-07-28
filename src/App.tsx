@@ -10,7 +10,7 @@ import InsightsView from "./InsightsView";
 import Intro, { ONBOARDED_KEY } from "./Intro";
 import AuthGate from "./AuthGate";
 import Paywall from "./Paywall";
-import { getToken, fetchMe } from "./session";
+import { getToken, fetchMe, type Entitlement } from "./session";
 import { requestPersistentStorage } from "./backup";
 import {
   CameraIcon,
@@ -41,8 +41,8 @@ export default function App() {
   );
   const [authChecked, setAuthChecked] = useState(false);
   const [authed, setAuthed] = useState(false);
-  const [credits, setCredits] = useState<number | null>(null);
-  const [paywall, setPaywall] = useState<null | "out" | "topup">(null);
+  const [ent, setEnt] = useState<Entitlement | null>(null);
+  const [paywall, setPaywall] = useState<null | "out" | "upsell">(null);
 
   useEffect(() => {
     requestPersistentStorage();
@@ -51,7 +51,7 @@ export default function App() {
         const me = await fetchMe();
         if (me) {
           setAuthed(true);
-          setCredits(me.credits);
+          setEnt(me);
         }
       }
       setAuthChecked(true);
@@ -60,7 +60,7 @@ export default function App() {
 
   const signOut = () => {
     setAuthed(false);
-    setCredits(null);
+    setEnt(null);
   };
 
   // Gate order: validate session → sign in → first-run intro → app.
@@ -68,9 +68,9 @@ export default function App() {
   if (!authed) {
     return (
       <AuthGate
-        onAuthed={(c) => {
+        onAuthed={(me) => {
           setAuthed(true);
-          setCredits(c);
+          setEnt(me);
         }}
       />
     );
@@ -83,8 +83,8 @@ export default function App() {
     <Paywall
       reason={paywall}
       onClose={() => setPaywall(null)}
-      onPurchased={(c) => {
-        setCredits(c);
+      onUpgraded={(e) => {
+        setEnt(e);
         setPaywall(null);
       }}
     />
@@ -142,8 +142,8 @@ export default function App() {
           initialNote={mealNote}
           editing={editing?.type === "meal" ? editing : undefined}
           onSaved={finishFlow}
-          onCredits={(n) => typeof n === "number" && setCredits(n)}
-          onNeedCredits={() => setPaywall("out")}
+          onEntitlement={(e) => e && setEnt(e)}
+          onNeedUpgrade={() => setPaywall("out")}
           onSignedOut={signOut}
           onBack={() => {
             // new meal → back to caption screen; editing → cancel out
@@ -206,12 +206,18 @@ export default function App() {
           onEdit={startEdit}
           reloadKey={reloadKey}
           onChanged={() => setReloadKey((k) => k + 1)}
-          credits={credits}
-          onOpenPaywall={() => setPaywall("topup")}
+          entitlement={ent}
+          onUpgrade={() => setPaywall("upsell")}
         />
       )}
       {tab === "insights" && (
-        <InsightsView reloadKey={reloadKey} onSignedOut={signOut} />
+        <InsightsView
+          reloadKey={reloadKey}
+          entitlement={ent}
+          onEntitlement={(e) => e && setEnt(e)}
+          onNeedUpgrade={() => setPaywall("out")}
+          onSignedOut={signOut}
+        />
       )}
 
       {plusOpen && (

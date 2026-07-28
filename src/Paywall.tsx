@@ -1,33 +1,33 @@
 import { useEffect, useState } from "react";
-import { fetchPacks, checkout, type Pack } from "./session";
+import { fetchPlans, checkout, type Plan, type Entitlement } from "./session";
 
 interface Props {
-  reason?: "out" | "topup";
+  reason?: "out" | "upsell";
   onClose: () => void;
-  onPurchased: (credits: number) => void;
+  onUpgraded: (ent: Entitlement) => void;
 }
 
-/** Credit packs. Dev: purchase is simulated and credits update instantly.
+/** SnapGut Pro upsell. Dev: purchase is simulated and Pro unlocks instantly.
  *  Prod: redirects to Stripe Checkout. */
-export default function Paywall({ reason = "topup", onClose, onPurchased }: Props) {
-  const [packs, setPacks] = useState<Pack[]>([]);
+export default function Paywall({ reason = "upsell", onClose, onUpgraded }: Props) {
+  const [plans, setPlans] = useState<Plan[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchPacks().then(setPacks);
+    fetchPlans().then(setPlans);
   }, []);
 
-  async function buy(pack: string) {
+  async function choose(plan: string) {
     setError(null);
-    setBusy(pack);
+    setBusy(plan);
     try {
-      const r = await checkout(pack);
+      const r = await checkout(plan);
       if (r.url) {
         window.location.href = r.url; // Stripe Checkout
         return;
       }
-      if (typeof r.credits === "number") onPurchased(r.credits); // dev simulated
+      if (r.pro) onUpgraded(r as Entitlement); // dev simulated
     } catch {
       setError("Couldn't start checkout. Try again.");
     } finally {
@@ -37,30 +37,37 @@ export default function Paywall({ reason = "topup", onClose, onPurchased }: Prop
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
-      <div className="action-sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="action-sheet upgrade" onClick={(e) => e.stopPropagation()}>
         <div className="action-grip" />
         <div className="paywall-head">
           <div className="paywall-title">
-            {reason === "out" ? "You're out of credits" : "Get more credits"}
+            {reason === "out" ? "You've used your free AI" : "Unlock SnapGut Pro"}
           </div>
           <div className="paywall-sub">
-            Credits power AI meal recognition. 1 credit per meal analyzed.
+            Unlimited AI meal recognition and AI insights. Your logging & on-device
+            trends stay free forever.
           </div>
         </div>
 
-        {packs.map((p) => (
+        {plans.map((p) => (
           <button
             key={p.id}
-            className="action-item pack"
+            className={`plan-card${p.id === "lifetime" ? " best" : ""}`}
             disabled={busy !== null}
-            onClick={() => buy(p.id)}
+            onClick={() => choose(p.id)}
           >
-            <div>
-              <div className="ai-title">{p.credits} credits</div>
-              <div className="ai-sub">{(p.credits / (p.price / 100)).toFixed(0)} per $1</div>
+            <div className="plan-left">
+              <div className="plan-label">
+                {p.label}
+                {p.id === "lifetime" && <span className="plan-tag">Best value</span>}
+              </div>
+              <div className="plan-caption">{p.caption}</div>
             </div>
-            <div className="pack-price">
-              {busy === p.id ? "…" : `$${(p.price / 100).toFixed(0)}`}
+            <div className="plan-right">
+              <div className="plan-price">
+                {busy === p.id ? "…" : `$${(p.price / 100).toFixed(2).replace(/\.00$/, "")}`}
+              </div>
+              <div className="plan-per">{p.per}</div>
             </div>
           </button>
         ))}
@@ -68,7 +75,7 @@ export default function Paywall({ reason = "topup", onClose, onPurchased }: Prop
         {error && <div className="error-banner">{error}</div>}
 
         <button className="action-cancel" onClick={onClose}>
-          {reason === "out" ? "Not now" : "Close"}
+          {reason === "out" ? "Maybe later" : "Not now"}
         </button>
       </div>
     </div>
