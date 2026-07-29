@@ -2,7 +2,7 @@ import { useState } from "react";
 import WhenPicker from "./WhenPicker";
 import SymptomPicker from "./SymptomPicker";
 import { BRISTOL } from "./symptoms";
-import { addEvent, type BowelEvent, type LoggedSymptom } from "./db";
+import { putEvent, type BowelEvent, type LoggedSymptom } from "./db";
 import type { Severity } from "./symptoms";
 
 interface Props {
@@ -27,7 +27,7 @@ export default function BowelLogView({ editing, onDone, onCancel }: Props) {
       id,
       severity,
     }));
-    const event: BowelEvent = {
+    const event: Omit<BowelEvent, "updatedAt"> = {
       id: editing?.id ?? crypto.randomUUID(),
       type: "bowel",
       createdAt: editing ? editing.createdAt : when,
@@ -35,7 +35,7 @@ export default function BowelLogView({ editing, onDone, onCancel }: Props) {
       symptoms: symptoms.length ? symptoms : undefined,
       note: note.trim() || undefined,
     };
-    await addEvent(event);
+    await putEvent(event);
     onDone();
   }
 

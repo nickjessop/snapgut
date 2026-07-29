@@ -2,14 +2,17 @@ import { describe, it, expect } from "vitest";
 import fc from "fast-check";
 import { eventFromRow } from "./googleSheets";
 import { SYMPTOMS } from "./symptoms";
-import type { LogEvent } from "./db";
+// A spreadsheet row carries no Revision_Time, so these fixtures and the row
+// mapping work over `DraftEvent` — a log event without the `updatedAt` that
+// `putEvent` assigns on the way into the Local_Store.
+import type { DraftEvent } from "./db";
 
 // Feature: google-sheets-integration, Property 6: Malformed rows are skipped, never fatal
 //
 // For any array of strings interpreted as a sheet row (including rows with a
 // missing/empty id, an unrecognized type, an unparseable datetime, a non-numeric
 // bristol, an out-of-set severity token, or an unknown symptom label),
-// eventFromRow returns either a valid LogEvent or null, and never throws; when
+// eventFromRow returns either a valid DraftEvent or null, and never throws; when
 // the row violates any of those constraints it returns null so the re-import
 // skips it and continues.
 //
@@ -137,7 +140,7 @@ const arbUnknownLabel = fc
 
 // --- fully arbitrary rows (mustBeNull: false) ---
 // Varying length (shorter/longer than 11) drawn from a pool that mixes garbage
-// with plausible-looking cells, so some rows may reconstruct a valid LogEvent.
+// with plausible-looking cells, so some rows may reconstruct a valid DraftEvent.
 const arbCell = fc.oneof(
   fc.string(),
   fc.constantFrom(...KNOWN_TYPES),
@@ -164,7 +167,7 @@ const arbSheetRow: fc.Arbitrary<{ row: string[]; mustBeNull: boolean }> = fc.one
 );
 
 // Structural validity of any non-null reconstruction.
-function assertValidEvent(ev: LogEvent): void {
+function assertValidEvent(ev: DraftEvent): void {
   expect(typeof ev.id).toBe("string");
   expect(ev.id.trim().length).toBeGreaterThan(0);
   expect(KNOWN_TYPES).toContain(ev.type);
@@ -194,7 +197,7 @@ describe("eventFromRow (Property 6: malformed rows are skipped, never fatal)", (
   it("never throws, returns null or a valid event, and skips known-malformed rows", () => {
     fc.assert(
       fc.property(arbSheetRow, ({ row, mustBeNull }) => {
-        let result: LogEvent | null = null;
+        let result: DraftEvent | null = null;
         let threw = false;
         try {
           result = eventFromRow(row, symptomIdFor);
@@ -210,7 +213,7 @@ describe("eventFromRow (Property 6: malformed rows are skipped, never fatal)", (
           expect(result).toBeNull();
         }
 
-        // (2) When non-null, the result must be a well-formed LogEvent.
+        // (2) When non-null, the result must be a well-formed DraftEvent.
         if (result !== null) {
           assertValidEvent(result);
         }

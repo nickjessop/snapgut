@@ -23,7 +23,7 @@ vi.mock("./db", async (importOriginal) => {
   return {
     ...actual,
     getEvents: async () => [...h.store.values()],
-    addEvent: async (e: { id: string }) => {
+    putEvent: async (e: { id: string }) => {
       h.store.set(e.id, e);
     },
     deleteEvent: async (id: string) => {
@@ -32,7 +32,10 @@ vi.mock("./db", async (importOriginal) => {
   };
 });
 
-import type { LogEvent } from "./db";
+// A spreadsheet row carries no Revision_Time, so these fixtures and the row
+// mapping work over `DraftEvent` — a log event without the `updatedAt` that
+// `putEvent` assigns on the way into the Local_Store.
+import type { DraftEvent } from "./db";
 import { SYMPTOMS } from "./symptoms";
 import {
   syncAll,
@@ -69,7 +72,7 @@ const arbText = fc.string({ maxLength: 24 });
 const arbCreatedAt = fc.integer({ min: 0, max: 4102444800000 });
 const arbId = fc.uuid();
 
-const arbMeal: fc.Arbitrary<LogEvent> = fc.record({
+const arbMeal: fc.Arbitrary<DraftEvent> = fc.record({
   type: fc.constant("meal" as const),
   id: arbId,
   createdAt: arbCreatedAt,
@@ -84,7 +87,7 @@ const arbMeal: fc.Arbitrary<LogEvent> = fc.record({
   ),
 });
 
-const arbSymptom: fc.Arbitrary<LogEvent> = fc.record({
+const arbSymptom: fc.Arbitrary<DraftEvent> = fc.record({
   type: fc.constant("symptom" as const),
   id: arbId,
   createdAt: arbCreatedAt,
@@ -92,7 +95,7 @@ const arbSymptom: fc.Arbitrary<LogEvent> = fc.record({
   symptoms: fc.array(arbLoggedSymptom, { maxLength: 3 }),
 });
 
-const arbBowel: fc.Arbitrary<LogEvent> = fc.record({
+const arbBowel: fc.Arbitrary<DraftEvent> = fc.record({
   type: fc.constant("bowel" as const),
   id: arbId,
   createdAt: arbCreatedAt,
@@ -103,7 +106,7 @@ const arbBowel: fc.Arbitrary<LogEvent> = fc.record({
   }),
 });
 
-const arbCheckin: fc.Arbitrary<LogEvent> = fc.record({
+const arbCheckin: fc.Arbitrary<DraftEvent> = fc.record({
   type: fc.constant("checkin" as const),
   id: arbId,
   createdAt: arbCreatedAt,
@@ -116,11 +119,11 @@ const arbCheckin: fc.Arbitrary<LogEvent> = fc.record({
   }),
 });
 
-const arbLogEvent: fc.Arbitrary<LogEvent> = fc.oneof(arbMeal, arbSymptom, arbBowel, arbCheckin);
+const arbLogEvent: fc.Arbitrary<DraftEvent> = fc.oneof(arbMeal, arbSymptom, arbBowel, arbCheckin);
 
 // At least one event so the "update"/"append" injection points are actually
 // reached (both writes are no-ops for an empty plan).
-const arbEvents: fc.Arbitrary<LogEvent[]> = fc.array(arbLogEvent, { minLength: 1, maxLength: 5 });
+const arbEvents: fc.Arbitrary<DraftEvent[]> = fc.array(arbLogEvent, { minLength: 1, maxLength: 5 });
 
 // ---- Mocked GIS + fetch ----
 
@@ -185,7 +188,7 @@ function fail(): Response {
  * event id (so the plan is all updates); for every other point the read returns
  * just the header row (so the plan is all appends).
  */
-function installFetch(point: Injection, events: LogEvent[]): void {
+function installFetch(point: Injection, events: DraftEvent[]): void {
   const dataRows =
     point === "update"
       ? events.map((e) => ["", "", "", "", "", "", "", "", "", "", e.id])

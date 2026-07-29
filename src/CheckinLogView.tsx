@@ -1,7 +1,7 @@
 import { useState } from "react";
 import WhenPicker from "./WhenPicker";
 import {
-  addEvent,
+  putEvent,
   type CheckinEvent,
   type StressLevel,
   type SleepQuality,
@@ -35,7 +35,7 @@ export default function CheckinLogView({ editing, onDone, onCancel }: Props) {
   async function save() {
     if (!stress && !sleep) return;
     setSaving(true);
-    const event: CheckinEvent = {
+    const event: Omit<CheckinEvent, "updatedAt"> = {
       id: editing?.id ?? crypto.randomUUID(),
       type: "checkin",
       createdAt: editing ? editing.createdAt : when,
@@ -43,7 +43,7 @@ export default function CheckinLogView({ editing, onDone, onCancel }: Props) {
       sleep: sleep ?? undefined,
       note: note.trim() || undefined,
     };
-    await addEvent(event);
+    await putEvent(event);
     onDone();
   }
 

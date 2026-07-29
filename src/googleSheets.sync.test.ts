@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import type { LogEvent } from "./db";
+// A spreadsheet row carries no Revision_Time, so these fixtures and the row
+// mapping work over `DraftEvent` — a log event without the `updatedAt` that
+// `putEvent` assigns on the way into the Local_Store.
+import type { DraftEvent } from "./db";
 
 // Task 12.3 — Integration tests for sync outcomes (mocked GIS + `fetch` + `db`).
 //
@@ -20,23 +23,23 @@ import type { LogEvent } from "./db";
 // ---- Fake local event store (stands in for IndexedDB) ----
 //
 // `googleSheets.ts` reads local events through `getEvents` and writes through
-// `addEvent`; both are redirected to an in-memory map so the tests control the
+// `putEvent`; both are redirected to an in-memory map so the tests control the
 // sync input and can observe that local logging still succeeds during an error.
 
-const h = vi.hoisted(() => ({ store: new Map<string, LogEvent>() }));
+const h = vi.hoisted(() => ({ store: new Map<string, DraftEvent>() }));
 
 vi.mock("./db", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./db")>();
   return {
     ...actual,
     getEvents: async () => [...h.store.values()],
-    addEvent: async (e: LogEvent) => {
+    putEvent: async (e: DraftEvent) => {
       h.store.set(e.id, e);
     },
   };
 });
 
-import { addEvent } from "./db";
+import { putEvent } from "./db";
 import {
   syncAll,
   getStatus,
@@ -121,7 +124,7 @@ function appendCalls(): Recorded[] {
   return calls.filter((c) => c.url.includes(":append") && method(c.init) === "POST");
 }
 
-function meal(id: string, createdAt: number): LogEvent {
+function meal(id: string, createdAt: number): DraftEvent {
   return {
     id,
     createdAt,
@@ -258,7 +261,7 @@ describe("logging while the error status is set (Req 10.4, 6.3)", () => {
     expect(getStatus().state).toBe("error");
 
     // The app keeps accepting and storing new events locally (Req 10.4).
-    await addEvent({ id: "new-1", createdAt: Date.now(), type: "checkin" });
+    await putEvent({ id: "new-1", createdAt: Date.now(), type: "checkin" });
     expect(h.store.has("new-1")).toBe(true);
 
     // The error status persists until a subsequent sync succeeds (Req 6.3, 10.3).

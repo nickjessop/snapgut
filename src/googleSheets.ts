@@ -9,9 +9,9 @@
 // store). This file currently defines the public surface and the pure config gate;
 // the remaining pieces are filled in by later tasks.
 
-import { getEvents, addEvent } from "./db";
+import { getEvents, putEvent } from "./db";
 import type {
-  LogEvent,
+  DraftEvent,
   LoggedSymptom,
   Ingredient,
   MealEvent,
@@ -24,6 +24,16 @@ import type {
 import { getSymptom, SYMPTOMS } from "./symptoms";
 import type { Severity } from "./symptoms";
 import { isBackupDue } from "./backup";
+import { createSingleFlight } from "./singleFlight";
+import { fetchWithTimeout } from "./httpTimeout";
+
+/**
+ * A spreadsheet row carries no Revision_Time, so the row mapping and the upsert
+ * planner work over `DraftEvent` — a `LogEvent` without `updatedAt`. A real
+ * `LogEvent` is assignable to it, so callers holding stored events are
+ * unaffected, and `putEvent` is what assigns the Revision_Time on the way in.
+ */
+type SheetEvent = DraftEvent;
 
 // ---- Public status model (Req 6) ----
 
@@ -520,7 +530,7 @@ export function resetGisForTests(): void {
 // ---- Google REST layer (Sheets v4 + Drive v3) — I/O shell (Req 2.2, 2.3, 4.2, 4.3, 7.6, 7.7) ----
 //
 // Every call attaches `Authorization: Bearer <token>` (the token is supplied by
-// the caller via `getAccessToken`) and is bounded by {@link withTimeout} using
+// the caller via `getAccessToken`) and is bounded by {@link fetchWithTimeout} using
 // the {@link API_TIMEOUT_MS} budget (Req 10.1). Non-2xx responses throw a
 // descriptive `Error` (including the HTTP status) so the sync/connect layers
 // (tasks 11/12) can surface an error status and leave local data untouched.
@@ -538,42 +548,10 @@ const DRIVE_FILES_API_BASE = "https://www.googleapis.com/drive/v3/files";
 
 /**
  * Per-request timeout budget for every Google REST call (Req 10.1). A request
- * that neither resolves nor rejects within this window is treated as a failure
- * by {@link withTimeout}.
+ * that neither resolves nor rejects within this window is aborted and treated as
+ * a failure by {@link fetchWithTimeout}.
  */
 export const API_TIMEOUT_MS = 30_000;
-
-/**
- * Perform a `fetch` bounded by a real timeout with genuine cancellation.
- *
- * Unlike {@link withTimeout} (a plain promise race, used for the GIS token flow
- * which cannot itself be cancelled), this wires an {@link AbortController} signal
- * directly into `fetch`, so when the `ms` budget elapses the in-flight request is
- * actually aborted rather than merely abandoned (Req 10.1). On timeout it rejects
- * with an `Error` carrying `onTimeoutMessage`; any caller-supplied `init.signal`
- * abort still propagates as the underlying fetch rejection.
- */
-async function fetchWithTimeout(
-  url: string,
-  init: RequestInit,
-  ms: number,
-  onTimeoutMessage = "Google API request timed out",
-): Promise<Response> {
-  const controller = new AbortController();
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, ms);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } catch (err) {
-    if (timedOut) throw new Error(onTimeoutMessage);
-    throw err;
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 /**
  * Shared fetch helper for the Sheets/Drive REST calls.
@@ -838,58 +816,6 @@ export async function disconnect(): Promise<void> {
   }
 }
 
-// ---- Sync single-flight scheduler (Req 5.4, 5.5) ----
-
-/**
- * Wrap an async `body` in a single-flight guard that enforces Req 5.5:
- *
- * - When no run is in flight, a trigger starts one immediately.
- * - When a run is already in flight, a trigger schedules **at most one**
- *   additional run (regardless of how many triggers arrive) and returns the
- *   in-flight promise; the queued run starts only after the current body
- *   settles, so two bodies never execute concurrently.
- *
- * The guard cleans up its state even when `body` rejects, so a failed run never
- * wedges the scheduler: the queued rerun (if any) still executes, and once the
- * chain drains the next trigger starts fresh.
- *
- * This is a pure, deterministic helper (its only state is the returned closure),
- * which makes it straightforward to drive from the concurrency property test
- * (Property 8) with a controllable fake body.
- */
-export function createSingleFlight(body: () => Promise<void>): () => Promise<void> {
-  let inFlight: Promise<void> | null = null;
-  let queued = false;
-
-  const run = (): Promise<void> => {
-    // `body()` may throw synchronously; keep that inside the promise chain so
-    // the guard state is always cleaned up in `finally`.
-    return Promise.resolve()
-      .then(body)
-      .finally(() => {
-        if (queued) {
-          // Exactly one queued rerun, collapsing any number of triggers that
-          // arrived during this run into a single additional run.
-          queued = false;
-          inFlight = run();
-        } else {
-          inFlight = null;
-        }
-      });
-  };
-
-  return function trigger(): Promise<void> {
-    if (inFlight === null) {
-      inFlight = run();
-    } else {
-      // A run is already active — schedule at most one rerun and share the
-      // currently in-flight promise with the caller.
-      queued = true;
-    }
-    return inFlight;
-  };
-}
-
 // ---- Sync (Req 4, 5, 10) ----
 
 /** Symptom id → human label, from the real `SYMPTOMS` registry (Req 4.4). */
@@ -1030,7 +956,7 @@ const symptomIdForLabel = (label: string): string | undefined =>
  *   3. Skip the header row and reconstruct each data row with
  *      {@link eventFromRow}; a `null` result counts as skipped and processing
  *      continues (Req 9.3).
- *   4. Merge by id via `addEvent` (an id-keyed `put`), so an existing id is
+ *   4. Merge by id via `putEvent` (an id-keyed `put`), so an existing id is
  *      updated in place and never duplicated (Req 9.2). The reconstructed event
  *      carries the sheet's non-photo values, which overwrite the local non-photo
  *      fields; when the local event is a meal with a photo, that photo is carried
@@ -1084,13 +1010,13 @@ export async function reimport(): Promise<{ imported: number; skipped: number }>
 
     // Retain the existing local photo (photos are never synced to the sheet).
     const prev = localById.get(ev.id);
-    let toStore: LogEvent = ev;
+    let toStore: SheetEvent = ev;
     if (prev && prev.type === "meal" && ev.type === "meal" && prev.photo) {
       toStore = { ...ev, photo: prev.photo };
     }
 
-    // `addEvent` is a `put` keyed by id → updates in place, no duplicates (Req 9.2).
-    await addEvent(toStore);
+    // `putEvent` is a `put` keyed by id → updates in place, no duplicates (Req 9.2).
+    await putEvent(toStore);
     imported++;
   }
 
@@ -1178,7 +1104,7 @@ export function isBackupNudgeDue(hasData: boolean): boolean {
 // These are implemented in tasks 3 and 4; declared here so the module's public
 // surface is complete and type-correct.
 
-export function rowFromEvent(e: LogEvent, labelFor: (id: string) => string): string[] {
+export function rowFromEvent(e: SheetEvent, labelFor: (id: string) => string): string[] {
   // Mirrors the exact per-cell field mapping of `toCSV` in `db.ts` for the first
   // ten cells (raw, unescaped values — the Sheets API takes raw cell values),
   // then appends `e.id` as the eleventh cell (Req 4.4). Photos/Blobs are never
@@ -1274,7 +1200,7 @@ function parseSymptoms(
 export function eventFromRow(
   row: string[],
   symptomIdFor: (label: string) => string | undefined,
-): LogEvent | null {
+): SheetEvent | null {
   try {
     const id = (row[10] ?? "").trim();
     if (id.length === 0) return null;
@@ -1297,7 +1223,7 @@ export function eventFromRow(
         name,
         confidence: "maybe",
       }));
-      const event: MealEvent = {
+      const event: Omit<MealEvent, "updatedAt"> = {
         ...base,
         type: "meal",
         dish: row[2] ?? "",
@@ -1309,7 +1235,7 @@ export function eventFromRow(
     if (type === "symptom") {
       const symptoms = parseSymptoms(row[5], symptomIdFor);
       if (symptoms === null) return null;
-      const event: SymptomEvent = { ...base, type: "symptom", symptoms };
+      const event: Omit<SymptomEvent, "updatedAt"> = { ...base, type: "symptom", symptoms };
       return event;
     }
 
@@ -1320,7 +1246,7 @@ export function eventFromRow(
       if (Number.isNaN(bristol)) return null;
       const symptoms = parseSymptoms(row[5], symptomIdFor);
       if (symptoms === null) return null;
-      const event: BowelEvent = {
+      const event: Omit<BowelEvent, "updatedAt"> = {
         ...base,
         type: "bowel",
         bristol,
@@ -1332,7 +1258,7 @@ export function eventFromRow(
     // type === "checkin"
     const stress = (row[7] || undefined) as StressLevel | undefined;
     const sleep = (row[8] || undefined) as SleepQuality | undefined;
-    const event: CheckinEvent = {
+    const event: Omit<CheckinEvent, "updatedAt"> = {
       ...base,
       type: "checkin",
       ...(stress !== undefined ? { stress } : {}),
@@ -1361,8 +1287,8 @@ export function eventFromRow(
  */
 export function computeUpsertPlan(
   existingIds: string[], // id column of current sheet rows, in row order
-  events: LogEvent[],
-): { updates: { rowIndex: number; event: LogEvent }[]; appends: LogEvent[] } {
+  events: SheetEvent[],
+): { updates: { rowIndex: number; event: SheetEvent }[]; appends: SheetEvent[] } {
   // id → existing row index (first occurrence wins if the sheet has duplicates).
   const rowById = new Map<string, number>();
   existingIds.forEach((id, rowIndex) => {
@@ -1371,14 +1297,14 @@ export function computeUpsertPlan(
 
   // Deduplicate events by id: keep first-seen ordering, last payload wins.
   const order: string[] = [];
-  const eventById = new Map<string, LogEvent>();
+  const eventById = new Map<string, SheetEvent>();
   for (const event of events) {
     if (!eventById.has(event.id)) order.push(event.id);
     eventById.set(event.id, event);
   }
 
-  const updates: { rowIndex: number; event: LogEvent }[] = [];
-  const appends: LogEvent[] = [];
+  const updates: { rowIndex: number; event: SheetEvent }[] = [];
+  const appends: SheetEvent[] = [];
   for (const id of order) {
     const event = eventById.get(id)!;
     const rowIndex = rowById.get(id);

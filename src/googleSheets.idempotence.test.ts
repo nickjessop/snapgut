@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
 import { computeUpsertPlan, rowFromEvent } from "./googleSheets";
-import type { LogEvent } from "./db";
+// A spreadsheet row carries no Revision_Time, so these fixtures and the row
+// mapping work over `DraftEvent` — a log event without the `updatedAt` that
+// `putEvent` assigns on the way into the Local_Store.
+import type { DraftEvent } from "./db";
 import { SYMPTOMS, getSymptom } from "./symptoms";
 
 // Feature: google-sheets-integration, Property 4: Sync is idempotent
@@ -39,7 +42,7 @@ const arbCreatedAt = fc.integer({ min: 0, max: 4102444800000 });
 // which is exactly the scenario idempotence must survive.
 const arbId = fc.constantFrom("id-a", "id-b", "id-c", "id-d", "id-e");
 
-const arbMeal: fc.Arbitrary<LogEvent> = fc.record({
+const arbMeal: fc.Arbitrary<DraftEvent> = fc.record({
   type: fc.constant("meal" as const),
   id: arbId,
   createdAt: arbCreatedAt,
@@ -48,7 +51,7 @@ const arbMeal: fc.Arbitrary<LogEvent> = fc.record({
   ingredients: fc.array(arbIngredient),
 });
 
-const arbSymptom: fc.Arbitrary<LogEvent> = fc.record({
+const arbSymptom: fc.Arbitrary<DraftEvent> = fc.record({
   type: fc.constant("symptom" as const),
   id: arbId,
   createdAt: arbCreatedAt,
@@ -56,7 +59,7 @@ const arbSymptom: fc.Arbitrary<LogEvent> = fc.record({
   symptoms: fc.array(arbLoggedSymptom),
 });
 
-const arbBowel: fc.Arbitrary<LogEvent> = fc.record({
+const arbBowel: fc.Arbitrary<DraftEvent> = fc.record({
   type: fc.constant("bowel" as const),
   id: arbId,
   createdAt: arbCreatedAt,
@@ -65,7 +68,7 @@ const arbBowel: fc.Arbitrary<LogEvent> = fc.record({
   symptoms: fc.option(fc.array(arbLoggedSymptom), { nil: undefined }),
 });
 
-const arbCheckin: fc.Arbitrary<LogEvent> = fc.record({
+const arbCheckin: fc.Arbitrary<DraftEvent> = fc.record({
   type: fc.constant("checkin" as const),
   id: arbId,
   createdAt: arbCreatedAt,
@@ -78,7 +81,7 @@ const arbCheckin: fc.Arbitrary<LogEvent> = fc.record({
   }),
 });
 
-const arbLogEvent: fc.Arbitrary<LogEvent> = fc.oneof(arbMeal, arbSymptom, arbBowel, arbCheckin);
+const arbLogEvent: fc.Arbitrary<DraftEvent> = fc.oneof(arbMeal, arbSymptom, arbBowel, arbCheckin);
 
 // --- sheet model ---
 // A sheet is modeled as an array of rows; each row is rowFromEvent(event, labelFor)

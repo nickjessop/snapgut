@@ -1,12 +1,15 @@
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
 import { rowFromEvent, eventFromRow } from "./googleSheets";
-import type { LogEvent } from "./db";
+// A spreadsheet row carries no Revision_Time, so these fixtures and the row
+// mapping work over `DraftEvent` — a log event without the `updatedAt` that
+// `putEvent` assigns on the way into the Local_Store.
+import type { DraftEvent } from "./db";
 import { SYMPTOMS, getSymptom } from "./symptoms";
 
 // Feature: google-sheets-integration, Property 5: Sync → re-import round-trip preserves non-photo fields
 //
-// For any LogEvent, eventFromRow(rowFromEvent(e, labelFor), symptomIdFor)
+// For any DraftEvent, eventFromRow(rowFromEvent(e, labelFor), symptomIdFor)
 // reconstructs an event deeply equal to `e` on all non-photo fields (id,
 // createdAt, type, and every type-specific field), where labelFor/symptomIdFor
 // are inverse label mappings from the SYMPTOMS registry.
@@ -70,7 +73,7 @@ const arbIngredients = fc
 const arbCreatedAt = fc.integer({ min: 0, max: 4102444800000 });
 const arbId = fc.uuid();
 
-const arbMeal: fc.Arbitrary<LogEvent> = fc.record({
+const arbMeal: fc.Arbitrary<DraftEvent> = fc.record({
   type: fc.constant("meal" as const),
   id: arbId,
   createdAt: arbCreatedAt,
@@ -85,7 +88,7 @@ const arbMeal: fc.Arbitrary<LogEvent> = fc.record({
   ),
 });
 
-const arbSymptom: fc.Arbitrary<LogEvent> = fc.record({
+const arbSymptom: fc.Arbitrary<DraftEvent> = fc.record({
   type: fc.constant("symptom" as const),
   id: arbId,
   createdAt: arbCreatedAt,
@@ -95,7 +98,7 @@ const arbSymptom: fc.Arbitrary<LogEvent> = fc.record({
   symptoms: fc.array(arbLoggedSymptom),
 });
 
-const arbBowel: fc.Arbitrary<LogEvent> = fc.record({
+const arbBowel: fc.Arbitrary<DraftEvent> = fc.record({
   type: fc.constant("bowel" as const),
   id: arbId,
   createdAt: arbCreatedAt,
@@ -107,7 +110,7 @@ const arbBowel: fc.Arbitrary<LogEvent> = fc.record({
   symptoms: fc.option(fc.array(arbLoggedSymptom, { minLength: 1 }), { nil: undefined }),
 });
 
-const arbCheckin: fc.Arbitrary<LogEvent> = fc.record({
+const arbCheckin: fc.Arbitrary<DraftEvent> = fc.record({
   type: fc.constant("checkin" as const),
   id: arbId,
   createdAt: arbCreatedAt,
@@ -122,11 +125,11 @@ const arbCheckin: fc.Arbitrary<LogEvent> = fc.record({
   }),
 });
 
-const arbLogEvent: fc.Arbitrary<LogEvent> = fc.oneof(arbMeal, arbSymptom, arbBowel, arbCheckin);
+const arbLogEvent: fc.Arbitrary<DraftEvent> = fc.oneof(arbMeal, arbSymptom, arbBowel, arbCheckin);
 
 // Strip the photo (and only the photo) from a meal event for comparison, since
 // eventFromRow never reconstructs a photo.
-function withoutPhoto(e: LogEvent): LogEvent {
+function withoutPhoto(e: DraftEvent): DraftEvent {
   if (e.type === "meal") {
     const { photo, ...rest } = e;
     void photo;

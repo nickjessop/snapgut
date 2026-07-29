@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { recognizeMeal, UpgradeRequiredError, AuthError } from "./api";
-import { addEvent, type Ingredient, type MealEvent } from "./db";
+import { putEvent, type Ingredient, type MealEvent } from "./db";
 import type { Entitlement } from "./session";
 import { NoteIcon, AddIcon, BackIcon } from "./icons";
 
@@ -94,7 +94,7 @@ export default function MealDetails({
 
   async function save() {
     setSaving(true);
-    const event: MealEvent = {
+    const event: Omit<MealEvent, "updatedAt"> = {
       id: editing?.id ?? crypto.randomUUID(),
       type: "meal",
       createdAt: editing?.createdAt ?? Date.now(),
@@ -103,7 +103,9 @@ export default function MealDetails({
       note: note.trim() || undefined,
       photo,
     };
-    await addEvent(event);
+    // `putEvent` assigns the Revision_Time and records the id in the Outbox in
+    // the same transaction as the content (Req 4.6, 5.2).
+    await putEvent(event);
     onSaved();
   }
 

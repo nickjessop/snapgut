@@ -50,22 +50,37 @@ gcloud config set project YOUR_PROJECT_ID
 gcloud services enable aiplatform.googleapis.com run.googleapis.com
 ```
 
-## Food illustration pack (one-time, offline)
+## Food illustration pack
 
-Food thumbnails come from our **own** Imagen-generated botanical illustrations in
-`public/foods/` — generated once, committed, then served as static assets (no runtime
-AI cost, no third-party image licensing). See `docs/security-and-infra-todo.md`.
+Food thumbnails are our **own** botanical illustrations (generated with Vertex AI
+Gemini image models) — **2,999 foods**, ~20 KB each as transparent 256px WebP.
+
+They are **not in git**. They live in a private GCS bucket
+(`gs://REDACTED-GCP-PROJECT-pack`) and the server streams them same-origin at `/foods/*`
+with immutable caching, so the repo/container stay small (`dist` ≈ 400 KB) and there's
+no third-party image licensing. See `docs/security-and-infra-todo.md`.
 
 ```bash
-node scripts/gen-food-images.mjs --dry-run     # list + cost estimate (~$5 for 247)
-node scripts/gen-food-images.mjs --limit 5     # sanity-check the style first
-node scripts/gen-food-images.mjs               # generate everything missing
+./scripts/sync-food-pack.sh down    # fresh clone: pull the pack locally (optional)
+./scripts/sync-food-pack.sh count   # how many images are in the bucket
 ```
 
-Resumable and idempotent (existing files are skipped; `--force` overwrites). Edit the
-food list in `scripts/food-list.txt` and the art direction via `STYLE` in the script —
-keep `STYLE` fixed so the set stays visually cohesive. Bump `PACK_VERSION` in
-`src/imageCache.ts` after adding images so clients re-check previously-missing foods.
+To extend the pack (e.g. a food showed up as a letter-avatar):
+
+```bash
+node scripts/gen-food-list.mjs --target 4000        # add more names (text, pennies)
+node scripts/gen-food-images.mjs --dry-run          # what's missing + cost estimate
+node scripts/gen-food-images.mjs --only "Natto"     # generate specific foods
+node scripts/gen-food-images.mjs --concurrency 6    # generate everything missing
+./scripts/sync-food-pack.sh up                      # upload to the bucket
+```
+
+Generation is resumable and idempotent (existing files are skipped, `--force`
+overwrites) and retries transient failures 3×. Cost is ~$0.039 USD/image. Keep `STYLE`
+in the script fixed so the set stays cohesive, and add a `SUBJECT_OVERRIDES` entry for
+any name a literal reading gets wrong (e.g. "Chicken" → breast fillets, not a bird).
+Bump `PACK_VERSION` in `src/imageCache.ts` after adding images so clients re-check
+foods they'd previously cached as missing.
 
 ## Deploy to Cloud Run (single container)
 

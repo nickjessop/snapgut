@@ -1,12 +1,15 @@
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
 import { rowFromEvent, SHEET_HEADER } from "./googleSheets";
-import { toCSV, type LogEvent } from "./db";
+// A spreadsheet row carries no Revision_Time, so these fixtures and the row
+// mapping work over `DraftEvent` — a log event without the `updatedAt` that
+// `putEvent` assigns on the way into the Local_Store.
+import { toCSV, type DraftEvent, type LogEvent } from "./db";
 import { SYMPTOMS, getSymptom } from "./symptoms";
 
 // Feature: google-sheets-integration, Property 3: Rows reuse the toCSV mapping and exclude photos
 //
-// For any LogEvent, the first ten cells of rowFromEvent(e, labelFor) are exactly
+// For any DraftEvent, the first ten cells of rowFromEvent(e, labelFor) are exactly
 // equal to the corresponding cells of the single data row produced by
 // toCSV([e], labelFor), the row has exactly eleven cells (the ten CSV columns
 // plus the appended id), the final cell equals e.id, and no cell contains a Blob
@@ -122,7 +125,7 @@ const arbCreatedAt = fc.integer({ min: 0, max: 4102444800000 });
 const arbId = fc.uuid();
 const arbOptionalNote = fc.option(arbText, { nil: undefined });
 
-const arbMeal: fc.Arbitrary<LogEvent> = fc.record({
+const arbMeal: fc.Arbitrary<DraftEvent> = fc.record({
   type: fc.constant("meal" as const),
   id: arbId,
   createdAt: arbCreatedAt,
@@ -136,7 +139,7 @@ const arbMeal: fc.Arbitrary<LogEvent> = fc.record({
   ),
 });
 
-const arbSymptom: fc.Arbitrary<LogEvent> = fc.record({
+const arbSymptom: fc.Arbitrary<DraftEvent> = fc.record({
   type: fc.constant("symptom" as const),
   id: arbId,
   createdAt: arbCreatedAt,
@@ -144,7 +147,7 @@ const arbSymptom: fc.Arbitrary<LogEvent> = fc.record({
   symptoms: fc.array(arbLoggedSymptom),
 });
 
-const arbBowel: fc.Arbitrary<LogEvent> = fc.record({
+const arbBowel: fc.Arbitrary<DraftEvent> = fc.record({
   type: fc.constant("bowel" as const),
   id: arbId,
   createdAt: arbCreatedAt,
@@ -153,7 +156,7 @@ const arbBowel: fc.Arbitrary<LogEvent> = fc.record({
   symptoms: fc.option(fc.array(arbLoggedSymptom), { nil: undefined }),
 });
 
-const arbCheckin: fc.Arbitrary<LogEvent> = fc.record({
+const arbCheckin: fc.Arbitrary<DraftEvent> = fc.record({
   type: fc.constant("checkin" as const),
   id: arbId,
   createdAt: arbCreatedAt,
@@ -166,7 +169,7 @@ const arbCheckin: fc.Arbitrary<LogEvent> = fc.record({
   }),
 });
 
-const arbLogEvent: fc.Arbitrary<LogEvent> = fc.oneof(arbMeal, arbSymptom, arbBowel, arbCheckin);
+const arbLogEvent: fc.Arbitrary<DraftEvent> = fc.oneof(arbMeal, arbSymptom, arbBowel, arbCheckin);
 
 describe("rowFromEvent (Property 3: rows reuse the toCSV mapping and exclude photos)", () => {
   it("matches toCSV's data-row cells, appends id, and never leaks photo data", () => {
@@ -188,7 +191,9 @@ describe("rowFromEvent (Property 3: rows reuse the toCSV mapping and exclude pho
         }
 
         // The first ten cells equal toCSV's parsed data-row cells (unescaped).
-        const parsed = parseCSV(toCSV([e], labelFor));
+        // `toCSV` takes stored events; the fixture is a draft (no Revision_Time),
+        // which toCSV never reads, so the cast is safe.
+        const parsed = parseCSV(toCSV([e as unknown as LogEvent], labelFor));
         expect(parsed.length).toBe(2); // header + one data row
         const dataRow = parsed[1];
         expect(dataRow.length).toBe(10);

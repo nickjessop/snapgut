@@ -158,6 +158,10 @@ const SUBJECT_OVERRIDES = {
   "peppermint tea": "a cup of tea beside a sprig of peppermint",
   "chamomile tea": "a cup of tea beside a few dried chamomile flowers",
   beer: "a glass of beer",
+  ale: "a pint glass of amber ale",
+  lager: "a pint glass of pale lager",
+  stout: "a pint glass of dark stout",
+  ipa: "a pint glass of hoppy IPA beer",
   wine: "a glass of wine",
   "red wine": "a glass of red wine",
   "white wine": "a glass of white wine",
@@ -485,18 +489,27 @@ async function main() {
 
   let ok = 0;
   const failures = [];
+  const ATTEMPTS = 3; // most failures are transient (NO_IMAGE / rate limit / reset)
   await pool(foods, args.concurrency, async (food) => {
-    try {
-      const { buffer } = await generate(client, project, food);
-      const webp = await toTransparentWebp(buffer);
-      const file = path.join(OUT_DIR, `${food.slug}.webp`);
-      await writeFile(file, webp);
-      ok++;
-      console.log(`  ✓ ${food.slug}.webp  (${(webp.length / 1024).toFixed(0)}kb)`);
-    } catch (e) {
-      failures.push({ food, message: e.message });
-      console.warn(`  ✗ ${food.slug}: ${e.message}`);
+    let lastErr;
+    for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+      try {
+        const { buffer } = await generate(client, project, food);
+        const webp = await toTransparentWebp(buffer);
+        const file = path.join(OUT_DIR, `${food.slug}.webp`);
+        await writeFile(file, webp);
+        ok++;
+        console.log(`  ✓ ${food.slug}.webp  (${(webp.length / 1024).toFixed(0)}kb)`);
+        return;
+      } catch (e) {
+        lastErr = e;
+        if (attempt < ATTEMPTS) {
+          await new Promise((r) => setTimeout(r, 1500 * attempt)); // simple backoff
+        }
+      }
     }
+    failures.push({ food, message: lastErr.message });
+    console.warn(`  ✗ ${food.slug}: ${lastErr.message}`);
   });
 
   console.log(`\nDone: ${ok} generated, ${failures.length} failed.`);

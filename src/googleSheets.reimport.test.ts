@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import type { LogEvent, MealEvent } from "./db";
+// A spreadsheet row carries no Revision_Time, so these fixtures and the row
+// mapping work over `DraftEvent` — a log event without the `updatedAt` that
+// `putEvent` assigns on the way into the Local_Store.
+import type { DraftEvent, MealEvent } from "./db";
 
 // Task 13.2 — Integration tests for `reimport` (mocked GIS + `fetch` + `db`).
 //
@@ -18,17 +21,17 @@ import type { LogEvent, MealEvent } from "./db";
 // ---- Fake local event store (stands in for IndexedDB) ----
 //
 // `googleSheets.ts` reads local events through `getEvents` and writes them back
-// through `addEvent` (a `put` keyed by id); both are redirected to an in-memory
+// through `putEvent` (a `put` keyed by id); both are redirected to an in-memory
 // map so the tests can seed local state and observe exactly what was written.
 
-const h = vi.hoisted(() => ({ store: new Map<string, LogEvent>() }));
+const h = vi.hoisted(() => ({ store: new Map<string, DraftEvent>() }));
 
 vi.mock("./db", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./db")>();
   return {
     ...actual,
     getEvents: async () => [...h.store.values()],
-    addEvent: async (e: LogEvent) => {
+    putEvent: async (e: DraftEvent) => {
       h.store.set(e.id, e);
     },
   };
@@ -113,7 +116,7 @@ const readFailsRouter = (url: string, init: RequestInit): Response => {
   throw new Error(`Unexpected fetch to ${url}`);
 };
 
-function meal(id: string, dish: string, createdAt = 1_700_000_000_000): MealEvent {
+function meal(id: string, dish: string, createdAt = 1_700_000_000_000): Omit<MealEvent, "updatedAt"> {
   return {
     id,
     createdAt,

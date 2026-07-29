@@ -1,7 +1,7 @@
 import { useState } from "react";
 import SymptomPicker from "./SymptomPicker";
 import WhenPicker from "./WhenPicker";
-import { addEvent, type LoggedSymptom, type SymptomEvent } from "./db";
+import { putEvent, type LoggedSymptom, type SymptomEvent } from "./db";
 import type { Severity } from "./symptoms";
 
 interface Props {
@@ -24,14 +24,14 @@ export default function SymptomLogView({ editing, onDone, onCancel }: Props) {
       id,
       severity,
     }));
-    const event: SymptomEvent = {
+    const event: Omit<SymptomEvent, "updatedAt"> = {
       id: editing?.id ?? crypto.randomUUID(),
       type: "symptom",
       createdAt: editing ? editing.createdAt : when,
       symptoms,
       note: note.trim() || undefined,
     };
-    await addEvent(event);
+    await putEvent(event);
     onDone();
   }
 

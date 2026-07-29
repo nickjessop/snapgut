@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
-import { createSingleFlight } from "./googleSheets";
+import { createSingleFlight } from "./singleFlight";
 
 // Feature: google-sheets-integration, Property 8: At most one sync runs, with at most one queued rerun
 //

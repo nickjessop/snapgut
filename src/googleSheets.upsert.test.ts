@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
 import { computeUpsertPlan } from "./googleSheets";
-import type { LogEvent } from "./db";
+// A spreadsheet row carries no Revision_Time, so these fixtures and the row
+// mapping work over `DraftEvent` — a log event without the `updatedAt` that
+// `putEvent` assigns on the way into the Local_Store.
+import type { DraftEvent } from "./db";
 
 // Feature: google-sheets-integration, Property 2: Sync upserts by event id (each id appears exactly once)
 //
@@ -19,11 +22,11 @@ import type { LogEvent } from "./db";
 const ID_POOL: string[] = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
 const arbId = fc.constantFrom(...ID_POOL);
 
-// --- lightweight LogEvent generators ---
+// --- lightweight DraftEvent generators ---
 // Only the `id` field matters for upsert planning, but each event must be a
-// structurally valid LogEvent. Type-specific fields are filled with minimal
+// structurally valid DraftEvent. Type-specific fields are filled with minimal
 // valid values so the generated values are real LogEvents.
-const arbMeal = (id: string): fc.Arbitrary<LogEvent> =>
+const arbMeal = (id: string): fc.Arbitrary<DraftEvent> =>
   fc.record({
     type: fc.constant("meal" as const),
     id: fc.constant(id),
@@ -32,7 +35,7 @@ const arbMeal = (id: string): fc.Arbitrary<LogEvent> =>
     ingredients: fc.constant([]),
   });
 
-const arbSymptom = (id: string): fc.Arbitrary<LogEvent> =>
+const arbSymptom = (id: string): fc.Arbitrary<DraftEvent> =>
   fc.record({
     type: fc.constant("symptom" as const),
     id: fc.constant(id),
@@ -40,7 +43,7 @@ const arbSymptom = (id: string): fc.Arbitrary<LogEvent> =>
     symptoms: fc.constant([]),
   });
 
-const arbBowel = (id: string): fc.Arbitrary<LogEvent> =>
+const arbBowel = (id: string): fc.Arbitrary<DraftEvent> =>
   fc.record({
     type: fc.constant("bowel" as const),
     id: fc.constant(id),
@@ -48,7 +51,7 @@ const arbBowel = (id: string): fc.Arbitrary<LogEvent> =>
     bristol: fc.integer({ min: 1, max: 7 }),
   });
 
-const arbCheckin = (id: string): fc.Arbitrary<LogEvent> =>
+const arbCheckin = (id: string): fc.Arbitrary<DraftEvent> =>
   fc.record({
     type: fc.constant("checkin" as const),
     id: fc.constant(id),
@@ -56,7 +59,7 @@ const arbCheckin = (id: string): fc.Arbitrary<LogEvent> =>
   });
 
 // Any of the four event types, with its id drawn from the shared pool.
-const arbLogEvent: fc.Arbitrary<LogEvent> = arbId.chain((id) =>
+const arbLogEvent: fc.Arbitrary<DraftEvent> = arbId.chain((id) =>
   fc.oneof(arbMeal(id), arbSymptom(id), arbBowel(id), arbCheckin(id)),
 );
 

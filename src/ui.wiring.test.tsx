@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, cleanup, waitFor, act } from "@testing-library/react";
-import type { LogEvent } from "./db";
+// A spreadsheet row carries no Revision_Time, so these fixtures and the row
+// mapping work over `DraftEvent` — a log event without the `updatedAt` that
+// `putEvent` assigns on the way into the Local_Store.
+import type { DraftEvent } from "./db";
 
 // Task 15.4 — UI wiring tests for the Google Sheets integration.
 //
@@ -18,14 +21,14 @@ import type { LogEvent } from "./db";
 // `LogsView` loads the timeline through `getEvents`; jsdom has no IndexedDB, so
 // the store is redirected to an in-memory list the tests seed directly.
 
-const h = vi.hoisted(() => ({ store: [] as LogEvent[] }));
+const h = vi.hoisted(() => ({ store: [] as DraftEvent[] }));
 
 vi.mock("./db", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./db")>();
   return {
     ...actual,
     getEvents: async () => [...h.store],
-    addEvent: async (e: LogEvent) => {
+    putEvent: async (e: DraftEvent) => {
       h.store.push(e);
     },
     deleteEvent: async (id: string) => {
@@ -71,7 +74,7 @@ const entitlement: Entitlement = {
   freeAiLimit: 5,
 };
 
-function checkin(id: string): LogEvent {
+function checkin(id: string): DraftEvent {
   return { id, createdAt: Date.now(), type: "checkin", stress: "low" };
 }
 
