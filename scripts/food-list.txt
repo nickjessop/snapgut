@@ -3029,3 +3029,42 @@ Burrito bowl
 Buddha bowl
 Gyro rice bowl
 Shawarma bowl
+
+# --- additives, thickeners, fibres, stocks (gut-health relevant, added 2026-07) ---
+Monosodium glutamate
+Yeast extract
+Dashi
+Bouillon cube
+Chicken stock
+Beef stock
+Vegetable stock
+Bonito flakes
+Inulin
+Chicory root
+Psyllium husk
+Xanthan gum
+Guar gum
+Pectin
+Gelatin
+Citric acid
+Maltodextrin
+Modified food starch
+Cornstarch
+Tapioca starch
+Potato starch
+Resistant starch
+Baking powder
+Baking soda
+Soy lecithin
+Whey protein
+Casein
+Food coloring
+Gluten
+Malt extract
+Invert sugar
+Sourdough starter
+Flour
+Whole wheat flour
+Almond flour
+Rice flour
+Baking mix
