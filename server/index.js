@@ -573,10 +573,37 @@ app.get("/foods/:file", async (c) => {
     c.header("Cache-Control", "public, max-age=31536000, immutable");
     return c.body(buf);
   } catch (err) {
-    if (err?.code === 404) return c.text("not found", 404); // client falls back to an avatar
+    if (err?.code === 404) {
+      // Every unmatched food is already a 404 here, so this is our coverage signal:
+      // tally the slug (aggregate only, no user linkage) to drive the next batch.
+      // The client tries several slug variants per food, so treat these as leads,
+      // not exact names — see scripts/missing-foods.mjs.
+      recordMissingFood(file.replace(/\.webp$/, ""));
+      return c.text("not found", 404); // client falls back to an avatar
+    }
     console.error("food pack error:", err?.message);
     return c.text("unavailable", 502);
   }
+});
+
+// Fire-and-forget so a logging hiccup never affects image serving.
+function recordMissingFood(slug) {
+  getStore()
+    .then((store) => store.recordMissingFood?.(slug))
+    .catch(() => {});
+}
+
+// Ops: which logged foods have no illustration yet (drives the next generation
+// batch). Requires ADMIN_TOKEN; returns aggregate counts only, no user data.
+app.get("/api/admin/missing-foods", async (c) => {
+  const expected = process.env.ADMIN_TOKEN;
+  if (!expected) return c.json({ error: "not_configured" }, 404);
+  if (c.req.header("x-admin-token") !== expected) {
+    return c.json({ error: "unauthorized" }, 401);
+  }
+  const store = await getStore();
+  const limit = Math.min(Number(c.req.query("limit") || 200), 1000);
+  return c.json({ missing: (await store.listMissingFoods?.(limit)) ?? [] });
 });
 
 // Serve the built PWA (dist/) in production.

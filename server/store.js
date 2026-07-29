@@ -45,7 +45,17 @@ function memoryStore() {
   const users = new Map();
   const codes = new Map();
   const rl = new Map(); // key -> timestamps[]
+  const missing = new Map(); // food slug -> { slug, count, lastSeen }
   return {
+    async recordMissingFood(slug) {
+      const rec = missing.get(slug) || { slug, count: 0, lastSeen: 0 };
+      rec.count += 1;
+      rec.lastSeen = Date.now();
+      missing.set(slug, rec);
+    },
+    async listMissingFoods(limit = 200) {
+      return [...missing.values()].sort((a, b) => b.count - a.count).slice(0, limit);
+    },
     async getUser(email) {
       return users.get(norm(email)) || null;
     },
@@ -103,7 +113,22 @@ async function firestoreStore() {
   const usersCol = db.collection("users");
   const codesCol = db.collection("authCodes");
   const rlCol = db.collection("rateLimits");
+  const missingCol = db.collection("missingFoods");
   return {
+    /**
+     * A food was logged that has no illustration yet. Aggregate counts only — the
+     * slug, a tally and a timestamp, never linked to a user (see docs).
+     */
+    async recordMissingFood(slug) {
+      await missingCol.doc(slug).set(
+        { slug, count: FieldValue.increment(1), lastSeen: Date.now() },
+        { merge: true }
+      );
+    },
+    async listMissingFoods(limit = 200) {
+      const snap = await missingCol.orderBy("count", "desc").limit(limit).get();
+      return snap.docs.map((d) => d.data());
+    },
     async getUser(email) {
       const snap = await usersCol.doc(norm(email)).get();
       return snap.exists ? snap.data() : null;
