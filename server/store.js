@@ -47,10 +47,11 @@ function memoryStore() {
   const rl = new Map(); // key -> timestamps[]
   const missing = new Map(); // food slug -> { slug, count, lastSeen }
   return {
-    async recordMissingFood(slug) {
-      const rec = missing.get(slug) || { slug, count: 0, lastSeen: 0 };
+    async recordMissingFood(slug, reason = "no_image") {
+      const rec = missing.get(slug) || { slug, count: 0, lastSeen: 0, reason };
       rec.count += 1;
       rec.lastSeen = Date.now();
+      rec.reason = reason;
       missing.set(slug, rec);
     },
     async listMissingFoods(limit = 200) {
@@ -116,12 +117,13 @@ async function firestoreStore() {
   const missingCol = db.collection("missingFoods");
   return {
     /**
-     * A food was logged that has no illustration yet. Aggregate counts only — the
-     * slug, a tally and a timestamp, never linked to a user (see docs).
+     * A logged food we can't illustrate. `reason` is "no_image" (a known canonical
+     * food we haven't drawn yet) or "unknown" (not in the food dictionary at all).
+     * Aggregate counts only — slug, reason, tally, timestamp; never linked to a user.
      */
-    async recordMissingFood(slug) {
+    async recordMissingFood(slug, reason = "no_image") {
       await missingCol.doc(slug).set(
-        { slug, count: FieldValue.increment(1), lastSeen: Date.now() },
+        { slug, reason, count: FieldValue.increment(1), lastSeen: Date.now() },
         { merge: true }
       );
     },

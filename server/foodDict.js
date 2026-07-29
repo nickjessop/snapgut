@@ -16,22 +16,31 @@ import { fileURLToPath } from "node:url";
 
 const DICT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), "food-dict.json");
 
-let dict = null;
+// Memoise the PROMISE, not the value: a meal canonicalises its ingredients in
+// parallel, so caching only the resolved value would let every concurrent caller
+// race past the check and re-read the file.
+let dictPromise = null;
 
-/** Load (and memoise) the dictionary. Missing file is non-fatal: we degrade to null. */
-async function load() {
-  if (dict !== null) return dict;
-  try {
-    dict = JSON.parse(await readFile(DICT_PATH, "utf8"));
-    console.log(
-      `food dict v${dict.version}: ${Object.keys(dict.foods).length} foods, ` +
-        `${Object.keys(dict.synonyms).length} synonyms`
-    );
-  } catch (err) {
-    console.warn(`food dict unavailable (${err.code || err.message}) — skipping canonicalisation`);
-    dict = false;
+/** Load (and memoise) the dictionary. A missing file is non-fatal: we degrade to null. */
+function load() {
+  if (!dictPromise) {
+    dictPromise = readFile(DICT_PATH, "utf8")
+      .then((raw) => {
+        const d = JSON.parse(raw);
+        console.log(
+          `food dict v${d.version}: ${Object.keys(d.foods).length} foods, ` +
+            `${Object.keys(d.synonyms).length} synonyms`
+        );
+        return d;
+      })
+      .catch((err) => {
+        console.warn(
+          `food dict unavailable (${err.code || err.message}) — skipping canonicalisation`
+        );
+        return null;
+      });
   }
-  return dict;
+  return dictPromise;
 }
 
 export function slugify(name) {
@@ -90,6 +99,18 @@ function candidates(name) {
 }
 
 /**
+ * Look up an exact canonical slug (no variant guessing).
+ * Returns { canonical, display, tags, img } or null if it isn't a canonical food.
+ */
+export async function lookupSlug(slug) {
+  const d = await load();
+  if (!d) return null;
+  const e = d.foods[slug];
+  if (!e) return null;
+  return { canonical: slug, display: e.display, tags: e.tags || [], img: !!e.img };
+}
+
+/**
  * Resolve a free-text food name to its canonical entry.
  * Returns { canonical, display, tags, img } or null when unknown.
  */
@@ -113,15 +134,25 @@ export async function canonicalize(name) {
 
 /**
  * Annotate recognised ingredients with their canonical id and trigger tags. Unknown
- * foods pass through untouched (the client still renders the raw name, and the /foods
- * 404 telemetry tells us what to add to the next batch).
+ * foods pass through untouched (the client still renders the raw name).
+ *
+ * `onGap(slug, reason)` reports coverage problems as we resolve, which is a far
+ * cleaner signal than watching image 404s:
+ *   - "no_image": a known food we simply haven't illustrated yet → generate it.
+ *   - "unknown":  not in the dictionary at all → add it to the food list first.
+ * One report per food occurrence, using the canonical id where we have one.
  */
-export async function annotateIngredients(ingredients) {
+export async function annotateIngredients(ingredients, onGap) {
   if (!Array.isArray(ingredients)) return [];
   return Promise.all(
     ingredients.map(async (ing) => {
       const hit = await canonicalize(ing?.name);
-      if (!hit) return ing;
+      if (!hit) {
+        const slug = slugify(ing?.name);
+        if (slug) onGap?.(slug, "unknown");
+        return ing;
+      }
+      if (!hit.img) onGap?.(hit.canonical, "no_image");
       return {
         ...ing,
         canonical: hit.canonical,

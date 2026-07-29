@@ -11,7 +11,7 @@ import {
   safeEqualHex,
 } from "./auth.js";
 import { sendCode } from "./email.js";
-import { annotateIngredients } from "./foodDict.js";
+import { annotateIngredients, lookupSlug } from "./foodDict.js";
 
 const PORT = Number(process.env.PORT) || 8080;
 const PROJECT = process.env.GOOGLE_CLOUD_PROJECT;
@@ -272,8 +272,10 @@ app.post("/api/recognize", async (c) => {
     }
 
     // Resolve each ingredient to a canonical food id (+ trigger tags) once, here, so
-    // images / scoring / FODMAP tagging downstream all join on the same key.
-    meal.ingredients = await annotateIngredients(meal.ingredients);
+    // images / scoring / FODMAP tagging downstream all join on the same key. Coverage
+    // gaps are reported with the canonical id (or "unknown" for foods missing from
+    // the dictionary) — see recordMissingFood.
+    meal.ingredients = await annotateIngredients(meal.ingredients, recordMissingFood);
 
     if (!pro) await store.incFreeAi(email); // count a free-trial use
     return c.json({ ...meal, entitlement: entitlement(await store.getUser(email)) });
@@ -579,11 +581,13 @@ app.get("/foods/:file", async (c) => {
     return c.body(buf);
   } catch (err) {
     if (err?.code === 404) {
-      // Every unmatched food is already a 404 here, so this is our coverage signal:
-      // tally the slug (aggregate only, no user linkage) to drive the next batch.
-      // The client tries several slug variants per food, so treat these as leads,
-      // not exact names — see scripts/missing-foods.mjs.
-      recordMissingFood(file.replace(/\.webp$/, ""));
+      // Secondary signal (mainly for events logged before canonicalisation existed).
+      // The client probes several slug variants per food, so only count slugs that are
+      // real canonical foods — otherwise every guess would pollute the tally.
+      const slug = file.replace(/\.webp$/, "");
+      lookupSlug(slug)
+        .then((hit) => hit && recordMissingFood(slug, "no_image"))
+        .catch(() => {});
       return c.text("not found", 404); // client falls back to an avatar
     }
     console.error("food pack error:", err?.message);
@@ -591,10 +595,14 @@ app.get("/foods/:file", async (c) => {
   }
 });
 
-// Fire-and-forget so a logging hiccup never affects image serving.
-function recordMissingFood(slug) {
+/**
+ * Tally a food-image coverage gap. Aggregate only — slug, reason, count and
+ * timestamp, never linked to a user (food names are health-adjacent).
+ * Fire-and-forget so a logging hiccup never affects the response.
+ */
+function recordMissingFood(slug, reason = "no_image") {
   getStore()
-    .then((store) => store.recordMissingFood?.(slug))
+    .then((store) => store.recordMissingFood?.(slug, reason))
     .catch(() => {});
 }
 
