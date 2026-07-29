@@ -4,3 +4,6 @@ dist
 .gitignore
 *.log
 .DS_Store
+
+# Generated food illustration pack (served from GCS, never baked into the image)
+food-pack/

@@ -548,6 +548,37 @@ app.post("/api/billing/webhook", async (c) => {
 
 app.get("/api/health", (c) => c.json({ ok: true }));
 
+// ---- Food illustration pack ----
+// Served same-origin out of a PRIVATE GCS bucket (org policy forbids public
+// buckets, and same-origin means no CSP img-src change). The pack is thousands of
+// small immutable WebPs, so it's kept out of the repo/container and edge-cached by
+// Cloudflare via the long Cache-Control below. See docs/security-and-infra-todo.md.
+const FOOD_PACK_BUCKET = process.env.FOOD_PACK_BUCKET || "REDACTED-GCP-PROJECT-pack";
+let bucket = null;
+async function getFoodBucket() {
+  if (!bucket) {
+    const { Storage } = await import("@google-cloud/storage");
+    bucket = new Storage().bucket(FOOD_PACK_BUCKET);
+  }
+  return bucket;
+}
+
+app.get("/foods/:file", async (c) => {
+  const file = c.req.param("file");
+  // Only ever serve the generated pack filenames (no traversal, no other objects).
+  if (!/^[a-z0-9-]+\.webp$/.test(file)) return c.text("not found", 404);
+  try {
+    const [buf] = await (await getFoodBucket()).file(`foods/${file}`).download();
+    c.header("Content-Type", "image/webp");
+    c.header("Cache-Control", "public, max-age=31536000, immutable");
+    return c.body(buf);
+  } catch (err) {
+    if (err?.code === 404) return c.text("not found", 404); // client falls back to an avatar
+    console.error("food pack error:", err?.message);
+    return c.text("unavailable", 502);
+  }
+});
+
 // Serve the built PWA (dist/) in production.
 app.use("/*", serveStatic({ root: "./dist" }));
 // SPA fallback so deep links load index.html.

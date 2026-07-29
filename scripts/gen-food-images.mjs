@@ -39,7 +39,9 @@ const execFileP = promisify(execFile);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
-const OUT_DIR = path.join(ROOT, "public", "foods");
+// Deliberately OUTSIDE public/ so Vite never copies ~50 MB into dist/ (and the
+// container). The pack is uploaded to GCS and streamed by the server at /foods/*.
+const OUT_DIR = path.join(ROOT, "food-pack");
 const LIST_FILE = path.join(__dirname, "food-list.txt");
 
 // gemini-2.5-flash-image works in us-central1; gemini-3.1-flash-image is global-only.
@@ -241,7 +243,7 @@ const SUBJECT_OVERRIDES = {
   burger: "a whole assembled burger",
   fries: "a portion of french fries",
   sandwich: "a sandwich cut in half",
-  pasta: "a small heap of dried pasta shapes",
+  pasta: "a few pieces of dried penne and fusilli pasta, clearly tube and spiral shaped",
   "wheat noodles": "a bundle of dried wheat noodles",
   "rice noodles": "a bundle of dried rice noodles",
   couscous: "a small heap of couscous",

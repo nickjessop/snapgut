@@ -10,6 +10,16 @@ import {
 } from "./session";
 import { exportBackup, importBackup, getLastBackupAt, daysSince } from "./backup";
 import {
+  isSheetsEnabled,
+  connect,
+  disconnect,
+  syncAll,
+  reimport,
+  getStatus,
+  subscribe,
+  type SyncStatus,
+} from "./googleSheets";
+import {
   getThemePref,
   setThemePref,
   type ThemePref,
@@ -55,6 +65,7 @@ export default function SettingsView({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [lastBackup, setLastBackup] = useState<number | null>(getLastBackupAt());
   const [theme, setTheme] = useState<ThemePref>(getThemePref());
+  const [sheetStatus, setSheetStatus] = useState<SyncStatus>(() => getStatus());
   const fileRef = useRef<HTMLInputElement>(null);
 
   function chooseTheme(pref: ThemePref) {
@@ -72,6 +83,12 @@ export default function SettingsView({
     return () => clearTimeout(t);
   }, [toast]);
 
+  // Keep the Google Sheets block in step with the module's status (Req 6.1–6.4).
+  useEffect(() => {
+    setSheetStatus(getStatus());
+    return subscribe(setSheetStatus);
+  }, []);
+
   const pro = entitlement?.pro ?? false;
   const planLabel = pro
     ? entitlement?.proUntil == null
@@ -87,6 +104,23 @@ export default function SettingsView({
       : daysSince(lastBackup) === 0
       ? "Backed up today"
       : `Last backup ${daysSince(lastBackup)}d ago`;
+
+  // Sheets block visibility (Req 1.2) and status text (Req 6.1–6.4).
+  const sheetsEnabled = isSheetsEnabled();
+  const sheetsConnected =
+    sheetStatus.state !== "disabled" && sheetStatus.state !== "disconnected";
+  const sheetsStatus =
+    sheetStatus.state === "syncing"
+      ? "Syncing…"
+      : sheetStatus.state === "synced"
+      ? `Synced · ${new Date(sheetStatus.lastSyncAt).toLocaleString()}`
+      : sheetStatus.state === "error"
+      ? `Sync error — ${sheetStatus.message}`
+      : sheetStatus.state === "connected"
+      ? sheetStatus.lastSyncAt === null
+        ? "Connected · not synced yet"
+        : `Synced · ${new Date(sheetStatus.lastSyncAt).toLocaleString()}`
+      : "Not connected";
 
   async function doBackup() {
     setBusy("Preparing backup…");
@@ -111,6 +145,52 @@ export default function SettingsView({
       setToast(`Restored ${n} item${n === 1 ? "" : "s"}`);
     } catch (err) {
       setToast((err as Error).message);
+    }
+    setBusy(null);
+  }
+
+  async function doConnect() {
+    setBusy("Connecting to Google…");
+    try {
+      await connect();
+      setToast("Google Sheets connected");
+    } catch (err) {
+      // Cancel/denial (2.5), create/header failure (2.7), consent timeout (2.8).
+      setToast((err as Error).message || "Couldn't connect to Google Sheets.");
+    }
+    setBusy(null);
+  }
+
+  async function doSync() {
+    setBusy("Syncing…");
+    try {
+      await syncAll();
+      setToast("Synced to Google Sheets");
+    } catch (err) {
+      setToast((err as Error).message || "Sync didn't complete.");
+    }
+    setBusy(null);
+  }
+
+  async function doReimport() {
+    setBusy("Re-importing…");
+    try {
+      const { imported, skipped } = await reimport();
+      onChanged();
+      setToast(`Imported ${imported} · skipped ${skipped}`);
+    } catch (err) {
+      setToast((err as Error).message || "Couldn't read the spreadsheet.");
+    }
+    setBusy(null);
+  }
+
+  async function doDisconnect() {
+    setBusy("Disconnecting…");
+    try {
+      await disconnect();
+      setToast("Google Sheets disconnected");
+    } catch (err) {
+      setToast((err as Error).message || "Disconnected.");
     }
     setBusy(null);
   }
@@ -272,6 +352,45 @@ export default function SettingsView({
             chevron
             onClick={exportCSV}
           />
+
+          {/* Google Sheets — hidden entirely without a Client ID (Req 1.2) */}
+          {sheetsEnabled && (
+            <>
+              <div className="settings-label">Google Sheets · {sheetsStatus}</div>
+              {!sheetsConnected ? (
+                <SettingsItem
+                  icon={CsvIcon}
+                  title="Connect Google Sheets"
+                  sub="Mirror your log to a spreadsheet in your Drive"
+                  chevron
+                  onClick={doConnect}
+                />
+              ) : (
+                <>
+                  <SettingsItem
+                    icon={BackupIcon}
+                    title="Sync now"
+                    sub="Push your timeline to the spreadsheet"
+                    chevron
+                    onClick={doSync}
+                  />
+                  <SettingsItem
+                    icon={RestoreIcon}
+                    title="Re-import from Sheet"
+                    sub="Read the spreadsheet back into your log"
+                    chevron
+                    onClick={doReimport}
+                  />
+                  <SettingsItem
+                    icon={SignOutIcon}
+                    title="Disconnect"
+                    sub="Stop syncing — your spreadsheet stays in Drive"
+                    onClick={doDisconnect}
+                  />
+                </>
+              )}
+            </>
+          )}
         </section>
 
         {/* Session */}

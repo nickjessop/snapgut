@@ -26,6 +26,7 @@ import {
   daysSince,
   snoozeReminder,
 } from "./backup";
+import { isSheetsConnected, shouldNudgeBackup, subscribe } from "./googleSheets";
 
 interface Props {
   onEdit: (event: LogEvent) => void;
@@ -48,13 +49,22 @@ export default function LogsView({
   const [lastBackup, setLastBackup] = useState<number | null>(getLastBackupAt());
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [sheetsConnected, setSheetsConnected] = useState(() => isSheetsConnected());
 
   useEffect(() => {
     getEvents().then(setEvents);
   }, [reloadKey]);
 
+  // An active Sheets connection replaces the manual backup nudge (Req 8.1) and
+  // must dismiss a shown one right away (Req 8.2), so track status changes.
+  useEffect(() => {
+    setSheetsConnected(isSheetsConnected());
+    return subscribe(() => setSheetsConnected(isSheetsConnected()));
+  }, []);
+
   const hasEvents = events.length > 0;
-  const due = hasEvents && !nudgeDismissed && isBackupDue(true);
+  const due =
+    hasEvents && !nudgeDismissed && shouldNudgeBackup(sheetsConnected, isBackupDue(true));
 
   async function remove(id: string) {
     await deleteEvent(id);

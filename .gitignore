@@ -6,3 +6,7 @@ dev-dist
 .env
 .env.local
 .playwright-mcp
+
+# Food illustration pack — lives in GCS (gs://REDACTED-GCP-PROJECT-pack), not git.
+# Regenerate with scripts/gen-food-images.mjs, sync with scripts/sync-food-pack.sh
+food-pack/

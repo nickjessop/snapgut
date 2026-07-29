@@ -1,6 +1,6 @@
 # Food Snap 🍽️
 
-A minimal, BeReal/Gas-style **PWA**: open the camera, snap your food, let Vertex AI
+A minimal **PWA** (for now): open the camera, snap your food, let Vertex AI
 figure out what you ate, then one-tap how you felt. Everything stores on-device and
 exports to CSV (which you can save to iCloud Drive via the iOS share sheet).
 

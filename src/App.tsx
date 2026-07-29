@@ -13,6 +13,7 @@ import AuthGate from "./AuthGate";
 import Paywall from "./Paywall";
 import { getToken, fetchMe, type Entitlement } from "./session";
 import { requestPersistentStorage } from "./backup";
+import { isSheetsConnected, syncAll } from "./googleSheets";
 import {
   CameraIcon,
   SymptomIcon,
@@ -56,6 +57,11 @@ export default function App() {
         }
       }
       setAuthChecked(true);
+      // Mirror local data to Google Sheets on app open when connected (Req 5.2);
+      // no-op when disconnected (Req 5.4). Errors surface in Settings, so ignore here.
+      if (isSheetsConnected()) {
+        void syncAll().catch(() => {});
+      }
     })();
   }, []);
 
@@ -101,6 +107,12 @@ export default function App() {
     resetFlow();
     setReloadKey((k) => k + 1);
     setTab("logs");
+    // Mirror the newly saved event to Google Sheets when connected (Req 5.1); the
+    // single-flight guard collapses overlapping triggers (Req 5.5). Error status is
+    // shown in Settings, so ignore the rejection here.
+    if (isSheetsConnected()) {
+      void syncAll().catch(() => {});
+    }
   }
   function cancelFlow() {
     const wasNewMeal = flow === "capture" || (flow === "meal-details" && !editing);
