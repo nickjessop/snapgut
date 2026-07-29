@@ -29,10 +29,28 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // The food illustration pack is thousands of files — never precache it
+        // (that would bloat the service worker install to tens of MB). It's
+        // runtime-cached on demand below instead.
+        globIgnores: ["**/foods/**"],
         runtimeCaching: [
           {
-            // Cache TheMealDB ingredient thumbnails on-device so we don't
-            // re-fetch them every load (also makes them work offline).
+            // Our own illustration pack: cache each thumbnail the first time it's
+            // actually shown, so only the foods a user logs are stored offline.
+            urlPattern: ({ url }) => url.pathname.startsWith("/foods/"),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "food-pack",
+              expiration: {
+                maxEntries: 1200,
+                maxAgeSeconds: 60 * 60 * 24 * 180, // 180 days
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Legacy TheMealDB thumbnails — only reachable when the dev-only
+            // VITE_MEALDB_FALLBACK flag is on (see src/foodImages.ts).
             urlPattern: /^https:\/\/www\.themealdb\.com\/images\/ingredients\//,
             handler: "CacheFirst",
             options: {
