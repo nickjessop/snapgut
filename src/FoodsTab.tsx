@@ -76,7 +76,7 @@ function FoodRow({ food, color }: { food: FoodScore; color: string }) {
 
   return (
     <div className="food-row">
-      <FoodImage name={food.name} />
+      <FoodImage name={food.name} canonical={food.canonical} />
       <div className="food-meta">
         <div className="food-name">
           {food.name}

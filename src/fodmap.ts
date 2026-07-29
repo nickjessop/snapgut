@@ -63,7 +63,25 @@ const KEYWORDS: { match: string[]; groups: TriggerGroup[] }[] = [
   { match: ["fermented", "sauerkraut", "kimchi", "salami", "cured", "aged", "smoked", "anchovy", "vinegar", "kombucha"], groups: ["histamine"] },
 ];
 
-/** Return the set of trigger groups a food name likely belongs to. */
+const ALL_GROUPS = new Set<string>(Object.keys(TRIGGER_LABELS));
+
+/**
+ * Preferred path: trigger groups resolved server-side from the food dictionary at
+ * recognition time and stored on the ingredient. Falls back to the keyword heuristic
+ * below for foods outside the dictionary and for events logged before it existed.
+ *
+ * The heuristic is substring-based and therefore wrong in places ("almond milk"
+ * matches "milk" -> lactose; "pineapple" matches "apple" -> fructose), which is
+ * exactly why the dictionary takes precedence.
+ */
+export function tagsForIngredient(ing: { name: string; tags?: string[] }): TriggerGroup[] {
+  if (ing.tags?.length) {
+    return ing.tags.filter((t): t is TriggerGroup => ALL_GROUPS.has(t));
+  }
+  return tagFood(ing.name);
+}
+
+/** Keyword fallback: trigger groups a food name likely belongs to. */
 export function tagFood(name: string): TriggerGroup[] {
   const n = name.toLowerCase();
   const groups = new Set<TriggerGroup>();

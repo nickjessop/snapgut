@@ -11,6 +11,7 @@ import {
   safeEqualHex,
 } from "./auth.js";
 import { sendCode } from "./email.js";
+import { annotateIngredients } from "./foodDict.js";
 
 const PORT = Number(process.env.PORT) || 8080;
 const PROJECT = process.env.GOOGLE_CLOUD_PROJECT;
@@ -269,6 +270,10 @@ app.post("/api/recognize", async (c) => {
         // model returned non-JSON; leave default
       }
     }
+
+    // Resolve each ingredient to a canonical food id (+ trigger tags) once, here, so
+    // images / scoring / FODMAP tagging downstream all join on the same key.
+    meal.ingredients = await annotateIngredients(meal.ingredients);
 
     if (!pro) await store.incFreeAi(email); // count a free-trial use
     return c.json({ ...meal, entitlement: entitlement(await store.getUser(email)) });

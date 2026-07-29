@@ -135,14 +135,22 @@ function pluralize(slug: string): string | null {
   return `${slug}s`;
 }
 
-/** Ordered, de-duplicated slug candidates to try for a food name. */
-export function slugCandidates(name: string): string[] {
+/**
+ * Ordered, de-duplicated slug candidates to try for a food.
+ *
+ * When `canonical` is present (resolved server-side against the food dictionary at
+ * recognition time) it's authoritative and goes first — the name-guessing below is
+ * only a fallback for foods outside the dictionary and for events logged before it
+ * existed.
+ */
+export function slugCandidates(name: string, canonical?: string): string[] {
   const base = slugify(name);
   const out: string[] = [];
   const push = (s: string | null | undefined) => {
     if (s && s.length > 1 && !out.includes(s)) out.push(s);
   };
 
+  push(canonical);
   push(base);
   push(ALIASES[base]);
   for (const s of singularVariants(base)) {
@@ -165,8 +173,8 @@ export function slugCandidates(name: string): string[] {
 }
 
 /** Local illustration-pack URLs to try, in order (256px WebP with alpha). */
-export function packUrls(name: string): string[] {
-  return slugCandidates(name).map((s) => `/foods/${s}.webp`);
+export function packUrls(name: string, canonical?: string): string[] {
+  return slugCandidates(name, canonical).map((s) => `/foods/${s}.webp`);
 }
 
 /**

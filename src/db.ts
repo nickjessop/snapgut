@@ -17,6 +17,15 @@ export type Confidence = "confident" | "maybe";
 export interface Ingredient {
   name: string;
   confidence: Confidence;
+  /**
+   * Canonical food id from the server-side dictionary (server/food-dict.json),
+   * resolved at recognition time. The join key for the illustration pack, food
+   * scoring and trigger tags. Absent on foods outside the dictionary, and on events
+   * logged before the dictionary existed — callers must fall back to `name`.
+   */
+  canonical?: string;
+  /** Trigger/FODMAP groups for this food, from the dictionary (see fodmap.ts). */
+  tags?: string[];
 }
 
 export interface MealAnalysis {
@@ -115,6 +124,20 @@ export type DraftEvent =
 
 export function confidentNames(e: MealEvent): string[] {
   return e.ingredients.filter((i) => i.confidence === "confident").map((i) => i.name);
+}
+
+/** Confident ingredients with their canonical ids/tags intact (for grouping). */
+export function confidentIngredients(e: MealEvent): Ingredient[] {
+  return e.ingredients.filter((i) => i.confidence === "confident");
+}
+
+/**
+ * Stable grouping key for a food: the canonical dictionary id when recognition
+ * resolved one, else a normalised form of the raw name. Keeps "Tomato"/"Tomatoes"
+ * (and legacy events with no canonical id) from splitting into separate foods.
+ */
+export function foodKey(i: Ingredient): string {
+  return i.canonical || i.name.trim().toLowerCase();
 }
 export function allNames(e: MealEvent): string[] {
   return e.ingredients.map((i) => i.name);

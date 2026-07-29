@@ -14,9 +14,18 @@ function colorFor(name: string): string {
  * TheMealDB, then falls back to a generated letter-avatar so we never render a
  * broken-image icon. See src/foodImages.ts for why the order matters.
  */
-export default function FoodImage({ name }: { name: string }) {
-  const slug = slugify(name);
-  const sources = [...packUrls(name), ...(MEALDB_FALLBACK ? [mealDbUrl(name)] : [])];
+export default function FoodImage({
+  name,
+  canonical,
+}: {
+  name: string;
+  canonical?: string;
+}) {
+  const slug = canonical || slugify(name);
+  const sources = [
+    ...packUrls(name, canonical),
+    ...(MEALDB_FALLBACK ? [mealDbUrl(name)] : []),
+  ];
 
   // Skip straight to the avatar for foods we've already learned have no image.
   const [idx, setIdx] = useState(() => (isMissing(slug) ? sources.length : 0));

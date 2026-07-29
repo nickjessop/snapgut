@@ -4,14 +4,19 @@
 // (not raw logs) is what we send to the AI to narrate. See docs/research-and-insights.md.
 
 import {
-  confidentNames,
+  confidentIngredients,
   type LogEvent,
   type MealEvent,
   type CheckinEvent,
   type LoggedSymptom,
 } from "./db";
 import { getSymptom, type Severity } from "./symptoms";
-import { tagFood, TRIGGER_LABELS, IS_FODMAP, type TriggerGroup } from "./fodmap";
+import {
+  tagsForIngredient,
+  TRIGGER_LABELS,
+  IS_FODMAP,
+  type TriggerGroup,
+} from "./fodmap";
 
 const SEV_SCORE: Record<Severity, number> = { mild: 1, moderate: 2, severe: 3 };
 
@@ -97,7 +102,9 @@ export function computeEvidence(events: LogEvent[]): EvidenceSummary {
 
   for (const meal of meals) {
     const groups = new Set<TriggerGroup>();
-    confidentNames(meal).forEach((f) => tagFood(f).forEach((g) => groups.add(g)));
+    confidentIngredients(meal).forEach((ing) =>
+      tagsForIngredient(ing).forEach((g) => groups.add(g))
+    );
 
     // symptom labels occurring within (mealTime, mealTime + LAG_WINDOW]
     const labels = new Set<string>();

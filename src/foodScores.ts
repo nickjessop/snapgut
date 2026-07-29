@@ -6,7 +6,13 @@
 // *without* that food are followed by symptoms — and only flag a food when it
 // meaningfully exceeds baseline AND there's enough evidence.
 
-import { confidentNames, type LogEvent, type MealEvent, type LoggedSymptom } from "./db";
+import {
+  confidentIngredients,
+  foodKey,
+  type LogEvent,
+  type MealEvent,
+  type LoggedSymptom,
+} from "./db";
 import { getSymptom } from "./symptoms";
 
 const LAG_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -22,6 +28,8 @@ export type FoodRank = "avoid" | "reduce" | "neutral" | "agrees" | "insufficient
 
 export interface FoodScore {
   name: string;
+  /** Canonical dictionary id, when recognition resolved one (see db.ts). */
+  canonical?: string;
   eaten: number;
   withSymptom: number;
   foodRate: number; // symptom-follow rate for this food (0..1)
@@ -59,7 +67,7 @@ export function computeFoodScores(events: LogEvent[]): FoodScore[] {
       }
     }
     const foods = new Set(
-      confidentNames(meal).map((f) => f.trim().toLowerCase()).filter(Boolean)
+      confidentIngredients(meal).map(foodKey).filter(Boolean)
     );
     return { followed: labels.size > 0, labels, foods, display: meal };
   });
@@ -70,6 +78,7 @@ export function computeFoodScores(events: LogEvent[]): FoodScore[] {
   // Accumulate per-food.
   interface Acc {
     display: string;
+    canonical?: string;
     eaten: number;
     withSymptom: number;
     symptomCounts: Map<string, number>;
@@ -77,12 +86,19 @@ export function computeFoodScores(events: LogEvent[]): FoodScore[] {
   const byFood = new Map<string, Acc>();
   for (const info of mealInfo) {
     const seen = new Set<string>();
-    for (const raw of confidentNames(info.display)) {
-      const key = raw.trim().toLowerCase();
+    for (const ing of confidentIngredients(info.display)) {
+      const key = foodKey(ing);
       if (!key || seen.has(key)) continue;
       seen.add(key);
       const acc =
-        byFood.get(key) ?? { display: raw.trim(), eaten: 0, withSymptom: 0, symptomCounts: new Map() };
+        byFood.get(key) ??
+        {
+          display: ing.name.trim(),
+          canonical: ing.canonical,
+          eaten: 0,
+          withSymptom: 0,
+          symptomCounts: new Map(),
+        };
       acc.eaten += 1;
       if (info.followed) {
         acc.withSymptom += 1;
@@ -120,6 +136,7 @@ export function computeFoodScores(events: LogEvent[]): FoodScore[] {
 
     return {
       name: a.display,
+      canonical: a.canonical,
       eaten: a.eaten,
       withSymptom: a.withSymptom,
       foodRate: +foodRate.toFixed(2),
