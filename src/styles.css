@@ -2183,6 +2183,104 @@ body {
   flex: 0 0 auto;
 }
 
+/* destination toggle rows (Cloud, Sheets) */
+.toggle-item {
+  gap: 12px;
+}
+.toggle-item.locked .si-title,
+.toggle-item.locked .si-sub {
+  opacity: 0.72;
+}
+/* a Pro-gated row: readable, visibly inert (Req 15.1) */
+.settings-item.locked .si-ico,
+.settings-item.locked .si-body,
+.settings-item.locked .si-chev {
+  opacity: 0.55;
+}
+.settings-item.locked {
+  cursor: default;
+}
+.si-switch {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--border);
+  padding: 3px;
+  display: flex;
+  align-items: center;
+  transition: background 0.16s ease;
+}
+.si-switch.on {
+  background: var(--accent);
+}
+.si-knob {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.28);
+  transition: transform 0.16s var(--spring);
+}
+.si-switch.on .si-knob {
+  transform: translateX(16px);
+}
+
+/* per-destination status lines — one per destination, never shared (Req 3.3) */
+.cloud-status,
+.sheets-status {
+  padding: 12px 14px;
+}
+.cloud-state-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cloud-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: 0 0 auto;
+}
+.cloud-dot.syncing {
+  background: var(--accent);
+}
+.cloud-dot.synced {
+  background: var(--good, var(--accent));
+}
+.cloud-dot.error {
+  background: var(--bad);
+}
+.cloud-dot.blocked_no_pro,
+.cloud-dot.paused {
+  background: var(--warn, var(--muted));
+}
+.cloud-dot.connected {
+  background: var(--muted);
+}
+.cloud-state-word {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-medium);
+}
+.cloud-state-msg {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 6px 0 0;
+}
+.cloud-dismiss {
+  margin-top: 10px;
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: var(--fw-medium);
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
 /* theme picker (segmented) */
 .theme-seg {
   margin-bottom: 8px;

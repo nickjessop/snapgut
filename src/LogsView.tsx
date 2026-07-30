@@ -21,12 +21,12 @@ import HeaderStats from "./HeaderStats";
 import InstallHint from "./InstallHint";
 import {
   exportBackup,
-  isBackupDue,
   getLastBackupAt,
   daysSince,
   snoozeReminder,
 } from "./backup";
-import { isSheetsConnected, shouldNudgeBackup, subscribe } from "./googleSheets";
+import { isBackupNudgeDue, subscribe as subscribeSyncSettings } from "./syncSettings";
+import { requestSync } from "./cloudSync";
 
 interface Props {
   onEdit: (event: LogEvent) => void;
@@ -49,27 +49,40 @@ export default function LogsView({
   const [lastBackup, setLastBackup] = useState<number | null>(getLastBackupAt());
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [sheetsConnected, setSheetsConnected] = useState(() => isSheetsConnected());
+  const [backupNudgeDue, setBackupNudgeDue] = useState(() => isBackupNudgeDue(true));
 
   useEffect(() => {
     getEvents().then(setEvents);
   }, [reloadKey]);
 
-  // An active Sheets connection replaces the manual backup nudge (Req 8.1) and
-  // must dismiss a shown one right away (Req 8.2), so track status changes.
+  // An active sync destination replaces the manual backup nudge and must dismiss a
+  // shown one right away, then bring it back as soon as the last destination goes
+  // inactive — including through a Pro lapse (cloud-sync Req 14.4, 14.5, 14.7,
+  // 15.6). The decision comes from the shared `syncSettings` predicate rather than
+  // any single destination's connection state, and `syncSettings` is also the only
+  // store subscribed to: it notifies synchronously on every input of that predicate
+  // (enabled state, entitlement snapshot, per-destination outcome), so the 1-second
+  // bounds hold. A Sheets connect or disconnect reaches it too, because both store
+  // the spreadsheet id and flip the shared enabled flag through `syncSettings`.
   useEffect(() => {
-    setSheetsConnected(isSheetsConnected());
-    return subscribe(() => setSheetsConnected(isSheetsConnected()));
+    const refresh = () => setBackupNudgeDue(isBackupNudgeDue(true));
+    refresh();
+    return subscribeSyncSettings(refresh);
   }, []);
 
   const hasEvents = events.length > 0;
-  const due =
-    hasEvents && !nudgeDismissed && shouldNudgeBackup(sheetsConnected, isBackupDue(true));
+  const due = hasEvents && !nudgeDismissed && backupNudgeDue;
 
+  // `deleteEvent` writes the tombstone and the Outbox entry in one transaction, so
+  // the delete is durable before the sync is asked for (cloud-sync Req 11.1). The
+  // list update needs no change: `getEvents()` never returns tombstones. The
+  // trigger is fire-and-forget — `requestSync` is a no-op while the Cloud
+  // destination can't sync, and a failed cycle keeps the id in the Outbox.
   async function remove(id: string) {
     await deleteEvent(id);
     setEvents((list) => list.filter((e) => e.id !== id));
     setDetail(null);
+    void requestSync("local-write");
   }
 
   async function doBackup() {

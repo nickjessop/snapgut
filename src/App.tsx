@@ -14,6 +14,8 @@ import Paywall from "./Paywall";
 import { getToken, fetchMe, type Entitlement } from "./session";
 import { requestPersistentStorage } from "./backup";
 import { isSheetsConnected, syncAll } from "./googleSheets";
+import { hydrateSyncState, requestSync, startTriggers } from "./cloudSync";
+import { applyEntitlement, restore as restoreSyncSettings } from "./syncSettings";
 import {
   CameraIcon,
   SymptomIcon,
@@ -24,7 +26,7 @@ import {
   AddIcon,
   type IconProps,
 } from "./icons";
-import type { LogEvent } from "./db";
+import { sweepTombstones, type LogEvent } from "./db";
 import type { ComponentType } from "react";
 
 type Tab = "camera" | "logs" | "insights";
@@ -46,14 +48,32 @@ export default function App() {
   const [ent, setEnt] = useState<Entitlement | null>(null);
   const [paywall, setPaywall] = useState<null | "out" | "upsell">(null);
 
+  /**
+   * The single funnel for every entitlement-carrying server response the UI
+   * handles — `/api/me`, `/api/recognize`, `/api/insights`, and checkout — so the
+   * rendered gate and the persisted Pro snapshot the Cloud gate reads move
+   * together (cloud-sync Req 1.7). The sync endpoints funnel their own responses
+   * inside `syncRequest`, so they never come through here.
+   */
+  function applyEnt(e: Entitlement): void {
+    setEnt(e);
+    applyEntitlement({ pro: e.pro, proUntil: e.proUntil });
+  }
+
   useEffect(() => {
     requestPersistentStorage();
+    // Ambient triggers: `online` (Req 11.4) and the ≥60 s foreground return
+    // (Req 11.9), plus the automatic retry timer. Torn down on unmount so no
+    // listener and no armed retry outlives this App instance. A trigger that
+    // arrives before restoration completes is discarded by the gate, not queued.
+    const stopTriggers = startTriggers();
+
     (async () => {
       if (getToken()) {
         const me = await fetchMe();
         if (me) {
           setAuthed(true);
-          setEnt(me);
+          applyEnt(me);
         }
       }
       setAuthChecked(true);
@@ -63,6 +83,28 @@ export default function App() {
         void syncAll().catch(() => {});
       }
     })();
+
+    // Cloud startup sequence, in this order on purpose.
+    (async () => {
+      // The persisted enabled state and Pro snapshot must be read before the
+      // first trigger: until `restore()` resolves the state reads fail-closed and
+      // a `cold-launch` trigger would be silently discarded (Req 3.9). The
+      // Sync_State hydration has no ordering constraint, so it rides along.
+      await Promise.all([restoreSyncSettings(), hydrateSyncState()]);
+      // Expired tombstones go before the cycle, so a push never carries rows the
+      // sweep is about to drop (Req 5.6). An unavailable IndexedDB must not hold
+      // back the trigger.
+      try {
+        await sweepTombstones(Date.now());
+      } catch {
+        /* best-effort — the sweep runs again on the next launch */
+      }
+      // Req 11.2 — exactly one Sync_Cycle for the launch. `requestSync` never
+      // rejects: a failed cycle is reported through Sync_State.
+      void requestSync("cold-launch");
+    })();
+
+    return stopTriggers;
   }, []);
 
   const signOut = () => {
@@ -77,7 +119,7 @@ export default function App() {
       <AuthGate
         onAuthed={(me) => {
           setAuthed(true);
-          setEnt(me);
+          applyEnt(me);
         }}
       />
     );
@@ -91,7 +133,7 @@ export default function App() {
       reason={paywall}
       onClose={() => setPaywall(null)}
       onUpgraded={(e) => {
-        setEnt(e);
+        applyEnt(e);
         setPaywall(null);
       }}
     />
@@ -113,6 +155,10 @@ export default function App() {
     if (isSheetsConnected()) {
       void syncAll().catch(() => {});
     }
+    // The Cloud destination's own local-write trigger (cloud-sync Req 11.1). The
+    // two destinations are independent, so this runs whatever Sheets is doing, and
+    // the gate discards it when Cloud is off, not Pro, or signed out.
+    void requestSync("local-write");
   }
   function cancelFlow() {
     const wasNewMeal = flow === "capture" || (flow === "meal-details" && !editing);
@@ -155,7 +201,7 @@ export default function App() {
           initialNote={mealNote}
           editing={editing?.type === "meal" ? editing : undefined}
           onSaved={finishFlow}
-          onEntitlement={(e) => e && setEnt(e)}
+          onEntitlement={(e) => e && applyEnt(e)}
           onNeedUpgrade={() => setPaywall("out")}
           onSignedOut={signOut}
           onBack={() => {
@@ -245,7 +291,7 @@ export default function App() {
         <InsightsView
           reloadKey={reloadKey}
           entitlement={ent}
-          onEntitlement={(e) => e && setEnt(e)}
+          onEntitlement={(e) => e && applyEnt(e)}
           onNeedUpgrade={() => setPaywall("out")}
           onSignedOut={signOut}
         />
