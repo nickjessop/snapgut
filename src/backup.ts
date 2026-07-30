@@ -3,6 +3,7 @@
 // and rebuild them on import. This is the local-first durability path: the file
 // can be saved to Files / iCloud Drive via the share sheet. See docs.
 
+import { compareForMerge } from "./cloudSync";
 import {
   getEvents,
   getRecord,
@@ -87,38 +88,13 @@ export async function exportBackup(): Promise<number> {
 // ---- import ----
 
 /**
- * Stable key-sorted JSON of every field but the photo, giving the total ordering
- * Requirement 8.3 needs for the final tie. Photos are excluded because they
- * never decide a merge (Req 8.7).
- */
-function canonicalKey(r: StoredRecord): string {
-  const entries = Object.entries(r as unknown as Record<string, unknown>)
-    .filter(([k, v]) => k !== "photo" && v !== undefined)
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-  return JSON.stringify(entries);
-}
-
-/**
  * Requirement 8's ordering applied to one imported entry against what the
- * Local_Store already holds for that `id` (Req 5.10): greater Revision_Time,
- * then tombstone-wins on a tie, then greater `createdAt`, then the total
- * ordering above, with the record ordered last retained.
- *
- * Local to the import path on purpose: task 7.1 introduces the shared
- * `compareForMerge` / `mergeRecords` that sync and the server both use, and this
- * helper is replaced by it then. Until then the import path still needs the rule.
+ * Local_Store already holds for that `id` (Req 5.10). The rule itself lives in
+ * `cloudSync.ts`, shared with the Sync_Cycle merge, so import and sync can never
+ * disagree about which revision wins.
  */
 function importedWins(incoming: StoredRecord, existing: StoredRecord): boolean {
-  if (incoming.updatedAt !== existing.updatedAt) {
-    return incoming.updatedAt > existing.updatedAt; // Req 8.1
-  }
-  const incomingDeleted = isTombstone(incoming);
-  const existingDeleted = isTombstone(existing);
-  if (incomingDeleted !== existingDeleted) return incomingDeleted; // Req 8.2
-  if (incoming.createdAt !== existing.createdAt) {
-    return incoming.createdAt > existing.createdAt; // Req 8.3
-  }
-  return canonicalKey(incoming) > canonicalKey(existing); // Req 8.3
+  return compareForMerge(incoming, existing) > 0;
 }
 
 /** The photo the Local_Store already holds for an id, if any. */

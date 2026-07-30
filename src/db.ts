@@ -1,6 +1,13 @@
 import { openDB, type DBSchema, type IDBPDatabase, type IDBPTransaction } from "idb";
 import type { Severity } from "./symptoms";
 
+// The pure half of `cloudSync.ts`: the wire codec and the merge rule, which
+// `mergePulledPage` below evaluates inside its transaction. `cloudSync.ts`
+// imports this module in turn, so the two form an import cycle — a benign one,
+// because neither module calls into the other while it is being evaluated: every
+// use is inside a function body.
+import { fromEventRecord, mergeRecords } from "./cloudSync";
+
 export interface LoggedSymptom {
   id: string; // SymptomDef id
   severity: Severity;
@@ -441,6 +448,114 @@ export async function deleteEvent(id: string, opts: { now?: number } = {}): Prom
   });
 
   return assigned;
+}
+
+// ---- pull merge (Req 7.3, 7.4, 7.6, 7.7, 7.9, 9.3, 9.4, 20.5) ----
+
+/** What one merged page did. */
+export interface MergePageResult {
+  /** Records that went through the merge rule — every record except the skipped. */
+  merged: number;
+  /** Records skipped as malformed, which the cursor still advances past (Req 20.5). */
+  skipped: number;
+  /** Ids whose stored record actually changed, for the Req 7.10 / 9.4 refresh. */
+  changedIds: string[];
+}
+
+/**
+ * Retain the Photo the Local_Store already holds (Req 7.7).
+ *
+ * A Photo is on-device-only data that no Event_Record carries, so a pulled record
+ * winning the merge would otherwise silently drop it. It is carried across only
+ * when the winner is a `meal` event and the local entry was a `meal` event
+ * holding one; a *winning Tombstone* is written as-is, which is what removes the
+ * content and the Photo together (Req 9.3), and Requirement 10.4's "no `photo`
+ * field" case is the same code path with nothing to carry.
+ */
+function withRetainedPhoto(winner: StoredRecord, local: StoredRecord | null): StoredRecord {
+  if (local === null) return winner;
+  if (isTombstone(winner) || winner.type !== "meal") return winner;
+  if (isTombstone(local) || local.type !== "meal" || local.photo === undefined) return winner;
+  return { ...winner, photo: local.photo };
+}
+
+/**
+ * Merge one pulled page into the Local_Store and commit the Sync_Cursor with it.
+ *
+ * The page and the cursor share **one** `readwrite` transaction over `events` and
+ * `meta` (Req 7.3, 7.4). That is the whole point of this function: the cursor can
+ * never end up ahead of a record that was not merged, because there is no instant
+ * at which one is durable and the other is not. A transaction that aborts leaves
+ * both the merged records and the cursor exactly as the previous page left them
+ * (Req 7.5), and the caller — which only issues the next pull request after this
+ * promise resolves — retries the same page on the next Sync_Cycle.
+ *
+ * Per record, in the order the page delivered them (ascending Server_Sequence):
+ *
+ * - `fromEventRecord` returning `null` is a **skipped** record, not a failure: the
+ *   Local_Store is left unchanged for that `id`, the remaining records are still
+ *   merged, and the cursor still advances past it so it is never re-fetched
+ *   (Req 20.3, 20.4, 20.5).
+ * - `mergeRecords(local, pulled)` decides the winner, with the local entry passed
+ *   first so a tie — two records equal in every field the ordering can see —
+ *   retains the local one. That is what makes re-merging the same page a no-op:
+ *   no write, no `changedIds` entry, and the Photo untouched (Req 7.6).
+ * - the local entry winning writes nothing at all, leaving its Photo and the
+ *   Outbox alone while the cursor advances as for a merged record (Req 7.9).
+ *
+ * The Outbox is never touched here. A pulled record came *from* the Sync_Service,
+ * so queueing it would push it straight back; and Requirement 7.9 says as much
+ * for the discarded case.
+ *
+ * `changedIds` names the ids whose stored record actually changed, which is what a
+ * caller uses to refresh the timeline and the derived statistics within the 2
+ * seconds Requirements 7.10 and 9.4 allow. `getEvents()` already filters
+ * Tombstones, so a merged Tombstone drops out of both by being written.
+ */
+export async function mergePulledPage(
+  records: unknown[],
+  cursorAfterPage: string,
+): Promise<MergePageResult> {
+  const db = await getDB();
+  const tx = db.transaction(["events", "meta"], "readwrite");
+  const result: MergePageResult = { merged: 0, skipped: 0, changedIds: [] };
+
+  try {
+    const events = tx.objectStore("events");
+    for (const raw of records) {
+      const pulled = fromEventRecord(raw);
+      if (pulled === null) {
+        result.skipped++; // Req 20.3, 20.4 — skipped, and the cursor still advances
+        continue;
+      }
+      result.merged++;
+      const local = (await events.get(pulled.id)) ?? null;
+      const winner = mergeRecords(local, pulled);
+      // Reference equality, not deep equality: `mergeRecords` returns one of its
+      // two arguments, so this is exactly "the local entry was retained".
+      if (winner === local) continue; // Req 7.6, 7.9 — nothing to write
+      await events.put(withRetainedPhoto(winner as StoredRecord, local));
+      result.changedIds.push(pulled.id);
+    }
+
+    // Committed by the same transaction as the merges above (Req 7.4).
+    await tx.objectStore("meta").put({ key: "cursor", value: cursorAfterPage });
+    await tx.done;
+  } catch (err) {
+    // See `writeInOneTransaction`: claim `tx.done`'s rejection and force the
+    // abort, so a failed page leaves the store and the cursor as they were.
+    tx.done.catch(noop);
+    try {
+      tx.abort();
+    } catch {
+      // already aborted
+    }
+    const failure = new Error("Failed to merge pulled page");
+    (failure as Error & { cause?: unknown }).cause = err;
+    throw failure;
+  }
+
+  return result;
 }
 
 // ---- outbox ----
