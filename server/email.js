@@ -20,7 +20,11 @@ export async function sendCode(email, code) {
     return { dev: true, code };
   }
   const client = await getResend();
-  await client.emails.send({
+  // The Resend SDK resolves with { data, error } instead of rejecting, so an
+  // unchecked call reports success for a rejected send (bad sender domain, revoked
+  // key, suppressed recipient). Surface it so /api/auth/request answers with an
+  // error rather than telling the user to check an inbox that will stay empty.
+  const { data, error } = await client.emails.send({
     from: EMAIL_FROM,
     to: email,
     subject: `Your SnapGut code: ${code}`,
@@ -31,5 +35,11 @@ export async function sendCode(email, code) {
       <div style="font-size:32px;font-weight:800;letter-spacing:6px;background:#faf7ef;border-radius:12px;padding:16px;text-align:center">${code}</div>
     </div>`,
   });
-  return { dev: false };
+
+  if (error) {
+    // Log the provider's reason (no address, no code, no key) and let the caller 500.
+    console.error(`email send failed: ${error.name ?? "error"}: ${error.message ?? ""}`);
+    throw new Error("email_send_failed");
+  }
+  return { dev: false, id: data?.id };
 }
