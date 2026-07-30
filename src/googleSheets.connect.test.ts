@@ -8,6 +8,13 @@ import {
   isSheetsConnected,
   resetGisForTests,
 } from "./googleSheets";
+import {
+  applyEntitlement,
+  clearPersistedSyncSettingsForTests,
+  isDestinationEnabled,
+  resetSyncSettingsForTests,
+  restore,
+} from "./syncSettings";
 
 // Task 11.2 — Integration tests for the connect/disconnect lifecycle
 // (mocked GIS + mocked `fetch`).
@@ -114,10 +121,19 @@ function clearStorage(): void {
   localStorage.removeItem(LAST_SYNC_KEY);
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.stubEnv("VITE_GOOGLE_CLIENT_ID", "test-client-id");
   resetGisForTests();
   clearStorage();
+
+  // `connect()` switches the shared enabled flag on itself (cloud-sync Req 15.5),
+  // but it cannot grant Pro_Entitlement, so the entitlement half of the Req 15.2
+  // gate is installed here — a signed-in Pro user is the precondition for the
+  // connect flow being reachable at all (Req 15.1).
+  resetSyncSettingsForTests();
+  clearPersistedSyncSettingsForTests();
+  await restore();
+  applyEntitlement({ pro: true, proUntil: null });
 
   responder = grants("token-abc");
 
@@ -155,6 +171,8 @@ afterEach(() => {
   resetGisForTests();
   delete (globalThis as unknown as { google?: unknown }).google;
   clearStorage();
+  resetSyncSettingsForTests();
+  clearPersistedSyncSettingsForTests();
 });
 
 describe("connect — Spreadsheet_Id persistence ordering (Req 2.4, 2.7)", () => {
@@ -179,6 +197,8 @@ describe("connect — Spreadsheet_Id persistence ordering (Req 2.4, 2.7)", () =>
     expect(getSpreadsheetId()).toBeNull();
     expect(isSheetsConnected()).toBe(false);
     expect(getStatus()).toEqual({ state: "disconnected" });
+    // A failed connect enables nothing (cloud-sync Req 15.5).
+    expect(isDestinationEnabled("sheets")).toBe(false);
   });
 
   it("stores the id after a successful header write and reports connected", async () => {
@@ -187,8 +207,26 @@ describe("connect — Spreadsheet_Id persistence ordering (Req 2.4, 2.7)", () =>
     await expect(connect()).resolves.toBeUndefined();
 
     expect(getSpreadsheetId()).toBe("new-id");
+    // The completed connection is what switches the shared enabled flag on
+    // (cloud-sync Req 15.5); with Pro held, the destination is active (Req 15.2).
+    expect(isDestinationEnabled("sheets")).toBe(true);
     expect(isSheetsConnected()).toBe(true);
     expect(getStatus()).toEqual({ state: "connected", lastSyncAt: null });
+  });
+
+  it("closes the gate on a Pro_Lapse while keeping the id and the enabled flag (cloud-sync Req 15.4)", async () => {
+    router = freshConnectRouter("new-id");
+    await connect();
+    expect(isSheetsConnected()).toBe(true);
+
+    applyEntitlement({ pro: false, proUntil: null });
+
+    // Inactive, but nothing about the connection was torn down: the id stays, the
+    // destination stays enabled, and the Google grant is untouched (Req 15.4, 15.9).
+    expect(isSheetsConnected()).toBe(false);
+    expect(getSpreadsheetId()).toBe("new-id");
+    expect(isDestinationEnabled("sheets")).toBe(true);
+    expect(mockOauth2.revoke).not.toHaveBeenCalled();
   });
 });
 

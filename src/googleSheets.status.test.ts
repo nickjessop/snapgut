@@ -11,6 +11,13 @@ import {
   setRuntime,
   type SyncStatus,
 } from "./googleSheets";
+import {
+  applyEntitlement,
+  clearPersistedSyncSettingsForTests,
+  resetSyncSettingsForTests,
+  restore,
+  setDestinationEnabled,
+} from "./syncSettings";
 
 // Task 8.2 — Unit tests for status derivation and persistence.
 //
@@ -19,6 +26,14 @@ import {
 // driving isSheetsConnected(), and the subscribe/notify pub/sub.
 //
 // Validates: Requirements 6.1, 6.2, 6.3, 6.4
+//
+// Task 4.2 (cloud-sync) — `isSheetsConnected()` now also requires Pro_Entitlement
+// and the shared enabled flag owned by `syncSettings` (cloud-sync Req 15.2, 15.5),
+// so the stored-id cases below carry Pro-on / Pro-off / enabled-off variants.
+// `getStatus()` is deliberately untouched by that gate: it reports the connection
+// the user set up, and the paused-during-lapse status line is task 15.2's job.
+//
+// Validates: Requirements 15.1, 15.2 (cloud-sync)
 //
 // isSheetsEnabled() reads import.meta.env.VITE_GOOGLE_CLIENT_ID at call time, so
 // vi.stubEnv is the standard way to simulate enabled/disabled here.
@@ -37,10 +52,28 @@ function disableSheets(): void {
   vi.stubEnv("VITE_GOOGLE_CLIENT_ID", "");
 }
 
-beforeEach(() => {
+/** Pro_Entitlement true, with no expiry (cloud-sync Req 15.2 condition 3). */
+function grantPro(): void {
+  applyEntitlement({ pro: true, proUntil: null });
+}
+
+/** A Pro_Lapse: the entitlement snapshot says not Pro (cloud-sync Req 15.4). */
+function lapsePro(): void {
+  applyEntitlement({ pro: false, proUntil: null });
+}
+
+/** The shared enabled flag for the Sheets destination (cloud-sync Req 15.5). */
+function enableDestination(): void {
+  setDestinationEnabled("sheets", true);
+}
+
+beforeEach(async () => {
   // Reset durable + runtime state between tests so the module singleton is clean.
   localStorage.removeItem(SPREADSHEET_ID_KEY);
   localStorage.removeItem(LAST_SYNC_KEY);
+  resetSyncSettingsForTests();
+  clearPersistedSyncSettingsForTests();
+  await restore();
   setRuntime({ phase: "idle" });
 });
 
@@ -48,6 +81,8 @@ afterEach(() => {
   vi.unstubAllEnvs();
   localStorage.removeItem(SPREADSHEET_ID_KEY);
   localStorage.removeItem(LAST_SYNC_KEY);
+  resetSyncSettingsForTests();
+  clearPersistedSyncSettingsForTests();
   setRuntime({ phase: "idle" });
 });
 
@@ -130,8 +165,10 @@ describe("getStatus — SyncStatus branch derivation", () => {
 });
 
 describe("persistence — spreadsheet id and connection state", () => {
-  it("setSpreadsheetId makes isSheetsConnected() true when enabled", () => {
+  it("setSpreadsheetId makes isSheetsConnected() true when enabled, entitled, and switched on", () => {
     enableSheets();
+    grantPro();
+    enableDestination();
     expect(isSheetsConnected()).toBe(false);
     setSpreadsheetId("sheet-1");
     expect(getSpreadsheetId()).toBe("sheet-1");
@@ -140,6 +177,8 @@ describe("persistence — spreadsheet id and connection state", () => {
 
   it("clearSpreadsheetId makes isSheetsConnected() false again", () => {
     enableSheets();
+    grantPro();
+    enableDestination();
     setSpreadsheetId("sheet-1");
     expect(isSheetsConnected()).toBe(true);
     clearSpreadsheetId();
@@ -149,9 +188,71 @@ describe("persistence — spreadsheet id and connection state", () => {
 
   it("isSheetsConnected() stays false when disabled even with a stored id (Req 1.3)", () => {
     disableSheets();
+    grantPro();
+    enableDestination();
     setSpreadsheetId("sheet-1");
-    // The id is stored, but the disabled gate overrides connection state.
+    // The id is stored and Pro is held, but the config gate overrides all of it.
     expect(getSpreadsheetId()).toBe("sheet-1");
+    expect(isSheetsConnected()).toBe(false);
+  });
+
+  // ---- cloud-sync Req 15.2: all four conditions are necessary ----
+
+  it("isSheetsConnected() is false with a stored id while Pro is off (cloud-sync Req 15.2)", () => {
+    enableSheets();
+    enableDestination();
+    setSpreadsheetId("sheet-1");
+    lapsePro();
+
+    // Config on, destination on, id stored — only entitlement is missing, and the
+    // gate closes anyway.
+    expect(getSpreadsheetId()).toBe("sheet-1");
+    expect(isSheetsConnected()).toBe(false);
+  });
+
+  it("isSheetsConnected() is false with a stored id before any entitlement is known (cloud-sync Req 1.9)", () => {
+    enableSheets();
+    enableDestination();
+    setSpreadsheetId("sheet-1");
+
+    // Cold start: no entitlement snapshot has ever been persisted, so the gate
+    // fails closed.
+    expect(isSheetsConnected()).toBe(false);
+  });
+
+  it("isSheetsConnected() is false with a stored id while the shared enabled flag is off (cloud-sync Req 15.5)", () => {
+    enableSheets();
+    grantPro();
+    setSpreadsheetId("sheet-1");
+
+    // The enabled state is owned by `syncSettings`, not by the stored id.
+    expect(getSpreadsheetId()).toBe("sheet-1");
+    expect(isSheetsConnected()).toBe(false);
+  });
+
+  it("a Pro_Lapse closes the gate without disturbing the stored id, and Pro's return reopens it (cloud-sync Req 15.4, 15.9)", () => {
+    enableSheets();
+    grantPro();
+    enableDestination();
+    setSpreadsheetId("sheet-1");
+    expect(isSheetsConnected()).toBe(true);
+
+    lapsePro();
+    expect(isSheetsConnected()).toBe(false);
+    // The spreadsheet id survives the lapse, so resumption reuses it (Req 15.9).
+    expect(getSpreadsheetId()).toBe("sheet-1");
+
+    grantPro();
+    expect(isSheetsConnected()).toBe(true);
+    expect(getSpreadsheetId()).toBe("sheet-1");
+  });
+
+  it("treats an expired proUntil as not entitled", () => {
+    enableSheets();
+    enableDestination();
+    setSpreadsheetId("sheet-1");
+    applyEntitlement({ pro: true, proUntil: Date.now() - 1 });
+
     expect(isSheetsConnected()).toBe(false);
   });
 });

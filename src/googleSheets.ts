@@ -23,9 +23,18 @@ import type {
 } from "./db";
 import { getSymptom, SYMPTOMS } from "./symptoms";
 import type { Severity } from "./symptoms";
-import { isBackupDue } from "./backup";
 import { createSingleFlight } from "./singleFlight";
 import { fetchWithTimeout } from "./httpTimeout";
+// The shared owner of destination enabled state, the Pro gate, and the sync
+// outcome history (cloud-sync Req 3, 14, 15). `syncSettings.ts` deliberately reads
+// the spreadsheet-id key by name rather than importing this module, so this
+// direction of the dependency is the only one and there is no cycle.
+import {
+  isDestinationEnabled,
+  isProEntitled,
+  recordSyncOutcome,
+  setDestinationEnabled,
+} from "./syncSettings";
 
 /**
  * A spreadsheet row carries no Revision_Time, so the row mapping and the upsert
@@ -186,13 +195,36 @@ export function setLastSyncAt(ms: number): void {
 // ---- Connection state (Req 1.3, 2, 7) ----
 
 /**
- * Connected iff the integration is enabled (Client ID configured) AND a
- * non-empty Spreadsheet_Id is stored locally (Req 2.4, 7.2). When the Client ID
- * is absent the integration reports not-connected regardless of stored id
- * (Req 1.3).
+ * Whether the Sheets destination is **active**: all four conditions of
+ * cloud-sync Req 15.2 hold —
+ *
+ *   1. the Client ID is configured (`VITE_GOOGLE_CLIENT_ID`, Req 1.3),
+ *   2. the shared enabled flag for `"sheets"` is on (cloud-sync Req 15.5 — the
+ *      enabled state is owned by `syncSettings`, never by this module's own
+ *      connection state),
+ *   3. Pro_Entitlement is true (cloud-sync Req 15.1, 15.4), and
+ *   4. a non-empty Spreadsheet_Id is stored locally (Req 2.4, 7.2).
+ *
+ * Every sync trigger goes through this gate, so a Pro lapse stops Sheets syncs
+ * on the next trigger — `isProEntitled()` reads the in-memory entitlement
+ * snapshot that `applyEntitlement` updates synchronously, well inside the 1
+ * second of cloud-sync Req 15.4. Nothing here clears the stored Spreadsheet_Id,
+ * revokes the Google grant, or touches the spreadsheet, so a lapse is fully
+ * reversible: when Pro returns the same spreadsheet is reused and no second one
+ * is created (cloud-sync Req 15.9).
+ *
+ * The continuous-failure half of Req 15.2 (the 72-hour rule of Req 14.9) governs
+ * Backup_Reminder suppression only; it lives in `syncSettings.isDestinationActive`
+ * and deliberately does not stop syncing here — a failing destination must keep
+ * retrying.
  */
 export function isSheetsConnected(): boolean {
-  return isSheetsEnabled() && getSpreadsheetId() !== null;
+  return (
+    isSheetsEnabled() &&
+    isDestinationEnabled("sheets") &&
+    isProEntitled() &&
+    getSpreadsheetId() !== null
+  );
 }
 
 // ---- Runtime status store (Req 6) ----
@@ -780,6 +812,11 @@ export async function connect(): Promise<void> {
     throw err instanceof Error ? err : new Error(String(err));
   }
 
+  // A completed connection is the user enabling the destination, and the enabled
+  // state is owned by `syncSettings` (cloud-sync Req 15.5). Recorded only after
+  // the spreadsheet exists, so a failed connect never enables anything.
+  setDestinationEnabled("sheets", true);
+
   // Id is stored → connected (Req 2.4). Reset runtime to idle so `getStatus`
   // derives connected/synced from persistence, and notify subscribers.
   setRuntime({ phase: "idle" });
@@ -808,6 +845,7 @@ export async function disconnect(): Promise<void> {
   }
 
   clearSpreadsheetId(); // Connected_State inactive (Req 7.2); remote untouched (Req 7.3).
+  setDestinationEnabled("sheets", false); // shared enabled state (cloud-sync Req 15.5)
   resetTokenCache(); // belt-and-suspenders (revokeToken already clears it).
   setRuntime({ phase: "idle" }); // reset status → getStatus returns "disconnected".
 
@@ -860,6 +898,9 @@ async function syncBody(): Promise<void> {
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     const message = "You're offline — sync will retry later";
     setRuntime({ phase: "error", message });
+    // A failed attempt like any other, so the 72-hour rule sees it (cloud-sync
+    // Req 14.9); `lastSuccessAt` is left untouched (cloud-sync Req 15.7).
+    recordSyncOutcome("sheets", "failure", Date.now());
     throw new Error(message);
   }
 
@@ -902,11 +943,18 @@ async function syncBody(): Promise<void> {
 
     // Every in-scope event written with no error → record completion (Req 4.6)
     // and clear any previous error status (Req 10.3).
-    setLastSyncAt(Date.now());
+    const completedAt = Date.now();
+    setLastSyncAt(completedAt);
+    // Feed the shared 72-hour failing rule (cloud-sync Req 14.9): a success here
+    // is what rescues the destination from the failing state.
+    recordSyncOutcome("sheets", "success", completedAt);
     setRuntime({ phase: "idle" }); // getStatus derives "synced" (Req 6.1)
   } catch (err) {
     // Error status only — no local writes, no timestamp update (Req 4.8, 10.5).
     setRuntime({ phase: "error", message: errorMessage(err) }); // Req 4.9, 6.3, 10.1
+    // Failure recorded for the 72-hour rule; the last successful sync timestamp
+    // and `lastSuccessAt` both stay unchanged (cloud-sync Req 14.9, 15.7).
+    recordSyncOutcome("sheets", "failure", Date.now());
     // Rethrow so the UI can toast and the error status persists until a later
     // successful trigger (Req 5.6, 10.3).
     throw err instanceof Error ? err : new Error(String(err));
@@ -1066,39 +1114,15 @@ export function subscribe(listener: (s: SyncStatus) => void): () => void {
   };
 }
 
-// ---- Backup-nudge gate (Req 8) ----
-
-/**
- * Pure decision core for the local backup reminder (Req 8.1, 8.4, 8.5).
- *
- * The effective nudge decision defers entirely to the existing
- * `isBackupDue(hasData)` behavior when the integration is **not** connected, and
- * is always `false` when the integration **is** connected (the synced spreadsheet
- * makes the local backup nudge redundant).
- *
- * This is intentionally parameterized (no side effects, no reads of connection
- * state or backup timing) so Property 9 can drive it deterministically over
- * arbitrary `(connected, backupDue)` combinations.
- *
- * @param connected  Whether the Sheets integration is in a connected state.
- * @param backupDue  The value of the existing `isBackupDue(hasData)` decision.
- * @returns `false` when `connected`; otherwise `backupDue`.
- */
-export function shouldNudgeBackup(connected: boolean, backupDue: boolean): boolean {
-  if (connected) return false;
-  return backupDue;
-}
-
-/**
- * Convenience wrapper that ties {@link shouldNudgeBackup} to the real connection
- * state and backup-timing functions, for consumption by `LogsView` (task 15.2).
- *
- * Kept separate from the pure core so the property test targets the deterministic
- * {@link shouldNudgeBackup} rather than the side-effecting inputs here.
- */
-export function isBackupNudgeDue(hasData: boolean): boolean {
-  return shouldNudgeBackup(isSheetsConnected(), isBackupDue(hasData));
-}
+// ---- Backup-nudge gate (Req 8) — moved to `syncSettings.ts` ----
+//
+// `shouldNudgeBackup(connected, backupDue)` and its `isBackupNudgeDue` wrapper
+// used to live here, gating the reminder on this module's connection state alone.
+// Both are retired: cloud-sync Req 15.6 derives suppression from the shared
+// N-destination predicate, so `syncSettings.shouldNudgeBackup(destinations,
+// backupDue)` and `syncSettings.isBackupNudgeDue(hasData)` are now the only gate,
+// and Req 8 is satisfied through it (the Sheets destination being active is one
+// of the ways suppression turns on).
 
 // ---- Pure core: row mapping & upsert planning (exported for tests) ----
 // These are implemented in tasks 3 and 4; declared here so the module's public

@@ -52,6 +52,13 @@ import {
   isSheetsConnected,
   SHEET_HEADER,
 } from "./googleSheets";
+import {
+  applyEntitlement,
+  clearPersistedSyncSettingsForTests,
+  resetSyncSettingsForTests,
+  restore,
+  setDestinationEnabled,
+} from "./syncSettings";
 
 const SPREADSHEET_ID_KEY = "food-snap-sheets-spreadsheet-id";
 const LAST_SYNC_KEY = "food-snap-sheets-last-sync";
@@ -134,7 +141,7 @@ function meal(id: string, createdAt: number): DraftEvent {
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.stubEnv("VITE_GOOGLE_CLIENT_ID", "test-client-id");
 
   // Fresh persistence + runtime + local store for every case.
@@ -142,9 +149,15 @@ beforeEach(() => {
   localStorage.removeItem(LAST_SYNC_KEY);
   h.store.clear();
   resetGisForTests();
+  resetSyncSettingsForTests();
+  clearPersistedSyncSettingsForTests();
+  await restore();
   setRuntime({ phase: "idle" });
 
-  // Connected: a stored spreadsheet id defines Connected_State.
+  // Active: all four conditions of cloud-sync Req 15.2 — the Client ID above, the
+  // shared enabled flag, Pro_Entitlement, and a stored spreadsheet id.
+  applyEntitlement({ pro: true, proUntil: null });
+  setDestinationEnabled("sheets", true);
   setSpreadsheetId("sheet-1");
 
   // GIS mock granting a long-lived token silently.
@@ -181,6 +194,8 @@ afterEach(() => {
   delete (globalThis as unknown as { google?: unknown }).google;
   localStorage.removeItem(SPREADSHEET_ID_KEY);
   localStorage.removeItem(LAST_SYNC_KEY);
+  resetSyncSettingsForTests();
+  clearPersistedSyncSettingsForTests();
   h.store.clear();
   setRuntime({ phase: "idle" });
 });
@@ -269,9 +284,36 @@ describe("logging while the error status is set (Req 10.4, 6.3)", () => {
   });
 });
 
-describe("syncAll — disconnected trigger is a no-op (Req 5.4)", () => {
+describe("syncAll — an inactive destination is a no-op (Req 5.4, cloud-sync Req 15.2, 15.4)", () => {
   it("resolves without a request when no spreadsheet is connected", async () => {
+    // Entitlement and the shared enabled flag are on (set up above); only the
+    // stored spreadsheet id is missing, so the gate closes.
     clearSpreadsheetId();
+    expect(isSheetsConnected()).toBe(false);
+
+    await expect(syncAll()).resolves.toBeUndefined();
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("resolves without a request after a Pro_Lapse, leaving the spreadsheet id intact", async () => {
+    h.store.set("e1", meal("e1", 1_700_000_000_000));
+
+    // Pro lapses: the entitlement snapshot is applied synchronously, so the very
+    // next trigger is already gated (cloud-sync Req 15.4).
+    applyEntitlement({ pro: false, proUntil: null });
+    expect(isSheetsConnected()).toBe(false);
+
+    await expect(syncAll()).resolves.toBeUndefined();
+
+    // Zero requests to Google, and nothing local or persisted was disturbed.
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(localStorage.getItem(SPREADSHEET_ID_KEY)).toBe("sheet-1");
+    expect(getLastSyncAt()).toBeNull();
+    expect(h.store.get("e1")).toEqual(meal("e1", 1_700_000_000_000));
+  });
+
+  it("resolves without a request while the shared enabled flag is off (cloud-sync Req 15.5)", async () => {
+    setDestinationEnabled("sheets", false);
     expect(isSheetsConnected()).toBe(false);
 
     await expect(syncAll()).resolves.toBeUndefined();

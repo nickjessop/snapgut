@@ -9,12 +9,10 @@ import {
   type DestinationOutcome,
 } from "./syncSettings";
 import { isBackupDue } from "./backup";
-// The one-destination gate this module generalizes. Task 4.1 removes
-// `shouldNudgeBackup(connected, backupDue)` from `googleSheets.ts`, so this import
-// and the "agrees with the retired one-destination gate" case below must be
-// updated (or dropped) when that task lands — the generalization is asserted
-// directly against the specification in the tests above it either way.
-import { shouldNudgeBackup as legacyShouldNudgeBackup } from "./googleSheets";
+// The one-destination gate this module generalizes was `shouldNudgeBackup(connected,
+// backupDue)` in `googleSheets.ts`; task 4.1 removed it, so the cross-check against
+// it is gone and the generalization is asserted directly against the specification
+// in the properties below.
 
 // Feature: cloud-sync
 //
@@ -241,6 +239,13 @@ describe("Property 16: the backup nudge predicate generalizes the existing gate"
         fc.array(arbActiveActivity, { minLength: 1, maxLength: 3 }),
         fc.array(arbInactiveActivity, { maxLength: 3 }),
         (state, active, inactive) => {
+          // `isBackupDue` reads `Date.now()`, and the generated snooze offset can
+          // sit a millisecond from expiry. Freeze the clock so the two readings
+          // below compare the same instant — the property under test is about the
+          // stored values, not about time passing mid-iteration.
+          const frozenNow = Date.now();
+          const nowSpy = vi.spyOn(Date, "now").mockReturnValue(frozenNow);
+
           installBackupState(state);
           const beforeLast = localStorage.getItem(LAST_BACKUP_KEY);
           const beforeSnooze = localStorage.getItem(SNOOZE_KEY);
@@ -267,6 +272,7 @@ describe("Property 16: the backup nudge predicate generalizes the existing gate"
           setItem.mockRestore();
           removeItem.mockRestore();
           clearSpy.mockRestore();
+          nowSpy.mockRestore();
 
           // ...and the stored values, and therefore the decision, are identical.
           expect(localStorage.getItem(LAST_BACKUP_KEY)).toBe(beforeLast);
@@ -279,16 +285,16 @@ describe("Property 16: the backup nudge predicate generalizes the existing gate"
     clearBackupState();
   });
 
-  it("agrees with the retired one-destination gate for a single destination", () => {
-    // Task 4.1 deletes `googleSheets.shouldNudgeBackup`; until then this pins the
-    // generalization to the behavior it replaces, with the old `connected` flag
-    // standing in for the new activity predicate.
+  it("reduces to the one-destination gate for a single destination", () => {
+    // The retired `googleSheets.shouldNudgeBackup(connected, backupDue)` returned
+    // `false` when connected and `backupDue` otherwise. With one destination whose
+    // activity stands in for the old `connected` flag, the generalization is that
+    // same function — asserted here against the specification rather than against
+    // the deleted implementation.
     fc.assert(
       fc.property(arbActivity, fc.boolean(), (a, backupDue) => {
-        const connected = isDestinationActive(a);
-        expect(shouldNudgeBackup([a], backupDue)).toBe(
-          legacyShouldNudgeBackup(connected, backupDue),
-        );
+        const active = isDestinationActive(a);
+        expect(shouldNudgeBackup([a], backupDue)).toBe(active ? false : backupDue);
       }),
       { numRuns: 200 },
     );

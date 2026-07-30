@@ -50,6 +50,13 @@ import {
   isSheetsConnected,
   SHEET_HEADER,
 } from "./googleSheets";
+import {
+  applyEntitlement,
+  clearPersistedSyncSettingsForTests,
+  resetSyncSettingsForTests,
+  restore,
+  setDestinationEnabled,
+} from "./syncSettings";
 
 const SPREADSHEET_ID_KEY = "food-snap-sheets-spreadsheet-id";
 const LAST_SYNC_KEY = "food-snap-sheets-last-sync";
@@ -126,7 +133,7 @@ function meal(id: string, dish: string, createdAt = 1_700_000_000_000): Omit<Mea
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.stubEnv("VITE_GOOGLE_CLIENT_ID", "test-client-id");
 
   // Fresh persistence + runtime + local store for every case.
@@ -134,9 +141,15 @@ beforeEach(() => {
   localStorage.removeItem(LAST_SYNC_KEY);
   h.store.clear();
   resetGisForTests();
+  resetSyncSettingsForTests();
+  clearPersistedSyncSettingsForTests();
+  await restore();
   setRuntime({ phase: "idle" });
 
-  // Connected: a stored spreadsheet id defines Connected_State.
+  // Active: all four conditions of cloud-sync Req 15.2 — the Client ID above, the
+  // shared enabled flag, Pro_Entitlement, and a stored spreadsheet id.
+  applyEntitlement({ pro: true, proUntil: null });
+  setDestinationEnabled("sheets", true);
   setSpreadsheetId("sheet-1");
 
   // GIS mock granting a long-lived token silently.
@@ -173,6 +186,8 @@ afterEach(() => {
   delete (globalThis as unknown as { google?: unknown }).google;
   localStorage.removeItem(SPREADSHEET_ID_KEY);
   localStorage.removeItem(LAST_SYNC_KEY);
+  resetSyncSettingsForTests();
+  clearPersistedSyncSettingsForTests();
   h.store.clear();
   setRuntime({ phase: "idle" });
 });
@@ -264,7 +279,7 @@ describe("reimport — a failed read leaves local data unchanged (Req 9.6)", () 
   });
 });
 
-describe("reimport — disconnected does not initiate a re-import (Req 9.7)", () => {
+describe("reimport — an inactive destination does not initiate a re-import (Req 9.7)", () => {
   it("returns zero counts without any request or local write", async () => {
     clearSpreadsheetId();
     expect(isSheetsConnected()).toBe(false);
@@ -275,6 +290,19 @@ describe("reimport — disconnected does not initiate a re-import (Req 9.7)", ()
 
     expect(mockFetch).not.toHaveBeenCalled();
     expect(h.store.size).toBe(1);
+    expect((h.store.get("a") as MealEvent).dish).toBe("Toast");
+  });
+
+  it("returns zero counts after a Pro_Lapse, keeping the spreadsheet id (cloud-sync Req 15.4)", async () => {
+    applyEntitlement({ pro: false, proUntil: null });
+    expect(isSheetsConnected()).toBe(false);
+
+    h.store.set("a", meal("a", "Toast"));
+
+    await expect(reimport()).resolves.toEqual({ imported: 0, skipped: 0 });
+
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(localStorage.getItem(SPREADSHEET_ID_KEY)).toBe("sheet-1");
     expect((h.store.get("a") as MealEvent).dish).toBe("Toast");
   });
 });

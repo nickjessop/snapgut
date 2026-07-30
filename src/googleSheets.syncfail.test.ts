@@ -47,6 +47,13 @@ import {
   resetGisForTests,
   SHEET_HEADER,
 } from "./googleSheets";
+import {
+  applyEntitlement,
+  clearPersistedSyncSettingsForTests,
+  resetSyncSettingsForTests,
+  restore,
+  setDestinationEnabled,
+} from "./syncSettings";
 
 // ---- Injected failure points ----
 //
@@ -218,8 +225,22 @@ function setOnLine(value: boolean): void {
   });
 }
 
-beforeEach(() => {
+/**
+ * Make the Sheets destination active for one property run: Pro_Entitlement plus
+ * the shared enabled flag, both owned by `syncSettings` (cloud-sync Req 15.2,
+ * 15.5). Each run clears `localStorage`, which drops the persisted copies, so
+ * this is re-established inside the property body rather than once in `beforeEach`.
+ */
+function activateSheetsDestination(): void {
+  applyEntitlement({ pro: true, proUntil: null });
+  setDestinationEnabled("sheets", true);
+}
+
+beforeEach(async () => {
   vi.stubEnv("VITE_GOOGLE_CLIENT_ID", "test-client-id");
+  resetSyncSettingsForTests();
+  clearPersistedSyncSettingsForTests();
+  await restore();
 });
 
 afterEach(() => {
@@ -228,6 +249,7 @@ afterEach(() => {
   resetGisForTests();
   setRuntime({ phase: "idle" });
   localStorage.clear();
+  resetSyncSettingsForTests();
   h.store.clear();
   setOnLine(true);
   delete (globalThis as unknown as { google?: unknown }).google;
@@ -242,7 +264,10 @@ describe("syncAll failure (Property 7: sync failure preserves local data and las
         for (const e of events) h.store.set(e.id, e);
 
         localStorage.clear();
-        setSpreadsheetId("sheet-1"); // connected (Req 5.4 guard passes)
+        // `localStorage.clear()` above wiped the persisted entitlement and enabled
+        // flag, so both are re-applied before the trigger (cloud-sync Req 15.2).
+        activateSheetsDestination();
+        setSpreadsheetId("sheet-1"); // active destination (Req 5.4 guard passes)
         setLastSyncAt(PRIOR_SYNC_AT); // a previous successful sync exists
         setRuntime({ phase: "idle" });
 
