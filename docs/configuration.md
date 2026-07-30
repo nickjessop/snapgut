@@ -26,7 +26,7 @@ never appear in the repository, the container image, or a deploy command line
 | `FOOD_PACK_BUCKET` | `REDACTED-GCP-PROJECT-pack` | Bucket behind `/foods/*` | Defaults to the same name in code; thumbnails fall back to letter avatars if wrong |
 | `VERTEX_LOCATION` | `us-central1` | Vertex region | Defaults to `us-central1` |
 | `VERTEX_MODEL` | `gemini-2.5-flash-lite` | Recognition/insights model | Defaults to `gemini-2.5-flash-lite`. **Must stay a `publishers/google` model** — third-party models bill outside credits (Requirement 18.9) |
-| `EMAIL_FROM` | `SnapGut <noreply@send.snapgut.com>` | Sender address | Defaults to `onboarding@resend.dev`, which only works for testing. Needs the verified sender domain before launch |
+| `EMAIL_FROM` | `SnapGut <noreply@notifications.snapgut.com>` | Sender address | Defaults to `onboarding@resend.dev`, which only works for testing. Must be an address on the verified sending domain |
 | `MOCK_AI` | unset | Forces mock recognition | Auto-enabled when `GOOGLE_CLOUD_PROJECT` is unset |
 | `TRUSTED_PROXY` | `cloudflare` — ⚠️ **not implemented yet** | Which header to trust for client IP | Today `clientIp()` reads the leftmost `X-Forwarded-For`, which a client can spoof to reset its own rate limit once we're behind the edge. Requirement 14 / task 11.1 |
 | `NODE_ENV` | `production` | Enables prod fail-fast + HSTS | Prod-only guards stay off |
