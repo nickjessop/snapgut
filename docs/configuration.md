@@ -26,12 +26,38 @@ never appear in the repository, the container image, or a deploy command line
 | `FOOD_PACK_BUCKET` | `REDACTED-GCP-PROJECT-pack` | Bucket behind `/foods/*` | Defaults to the same name in code; thumbnails fall back to letter avatars if wrong |
 | `VERTEX_LOCATION` | `us-central1` | Vertex region | Defaults to `us-central1` |
 | `VERTEX_MODEL` | `gemini-2.5-flash-lite` | Recognition/insights model | Defaults to `gemini-2.5-flash-lite`. **Must stay a `publishers/google` model** — third-party models bill outside credits (Requirement 18.9) |
+| `STRIPE_PRICE_MONTHLY` | `REDACTED-STRIPE-PRICE` | Pro monthly price id | Checkout fails for that plan |
+| `STRIPE_PRICE_ANNUAL` | `REDACTED-STRIPE-PRICE` | Pro annual price id | Checkout fails for that plan |
+| `STRIPE_PRICE_LIFETIME` | `REDACTED-STRIPE-PRICE` | Pro lifetime price id | Checkout fails for that plan |
 | `EMAIL_FROM` | `SnapGut <notifications@mail.snapgut.com>` | Sender address | Defaults to `onboarding@resend.dev`, which only works for testing. Must be an address on the verified sending domain (`mail.snapgut.com`) |
 | `MOCK_AI` | unset | Forces mock recognition | Auto-enabled when `GOOGLE_CLOUD_PROJECT` is unset |
 | `TRUSTED_PROXY` | `cloudflare` — ⚠️ **not implemented yet** | Which header to trust for client IP | Today `clientIp()` reads the leftmost `X-Forwarded-For`, which a client can spoof to reset its own rate limit once we're behind the edge. Requirement 14 / task 11.1 |
 | `NODE_ENV` | `production` | Enables prod fail-fast + HSTS | Prod-only guards stay off |
 | `FREE_AI_LIMIT` | unset (default 10) | Free AI uses per account | Defaults to 10 |
 | `PORT` | set by Cloud Run | Listen port | Defaults to 8080 |
+
+## Stripe catalog (live mode)
+
+Created 2026-07-30 on the SnapGut account `REDACTED-STRIPE-ACCOUNT` (REDACTED-ENTITY,
+country CA, `default_currency: usd`). One product, three prices, **all USD**, matching
+`shared/plans.js` exactly. Price IDs are configuration, not secrets.
+
+| Plan | Price id | Amount | Type |
+| --- | --- | --- | --- |
+| Monthly | `REDACTED-STRIPE-PRICE` | 499 | recurring / month |
+| Annual | `REDACTED-STRIPE-PRICE` | 2999 | recurring / year |
+| Lifetime | `REDACTED-STRIPE-PRICE` | 7999 | one-time |
+
+Product: `REDACTED-STRIPE-PRODUCT` — "SnapGut Pro", `statement_descriptor: SNAPGUT`.
+
+**Currency is immutable on a Price.** Changing to CAD later means creating new prices and
+migrating any existing subscribers, so the pricing page must always state USD explicitly.
+
+**These are live-mode objects.** Test mode is a separate object space with its own keys and
+its own price ids, so a real end-to-end checkout test needs a test-mode product and prices
+created separately. Until `STRIPE_SECRET_KEY` is set the server simulates checkout and
+grants Pro without payment (see the secrets table), which is fine for local work but must
+not reach production.
 
 ## Storing and rotating a secret
 
