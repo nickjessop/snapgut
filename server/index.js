@@ -12,6 +12,7 @@ import {
 } from "./auth.js";
 import { sendCode } from "./email.js";
 import { annotateIngredients, lookupSlug } from "./foodDict.js";
+import { registerSyncRoutes, purgeEventData, logSyncRequest, errorLabel } from "./sync.js";
 
 const PORT = Number(process.env.PORT) || 8080;
 const PROJECT = process.env.GOOGLE_CLOUD_PROJECT;
@@ -455,14 +456,70 @@ app.get("/api/me", async (c) => {
   return c.json({ email: user.email, ...entitlement(user) });
 });
 
-// Delete the user's server-side account (entitlement + auth code). Local device
+// Delete everything the service holds for the user: stored Event_Records and
+// Tombstones first, then the user record (entitlement + auth code). Local device
 // data (IndexedDB, token) is wiped client-side after this succeeds.
+//
+// The order is the requirement, not a preference (Req 17.1). Removing the user
+// record first would drop the entitlement that `/api/sync/*` checks, leaving the
+// stored events unreachable through any authenticated path — orphaned data with no
+// way left to ask for its deletion. Purging first means a failure anywhere leaves
+// an account that still works and a request the client can simply repeat, and
+// repeating is safe: a purge of an already-empty user succeeds (Req 17.2).
 app.post("/api/account/delete", async (c) => {
   const email = sessionEmail(c);
   if (!email) return c.json({ error: "unauthorized" }, 401);
+
+  // Step 1 — events. On failure: no user record removed, entitlement intact,
+  // Session_Token still valid, and an error status so the client retains its local
+  // data and offers a retry rather than wiping (Req 17.2, 17.7, 18.11).
+  const purge = await purgeEventData(email);
+  if (!purge.ok) {
+    // One redacted line, same shape as the sync routes: the reason is one of
+    // `purgeEventData`'s two fixed codes, never a store error's message, and no
+    // Event_Record content or token can reach it (Req 18.4, 18.5).
+    logSyncRequest({
+      method: c.req.method,
+      path: c.req.path,
+      status: 500,
+      records: 0,
+      user: email,
+      reason: `delete_incomplete_${purge.reason}`,
+    });
+    return c.json({ error: "delete_incomplete" }, 500);
+  }
+
+  // Step 2 — the user record. Only now, and success only after this returns.
   const store = await getStore();
-  await store.deleteUser(email);
-  return c.json({ ok: true });
+  try {
+    await store.deleteUser(email);
+  } catch (err) {
+    // The events are gone; the account is not. Reported as incomplete so the
+    // client keeps its local copy and retries, which then only has step 2 left.
+    // Logged by the error's *class name* alone — not its message, not its stack,
+    // and not the thrown value, either of which a store is free to build out of
+    // the data it was handed (Req 18.5).
+    logSyncRequest({
+      method: c.req.method,
+      path: c.req.path,
+      status: 500,
+      records: purge.deleted,
+      user: email,
+      reason: "delete_incomplete_user_record",
+      error: errorLabel(err),
+    });
+    return c.json({ error: "delete_incomplete" }, 500);
+  }
+
+  logSyncRequest({
+    method: c.req.method,
+    path: c.req.path,
+    status: 200,
+    records: purge.deleted,
+    user: email,
+    reason: "deleted",
+  });
+  return c.json({ ok: true, deleted: purge.deleted });
 });
 
 // ---- Billing (Stripe; dev-simulated without keys) ----
@@ -554,6 +611,9 @@ app.post("/api/billing/webhook", async (c) => {
 });
 
 app.get("/api/health", (c) => c.json({ ok: true }));
+
+// ---- Cloud sync (own module so tests can mount it without a listener) ----
+registerSyncRoutes(app);
 
 // ---- Food illustration pack ----
 // Served same-origin out of a PRIVATE GCS bucket (org policy forbids public
