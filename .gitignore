@@ -10,3 +10,8 @@ dev-dist
 # Food illustration pack — lives in GCS (gs://REDACTED-GCP-PROJECT-pack), not git.
 # Regenerate with scripts/gen-food-images.mjs, sync with scripts/sync-food-pack.sh
 food-pack/
+
+# Pulumi: local build output and any accidental local state.
+# Stack config (Pulumi.<stack>.yaml) IS committed; the state lives in GCS.
+infra/bin/
+infra/node_modules/
