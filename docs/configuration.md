@@ -54,10 +54,32 @@ Product: `REDACTED-STRIPE-PRODUCT` — "SnapGut Pro", `statement_descriptor: SNA
 migrating any existing subscribers, so the pricing page must always state USD explicitly.
 
 **These are live-mode objects.** Test mode is a separate object space with its own keys and
-its own price ids, so a real end-to-end checkout test needs a test-mode product and prices
-created separately. Until `STRIPE_SECRET_KEY` is set the server simulates checkout and
-grants Pro without payment (see the secrets table), which is fine for local work but must
-not reach production.
+its own price ids. Until `STRIPE_SECRET_KEY` is set the server simulates checkout and grants
+Pro without payment — fine for local work, must not reach production.
+
+### Test-mode catalog for local development
+
+```bash
+# Key from Dashboard → Developers → API keys, with the Test mode toggle ON
+STRIPE_SECRET_KEY=sk_test_... node scripts/stripe-setup-test.mjs --dry-run
+STRIPE_SECRET_KEY=sk_test_... node scripts/stripe-setup-test.mjs
+```
+
+The script builds the product and all three prices from `shared/plans.js`, so a test price
+can't drift from what the app charges. It is idempotent (prices are matched by
+`lookup_key`), and because Stripe prices are immutable it archives and replaces a price
+whose amount no longer matches the catalog. It **refuses to run against a live key**, since
+that would add duplicates to the real catalog.
+
+It prints the `STRIPE_PRICE_*` values to put in `.env`. To exercise entitlement updates you
+also need the webhook:
+
+```bash
+stripe listen --forward-to localhost:8080/api/billing/webhook
+# put the printed whsec_… into STRIPE_WEBHOOK_SECRET
+```
+
+Test card `4242 4242 4242 4242`, any future expiry, any CVC.
 
 ## Storing and rotating a secret
 
