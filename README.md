@@ -92,6 +92,10 @@ gcloud run deploy food-snap \
   --set-env-vars GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID,VERTEX_LOCATION=us-central1
 ```
 
+Every variable and secret the server reads — purpose, whether it is a secret, and what
+breaks without it — is tabulated in [docs/configuration.md](docs/configuration.md). The two
+that stop a production boot are `SESSION_SECRET` and `USERS_BACKEND=firestore`.
+
 Cloud Run builds the Dockerfile, gives you an HTTPS URL, and scales to zero
 (≈ free when idle). Vertex AI calls use the Cloud Run service account — grant it
 the Vertex AI User role once:

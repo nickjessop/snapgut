@@ -48,15 +48,10 @@ service key to manage — so it inherits the same GCP IAM story as Vertex AI and
 Cloud Run.
 
 ## Env / config (prod)
-| Var | Purpose |
-| --- | --- |
-| `SESSION_SECRET` | HMAC signing secret |
-| `RESEND_API_KEY`, `EMAIL_FROM` | verification emails (else dev-logs code) |
-| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | billing |
-| `STRIPE_PRICE_ANNUAL`, `STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_LIFETIME` | plan price IDs |
-| `USERS_BACKEND` | `firestore` (prod); else in-memory dev |
-| `GOOGLE_CLOUD_PROJECT` | GCP project for Firestore (auth via ADC / Cloud Run SA) |
-| `FREE_AI_LIMIT` | free AI trial size (default 10) |
+See [docs/configuration.md](configuration.md) — the single inventory of every variable,
+whether it is a secret, and what breaks without it. The entries this flow depends on are
+`SESSION_SECRET`, `USERS_BACKEND`, `RESEND_API_KEY`, `EMAIL_FROM`, `FREE_AI_LIMIT`, and the
+Stripe key, webhook secret, and `STRIPE_PRICE_*` ids.
 
 ## Dev mode
 No external keys needed: code is logged/returned, purchases are simulated (grant Pro),
