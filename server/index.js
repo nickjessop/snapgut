@@ -569,6 +569,165 @@ app.post("/api/billing/portal", async (c) => {
   return c.json({ url: session.url });
 });
 
+// ---- Stripe webhook ----
+//
+// Three events matter, and only three:
+//
+//   checkout.session.completed  — the first grant, for all three plans. Carries
+//     our own `metadata.email`/`metadata.plan`, so the grant length comes from the
+//     Plan_Catalog (`proUntilFor`), and `lifetime` lands as `proUntil: null`.
+//   invoice.paid                — every renewal after that. Carries a customer id,
+//     not an address, hence the `stripeCustomerId` lookup in the store.
+//   customer.subscription.deleted — the subscription is over; stop renewing.
+//
+// Deliberately NOT handled: `invoice.payment_failed`. A failed charge does not
+// change what the customer has already paid for — `proUntil` is already the end of
+// the paid period, and it expires on its own. Stripe's own retry schedule then
+// either recovers (a later `invoice.paid` extends) or gives up and cancels, which
+// arrives as `customer.subscription.deleted`. Revoking on the first failed retry
+// would take Pro away from someone whose card succeeds two days later. Dunning
+// email is Stripe's job, not ours. Everything else falls through to a 200 below.
+//
+// Idempotency: Stripe retries deliveries and can deliver the same event twice, so
+// every write here is a *set to an absolute instant derived from the Stripe
+// object*, never an increment of what we hold. `invoice.paid` sets `proUntil` to
+// the end of the period the invoice paid for; a second delivery of that same
+// invoice computes the same instant and the write is a no-op. That is why no
+// processed-event table is needed: the operations are idempotent by construction
+// rather than by bookkeeping. The two clamps below (`Math.max` on renewal,
+// `Math.min` on cancellation) keep that true when deliveries arrive out of order.
+
+/** A Stripe Unix timestamp (seconds) as epoch ms, or null if it isn't one. */
+function stripeMs(seconds) {
+  return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 1000) : null;
+}
+
+/** Lifetime = Pro with no expiry. Nothing recurring may ever put a date on it. */
+function isLifetime(user) {
+  return Boolean(user?.pro) && user?.proUntil == null;
+}
+
+/**
+ * The account a Stripe object belongs to.
+ *
+ * By recorded customer id first — that is what a renewal invoice carries. The
+ * fallback matters for one real case: on a brand-new subscription, `invoice.paid`
+ * can be delivered before (or concurrently with) the `checkout.session.completed`
+ * that records the customer id, so the id is not linked yet. The invoice still
+ * carries the address Checkout collected, and the caller writes the customer id
+ * back through `setPro`, so the fallback is needed at most once per customer.
+ */
+async function billingUser(store, obj) {
+  const byCustomer = obj?.customer ? await store.getUserByStripeCustomerId(obj.customer) : null;
+  if (byCustomer) return byCustomer;
+  return obj?.customer_email ? await store.getUser(obj.customer_email) : null;
+}
+
+/** End of the period a subscription is currently paid through, in epoch ms. */
+function subscriptionPeriodEnd(sub) {
+  // `current_period_end` sat on the subscription in older API versions and moved
+  // onto each item in the 2025-03 versions; accept either rather than pinning a
+  // version here.
+  const top = stripeMs(sub?.current_period_end);
+  if (top != null) return top;
+  const items = Array.isArray(sub?.items?.data) ? sub.items.data : [];
+  const ends = items.map((i) => stripeMs(i?.current_period_end)).filter((ms) => ms != null);
+  return ends.length ? Math.max(...ends) : null;
+}
+
+/** The subscription id an invoice belongs to, across API-version shapes. */
+function invoiceSubscriptionId(invoice) {
+  const ref = invoice?.subscription ?? invoice?.parent?.subscription_details?.subscription;
+  if (typeof ref === "string") return ref;
+  return typeof ref?.id === "string" ? ref.id : null;
+}
+
+/**
+ * The instant an invoice has paid through, in epoch ms.
+ *
+ * The line items on the event payload are the authoritative record of what was
+ * bought — a subscription line's `period.end` is the end of the period this
+ * payment covers — and reading them needs no extra API call. When they are absent
+ * (a shape we don't recognise), fall back to asking Stripe for the subscription's
+ * current period end. Both are absolute instants, which is what keeps a repeat
+ * delivery from granting anything extra.
+ */
+async function invoicePaidThrough(invoice) {
+  const lines = Array.isArray(invoice?.lines?.data) ? invoice.lines.data : [];
+  const ends = lines.map((l) => stripeMs(l?.period?.end)).filter((ms) => ms != null);
+  if (ends.length) return Math.max(...ends);
+
+  const subId = invoiceSubscriptionId(invoice);
+  if (!subId) return null;
+  const s = await getStripe();
+  return subscriptionPeriodEnd(await s.subscriptions.retrieve(subId));
+}
+
+/** A renewal was paid: hold Pro until the end of the period it paid for. */
+async function onInvoicePaid(store, invoice) {
+  const user = await billingUser(store, invoice);
+  if (!user) return "renewal_unknown_customer";
+  if (isLifetime(user)) return "renewal_lifetime_untouched";
+
+  const paidThrough = await invoicePaidThrough(invoice);
+  if (paidThrough == null) return "renewal_no_period";
+
+  // Never shorten: a delayed delivery of an older invoice must not pull a
+  // further-out expiry back. Combined with the absolute `paidThrough`, this makes
+  // repeat and out-of-order deliveries converge on the same value.
+  const held = typeof user.proUntil === "number" ? user.proUntil : 0;
+  await store.setPro(user.email, Math.max(paidThrough, held), invoice.customer || undefined);
+  return "renewal_extended";
+}
+
+/**
+ * The subscription ended: stop extending, and let the period already paid for run
+ * out rather than cutting access off at the moment the event arrives.
+ *
+ * Both ways this event is reached argue for the same thing. A voluntary cancel in
+ * the billing portal is `cancel_at_period_end`, so Stripe sends this *at* the
+ * period end — "run out the period" and "revoke now" coincide, and the customer
+ * keeps exactly what they paid for. An involuntary cancel after repeated payment
+ * failure arrives only once Stripe's retry schedule is exhausted, weeks past the
+ * period end, so the paid-through instant is already in the past and Pro is
+ * already gone: no grace period is being handed to a non-paying customer.
+ *
+ * `Math.min` is the whole revocation: it can only bring the expiry in, never push
+ * it out, so a duplicate delivery — or one that lands after a renewal we already
+ * processed — settles on the same instant.
+ */
+async function onSubscriptionDeleted(store, sub) {
+  const user = await billingUser(store, sub);
+  if (!user) return "cancel_unknown_customer";
+  // A lifetime purchase is not what this subscription sold, so it is not this
+  // event's to revoke.
+  if (isLifetime(user)) return "cancel_lifetime_untouched";
+
+  const paidThrough = subscriptionPeriodEnd(sub) ?? stripeMs(sub?.ended_at) ?? Date.now();
+  const held = typeof user.proUntil === "number" ? user.proUntil : paidThrough;
+  await store.setPro(user.email, Math.min(held, paidThrough));
+  return "cancel_scheduled";
+}
+
+/**
+ * One line per delivery: the event type and what we did about it.
+ *
+ * The vocabulary is fixed and derived here — no customer id, no email, no amount,
+ * and never the event object, whose `data.object` is a full Stripe record. Same
+ * reasoning as `logSyncRequest`: a caught error contributes its class name only.
+ */
+function logBillingEvent(type, outcome, error) {
+  const safe = (v) =>
+    String(v)
+      .replace(/[^\x20-\x7E]/g, "")
+      .replace(/\s+/g, "_")
+      .slice(0, 60);
+  const line =
+    `billing event=${safe(type)} outcome=${safe(outcome)}` + (error ? ` error=${safe(error)}` : "");
+  if (error) console.error(line);
+  else console.log(line);
+}
+
 app.post("/api/billing/webhook", async (c) => {
   if (!STRIPE_SECRET) return c.json({ error: "billing_disabled" }, 400);
   const sig = c.req.header("stripe-signature");
@@ -580,14 +739,42 @@ app.post("/api/billing/webhook", async (c) => {
   } catch {
     return c.text("bad signature", 400);
   }
+
   const store = await getStore();
-  if (evt.type === "checkout.session.completed") {
-    const obj = evt.data.object;
-    const m = obj.metadata || {};
-    if (m.email) await store.setPro(m.email, proUntilFor(m.plan), obj.customer || undefined);
+  let outcome = "ignored";
+  try {
+    switch (evt.type) {
+      case "checkout.session.completed": {
+        const obj = evt.data.object;
+        const m = obj.metadata || {};
+        if (m.email) {
+          await store.setPro(m.email, proUntilFor(m.plan), obj.customer || undefined);
+          outcome = "checkout_granted";
+        } else {
+          outcome = "checkout_no_metadata";
+        }
+        break;
+      }
+      case "invoice.paid":
+        outcome = await onInvoicePaid(store, evt.data.object);
+        break;
+      case "customer.subscription.deleted":
+        outcome = await onSubscriptionDeleted(store, evt.data.object);
+        break;
+      default:
+        // Everything Stripe sends that we don't act on is acknowledged, so it is
+        // not redelivered for days against a handler that will never want it.
+        outcome = "ignored";
+    }
+  } catch (err) {
+    // A store or Stripe API failure mid-grant is the one case worth a retry: the
+    // writes above are idempotent, so redelivery is safe, and swallowing it would
+    // silently drop a renewal and expire a paying customer.
+    logBillingEvent(evt.type, "error", errorLabel(err));
+    return c.json({ error: "webhook_error" }, 500);
   }
-  // NOTE: for recurring plans, also handle invoice.paid (extend proUntil) and
-  // customer.subscription.deleted (revoke). See docs/auth-and-credits.md.
+
+  logBillingEvent(evt.type, outcome);
   return c.json({ received: true });
 });
 

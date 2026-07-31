@@ -36,8 +36,26 @@ AI surfaces don't need separate metering. One `pro` flag covers all AI (now and 
   `entitlement`.
 - **Billing:** `GET /api/billing/plans`; `POST /api/billing/checkout {plan}` →
   Stripe Checkout (`subscription` for annual/monthly, `payment` for lifetime), or
-  dev-simulated (grants Pro instantly). `POST /api/billing/webhook` →
-  `checkout.session.completed` grants Pro.
+  dev-simulated (grants Pro instantly). `POST /api/billing/portal` → Stripe billing
+  portal (needs a recorded `stripeCustomerId`).
+- **Webhook** (`POST /api/billing/webhook`, signature-verified) handles three events:
+  - `checkout.session.completed` → first grant, length from the Plan_Catalog
+    (`lifetime` → `proUntil: null`).
+  - `invoice.paid` → every renewal. Sets `proUntil` to the end of the period the
+    invoice paid for (invoice line `period.end`, else the subscription's
+    `current_period_end`), so a retried delivery converges instead of granting
+    another month. The account is found by `stripeCustomerId` (an invoice carries a
+    customer id, not an address), falling back to the invoice's email the one time
+    the id isn't linked yet.
+  - `customer.subscription.deleted` → stop renewing, clamping `proUntil` down to the
+    period already paid for (never up). A portal cancel is `cancel_at_period_end`, so
+    the event arrives at the period end anyway; a non-payment cancel arrives weeks
+    after it, so Pro is already gone.
+  - `invoice.payment_failed` is deliberately unhandled: `proUntil` already ends with
+    the paid period, and Stripe's retries either recover (`invoice.paid`) or end in a
+    cancel. Every other event type is acknowledged with 200 so it isn't redelivered.
+  - A store or Stripe failure mid-grant answers 500 so Stripe retries; the writes are
+    idempotent, so a retry is safe.
 
 ## Datastore
 `server/store.js`: in-memory (dev) / **Firestore** (`USERS_BACKEND=firestore`, prod).
@@ -60,9 +78,19 @@ Lifetime → Pro.
 
 ## Prod TODO
 - [ ] Set env/keys above; verified Resend sending domain.
-- [ ] Register Stripe webhook at `/api/billing/webhook`.
-- [ ] For recurring plans, handle `invoice.paid` (extend `proUntil`) and
-      `customer.subscription.deleted` (revoke) in the webhook.
+- [ ] Register Stripe webhook at `/api/billing/webhook`, subscribed to
+      `checkout.session.completed`, `invoice.paid`, and
+      `customer.subscription.deleted` — the three the handler acts on. Store the
+      signing secret Stripe issues at registration as `stripe-webhook-secret`.
+- [x] Recurring plans are handled in the webhook: `invoice.paid` extends `proUntil`
+      to the period the invoice paid for, `customer.subscription.deleted` clamps it
+      down to the period already paid for, both idempotent under redelivery. Covered
+      by `src/billingWebhook.test.ts`. `invoice.payment_failed` is intentionally not
+      handled (see above).
+- [ ] Firestore: the renewal path queries `users` by `stripeCustomerId`. Equality on
+      one field is served by the automatic single-field index, so nothing to create —
+      but if single-field indexing is ever exempted for `users`, add an index for it,
+      or renewals start failing (as 500s, so Stripe retries).
 - [ ] Move `auth/request` rate-limit to the shared store for multi-instance.
 - [ ] Client can let users log locally before sign-in (optional friction reduction).
 

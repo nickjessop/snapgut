@@ -60,6 +60,18 @@ function memoryStore() {
     async getUser(email) {
       return users.get(norm(email)) || null;
     },
+    /**
+     * The user a Stripe object belongs to, by the customer id recorded the first
+     * time a real checkout completed. A renewal webhook (`invoice.paid`) carries a
+     * customer id rather than an address, so this is the only reliable join from a
+     * Stripe event back to an account.
+     */
+    async getUserByStripeCustomerId(customerId) {
+      const id = String(customerId || "");
+      if (!id) return null;
+      for (const u of users.values()) if (u.stripeCustomerId === id) return u;
+      return null;
+    },
     async upsertUser(email) {
       const key = norm(email);
       let u = users.get(key);
@@ -134,6 +146,24 @@ async function firestoreStore() {
     async getUser(email) {
       const snap = await usersCol.doc(norm(email)).get();
       return snap.exists ? snap.data() : null;
+    },
+    /**
+     * The user a Stripe object belongs to, by recorded customer id (see the
+     * in-memory twin above for why this join exists).
+     *
+     * Index: a single-field equality filter is served by Firestore's automatic
+     * single-field index, so no composite index is needed as written. Two things
+     * would change that — adding a second filter or an `orderBy`, or a
+     * single-field index exemption on the `users` collection (which would need an
+     * explicit index for `stripeCustomerId` instead). A missing index surfaces as
+     * a FAILED_PRECONDITION on the query, which the webhook reports as a 500 so
+     * Stripe retries rather than the renewal being silently dropped.
+     */
+    async getUserByStripeCustomerId(customerId) {
+      const id = String(customerId || "");
+      if (!id) return null;
+      const snap = await usersCol.where("stripeCustomerId", "==", id).limit(1).get();
+      return snap.empty ? null : snap.docs[0].data();
     },
     async upsertUser(email) {
       const ref = usersCol.doc(norm(email));
