@@ -811,7 +811,8 @@ registerSyncRoutes(app);
 // Served same-origin out of a PRIVATE GCS bucket (org policy forbids public
 // buckets, and same-origin means no CSP img-src change). The pack is thousands of
 // small immutable WebPs, so it's kept out of the repo/container and edge-cached by
-// Cloudflare via the long Cache-Control below. See docs/security-and-infra-todo.md.
+// Cloud CDN on the load balancer via the long Cache-Control below — the Edge runs in
+// origin-headers mode, so this header is the whole cache policy (infra/loadbalancer.ts).
 const FOOD_PACK_BUCKET = process.env.FOOD_PACK_BUCKET || "REDACTED-GCP-PROJECT-pack";
 let bucket = null;
 async function getFoodBucket() {
