@@ -53,6 +53,27 @@ if (IS_PROD && process.env.USERS_BACKEND !== "firestore") {
   );
 }
 
+// Whether `/api/billing/checkout` may take its simulated branch, which grants Pro
+// — up to and including Lifetime — with no payment.
+//
+// Deliberately *not* a boot failure, unlike the two guards above. A missing Stripe
+// key is Degraded, not Fatal (docs/configuration.md): billing disappearing costs
+// upgrades, while refusing to boot costs logging, recognition, sync, and every
+// marketing route as well. But "unreachable because the key happens to be
+// mounted" is not a guarantee — the simulated grant must be impossible in
+// production regardless of configuration, so it is gated on NODE_ENV here and the
+// route answers 503 instead (Requirement 18.10, same spirit as 18.3).
+const SIMULATE_CHECKOUT = !STRIPE_SECRET && !IS_PROD;
+
+if (IS_PROD && !STRIPE_SECRET) {
+  // Loud, once, at boot: the revision is serving with billing switched off. No
+  // value is logged, only its absence.
+  console.error(
+    "billing disabled: STRIPE_SECRET_KEY is not set; " +
+      "/api/billing/checkout, /portal and /webhook refuse rather than simulate."
+  );
+}
+
 const app = new Hono();
 
 // ---- security middleware ----
@@ -527,11 +548,14 @@ app.post("/api/billing/checkout", async (c) => {
   if (!email) return c.json({ error: "unauthorized" }, 401);
   const { plan } = await c.req.json().catch(() => ({}));
   const chosen = PLANS[plan] ? plan : "annual";
-  const store = await getStore();
 
   if (!STRIPE_SECRET) {
-    // Dev: simulate a successful purchase → grant Pro immediately.
-    const user = await store.setPro(email, proUntilFor(chosen));
+    // Production never simulates: granting Pro without payment is a revenue and
+    // trust problem, whereas an unavailable upgrade is a degraded product. Answer
+    // before touching the store, so the refusal cannot write entitlement.
+    if (!SIMULATE_CHECKOUT) return c.json({ error: "billing_unavailable" }, 503);
+    // Dev only: simulate a successful purchase → grant Pro immediately.
+    const user = await (await getStore()).setPro(email, proUntilFor(chosen));
     return c.json({ simulated: true, ...entitlement(user) });
   }
 
