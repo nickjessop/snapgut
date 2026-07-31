@@ -54,8 +54,8 @@ when the endpoint is registered against the Canonical_Host (also 11.4).
 | `SESSION_SECRET` | yes (entry `SESSION_SECRET`) | **Fatal** | HMAC key for session tokens (`server/auth.js`) | **Production refuses to boot** (`server/index.js`). Outside production it falls back to `dev-insecure-secret-change-me`, under which any token is forgeable | ✅ mounted from Secret Manager |
 | `USERS_BACKEND` | no | **Fatal** | Selects the datastore for `server/store.js` **and** `server/eventStore.js`; only the exact value `firestore` selects Firestore | **Production refuses to boot** unless it is `firestore` — the guard in `server/index.js` mirrors the `SESSION_SECRET` one (Req 18.3). Without that guard anything else silently selects a per-process in-memory map: accounts, Pro entitlements, auth codes, rate limits, and queued sync events all vanish on the next revision — silent data loss, which is why this is fatal rather than degraded | ✅ `firestore` |
 | `GOOGLE_CLOUD_PROJECT` | no | Degraded | Vertex AI and Firestore project | Forces `MOCK_AI`: `/api/recognize` and `/api/insights` return fabricated data. Logging, trends, and every marketing route are unaffected | ✅ `REDACTED-GCP-PROJECT` |
-| `VERTEX_LOCATION` | no | Default | Vertex region | Defaults to `us-central1` | ✅ `us-central1` |
-| `VERTEX_MODEL` | no | Default | Recognition and insights model | Defaults to `gemini-2.5-flash-lite`. **Must stay a `publishers/google` model** — a third-party model bills outside Google Cloud credits (Req 18.9) | unset → code default (deliberately not set on the revision; task 10.8) |
+| `VERTEX_LOCATION` | no | Default | Vertex region | Defaults to `us-central1`, matching the code default in `server/index.js` and in the generation scripts | ✅ `us-central1` — verified on the revision 2026-07-31 |
+| `VERTEX_MODEL` | no | Default | Recognition and insights model | Defaults to `gemini-2.5-flash-lite`. **Must stay a `publishers/google` model** — a third-party model bills outside Google Cloud credits (Req 18.9). Asserted by `src/vertexModel.test.ts`; see [Cost guardrails](#cost-guardrails) | unset → code default (deliberately not set on the revision; confirmed 2026-07-31) |
 | `MOCK_AI` | no | Default | `=1` forces mock recognition and insights | Off unless set; auto-enabled anyway when `GOOGLE_CLOUD_PROJECT` is unset | unset |
 | `FOOD_PACK_BUCKET` | no | Default | Private bucket behind `/foods/*` | Defaults to `REDACTED-GCP-PROJECT-pack` in code. A wrong or unreadable bucket degrades thumbnails to letter avatars; no other route class is affected | ✅ `REDACTED-GCP-PROJECT-pack` |
 | `RESEND_API_KEY` | yes (`resend-api-key`) | Degraded | Sends the sign-in verification code | `/api/auth/request` logs the code to stdout **and returns it in the response body**, so anyone can sign in as any address. Acceptable locally, an authentication bypass in production | ✅ mounted from Secret Manager |
@@ -89,6 +89,93 @@ The generation scripts also read `VERTEX_LOCATION` and `GOOGLE_CLOUD_PROJECT`, a
 `scripts/missing-foods.mjs` reads `ADMIN_TOKEN` while `scripts/stripe-setup-test.mjs` needs a
 **test-mode** `STRIPE_SECRET_KEY` — the same variables as above, supplied to the script rather
 than to the service.
+
+## Cost guardrails
+
+Two separate things, and only one of them is enforced.
+
+### The model rule (enforced)
+
+**Every configured model identifier must be a model published by Google
+(`publishers/google`).** A model from any other publisher on Vertex AI bills as a Cloud
+Marketplace charge, which sits *outside* committed credits — so a one-word change to
+`VERTEX_MODEL`, `TEXT_MODEL`, or `IMAGE_MODEL` can move real spend off the credits paying for
+this project. That is the whole reason the rule exists (Reqs 18.9, 21.6).
+
+The three configuration points and their defaults:
+
+| Variable | Where | Default | Set on the revision? |
+| --- | --- | --- | --- |
+| `VERTEX_MODEL` | `server/index.js` — recognition and insights | `gemini-2.5-flash-lite` | No — deliberately unset, so the code default applies |
+| `TEXT_MODEL` | `scripts/gen-food-list.mjs`, `scripts/gen-food-dict.mjs` | `gemini-2.5-flash` | n/a (script-only, never reaches the service) |
+| `IMAGE_MODEL` | `scripts/gen-food-images.mjs` | `gemini-2.5-flash-image` | n/a (script-only) |
+
+`src/vertexModel.test.ts` fails the build if any of those defaults, or any `*MODEL` variable
+set in `infra/service.ts`, is not first-party. It checks two things: that the identifier is a
+**bare** model id (no `/`, no `:`) and that it starts with a known Google family prefix
+(`gemini-`, `imagen-`, `veo-`, `gemma-`, the embedding families). The structural half is the
+strong half — `@google-cloud/vertexai` expands a bare name to
+`.../publishers/google/models/<name>`, and the generation scripts interpolate the value into a
+hardcoded `publishers/google/models/${MODEL}` URL that a value containing `/` could climb out
+of. The family prefixes are prefixes rather than exact strings on purpose, so a legitimate
+version bump inside a Google family does not require a test edit.
+
+### The budget alert (notifies only, does **not** cap)
+
+Declared in `infra/budget.ts` and imported into Pulumi state (it was created by hand when
+image generation started spending). Verified against the billing account on 2026-07-31:
+
+```
+$ gcloud billing budgets describe REDACTED-BUDGET-ID \
+    --billing-account=REDACTED-BILLING-ACCOUNT
+amount:
+  specifiedAmount:
+    currencyCode: CAD
+    units: '200'
+budgetFilter:
+  calendarPeriod: MONTH
+  creditTypesTreatment: INCLUDE_ALL_CREDITS
+  projects:
+  - projects/REDACTED-GCP-PROJECT-NUMBER
+displayName: SnapGut food-image pack cap
+notificationsRule: {}
+thresholdRules:
+- spendBasis: CURRENT_SPEND
+  thresholdPercent: 0.25
+- spendBasis: CURRENT_SPEND
+  thresholdPercent: 0.5
+- spendBasis: CURRENT_SPEND
+  thresholdPercent: 0.9
+- spendBasis: CURRENT_SPEND
+  thresholdPercent: 1.0
+```
+
+So: **200 CAD per calendar month**, scoped to this project only (by project *number*,
+`REDACTED-GCP-PROJECT-NUMBER`), all credits included in the spend it measures, with alerts at 25%, 50%, 90%,
+and 100% of actual current spend. `notificationsRule: {}` means no Pub/Sub topic and no
+monitoring channel are attached, so the alert email goes to the billing account's
+administrators and users — nothing else receives it. The name reads "pack cap", which is
+misleading; it caps nothing.
+
+**A Google Cloud budget alert notifies; it does not cap.** Crossing 100% sends mail and the
+meter keeps running. There is no setting anywhere in Cloud Billing that stops spend at a
+number.
+
+A real cap would have to be built: route the budget's notifications to a Pub/Sub topic, and
+have a subscriber (a Cloud Function or Cloud Run job) act on the threshold message — either
+detaching the billing account from the project, which stops every billable resource including
+the live service, or disabling the Vertex AI API to shed just the AI spend. Both are blunt and
+neither is in place; the second is the one worth building if we ever want it, because the first
+takes the site down.
+
+What actually bounds spend today, all of it in the application rather than in billing:
+
+- `maxInstanceCount: 100` on the Cloud Run service (`infra/service.ts`) — the ceiling on
+  concurrent compute.
+- `FREE_AI_LIMIT` (default 10) — free AI actions per account before the paywall, so an
+  anonymous flood cannot run up Vertex charges without paying.
+- The per-IP rate limiters on auth and sync (`server/clientIp.js` and callers).
+- Vertex AI's own per-project quotas, which cap request rate rather than dollars.
 
 ## Stripe catalog (live mode)
 
