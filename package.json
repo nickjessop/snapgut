@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "concurrently -k -n web,api -c cyan,magenta \"vite\" \"node server/index.js\"",
     "build": "vite build",
+    "icons": "node scripts/gen-icons.mjs",
+    "og": "node scripts/gen-og.mjs",
     "start": "node server/index.js",
     "preview": "npm run build && node server/index.js",
     "test": "vitest run"

@@ -1,0 +1,284 @@
+<!doctype html>
+<!--
+  Task 5.4 — the plain-language privacy page called for as work item 4 in
+  `docs/positioning.md`, which Requirement 9.7 makes concrete: what is on the
+  device, what is on the server, what is transmitted for recognition, and how to
+  export and delete.
+
+  Every statement here is checked against the code rather than the marketing
+  instinct, because Requirement 9.1 forbids a claim the code does not support and
+  the claims table in `docs/positioning.md` is only as good as its last audit:
+
+    - the account record — `server/store.js`, `newUser()`
+    - verification codes, attempts, expiry — `server/index.js`, /api/auth/*
+    - rate-limit counters and their keys — `server/index.js`, `server/store.js`
+    - the coverage tally — `store.recordMissingFood`, aggregate and unlinked
+    - what /api/recognize sends and keeps — `server/index.js`, nothing persisted
+    - what /api/insights sends — an on-device summary, not the raw log
+    - what SnapGut Cloud stores — `server/eventStore.js`, structured records only
+    - the Sheets mirror's columns — `rowFromEvent` in `src/googleSheets.ts`
+    - what lives on the device — `src/db.ts` (events, photos, outbox, meta)
+    - export — `exportBackup` and `toCSV`; deletion — DELETE /api/sync/data and
+      POST /api/account/delete
+
+  Requirement 9.5 is the line that matters most: photos ARE transmitted for
+  recognition, so the absolute "data stays put" framing that the Forbidden_Claim
+  list rules out is avoided everywhere. The wording throughout is the approved
+  one: your log stays on your device, photos are sent only to identify a meal,
+  and we do not keep them.
+
+  Cross-device sync shipped as a Pro feature (the `cloud-sync` spec), so it is
+  described in the present tense. Task 12.4 will add the canonical SnapGut Cloud
+  doc; this page does not depend on it.
+-->
+<html lang="en">
+  <head>
+    <!--#include head-->
+  </head>
+  <body>
+    <!--#include header-->
+
+    <main id="main" tabindex="-1">
+      <section class="section">
+        <div class="wrap prose">
+          <h1>Privacy</h1>
+          <p class="lede">
+            Your log stays on your device. Photos are sent only to identify a meal,
+            and we do not keep them. This page spells out exactly what that means,
+            in the order you probably want to know it.
+          </p>
+
+          <h2>The short version</h2>
+          <ul class="checklist">
+            <li>Your meals, symptoms, and photos live in your browser's own storage on your device.</li>
+            <li>Our server holds an account record: your email address, whether Pro is active, and a couple of counters.</li>
+            <li>A meal photo is sent to identify the dish, and is not stored on our servers.</li>
+            <li>We ask for no name, age, gender, weight, or onboarding quiz.</li>
+            <li>Nothing syncs anywhere unless you switch a destination on yourself.</li>
+            <li>You can export everything, free, and delete everything, without asking us.</li>
+            <li>No advertising, no third-party analytics, no tracking cookies.</li>
+          </ul>
+
+          <h2>What stays on your device</h2>
+          <p>
+            The app keeps your timeline in IndexedDB, the browser's own on-device
+            database. That is the source of truth: everything you see in the app is
+            read from there, and every statistic is calculated there.
+          </p>
+          <ul>
+            <li>Meals — the dish name, the ingredients and how confident the recognition was, and any note you write.</li>
+            <li>Meal photos, as image files. Photos are only ever stored on your device.</li>
+            <li>Symptoms and their severities, Bristol stool scores, and stress and sleep check-ins.</li>
+            <li>Deletion markers, so an entry you delete on one device stays deleted on the others.</li>
+            <li>A queue of entries still waiting to sync, if you have turned a sync destination on.</li>
+            <li>Your sign-in token and your settings, in the browser's local storage.</li>
+          </ul>
+          <p>
+            Deleting the app's data in your browser, or removing the app from your
+            device, removes all of it. That cuts both ways: browser storage can also
+            be evicted when a device runs short of space, so your data is yours —
+            keep a copy wherever you like. The export below is how.
+          </p>
+
+          <h2>What we keep on our servers</h2>
+          <p>
+            One record per account, and it is this short:
+          </p>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Field</th>
+                  <th scope="col">What it holds</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>email</code></td>
+                  <td>The address you sign in with. The only personal detail we ask for.</td>
+                </tr>
+                <tr>
+                  <td><code>pro</code></td>
+                  <td>Whether Pro is switched on for the account.</td>
+                </tr>
+                <tr>
+                  <td><code>proUntil</code></td>
+                  <td>When Pro runs out, or empty for a lifetime purchase.</td>
+                </tr>
+                <tr>
+                  <td><code>freeAiUsed</code></td>
+                  <td>How many free AI actions you have used, so the trial can be counted.</td>
+                </tr>
+                <tr>
+                  <td><code>stripeCustomerId</code></td>
+                  <td>Stripe's reference for your payments, set only if you buy Pro.</td>
+                </tr>
+                <tr>
+                  <td><code>createdAt</code></td>
+                  <td>When the account was created.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            There is no field for your log, your photos, your symptoms, or a profile.
+            Alongside that record, the server holds a few short-lived operational
+            things:
+          </p>
+          <ul>
+            <li>
+              A one-time sign-in code, stored as a hash rather than the code itself,
+              with an expiry ten minutes out and a count of wrong attempts. It is
+              deleted the moment you use it.
+            </li>
+            <li>
+              Rate-limit counters, keyed by your email address or by the network
+              address a request arrived from, so the sign-in endpoint cannot be
+              hammered. They expire with their time window.
+            </li>
+            <li>
+              A tally of foods we could not illustrate, which tells us what to draw
+              next. It records a food name and a count, and is not linked to an
+              account.
+            </li>
+          </ul>
+          <p>
+            If you buy Pro, the payment itself happens on Stripe's own checkout
+            page. We never see or hold your card details — only the customer
+            reference in the table above.
+          </p>
+
+          <h2>What is transmitted to recognise a meal</h2>
+          <p>
+            This is the one place your data leaves the device, so it is worth being
+            precise about.
+          </p>
+          <p>
+            When you snap a meal, the photo is sent to our server, which passes it
+            to Google's Vertex AI to identify the dish and its ingredients. The
+            names come back, the app writes them into your on-device log, and the
+            photo is not written to any database, bucket, or log file on our side.
+            We keep the picture nowhere; the copy in your timeline is on your
+            device.
+          </p>
+          <p>
+            The AI insight feature works from a summary your device calculates
+            first — counts and associations, not your entries. Your raw log, your
+            notes, and your photos are not sent to generate an insight.
+          </p>
+          <p>
+            Everything else the app does, including all of the pattern analysis and
+            the food ranking, runs on your device and needs no network at all.
+          </p>
+
+          <h2>Where your log syncs, if you want it to</h2>
+          <p>
+            The default is local-only: no sync, no copies, nothing to opt out of.
+            There are two destinations you can switch on, independently, in
+            Settings. Both are part of Pro, and neither is ever on by default.
+          </p>
+          <h3>SnapGut Cloud</h3>
+          <p>
+            Our own sync, for keeping two devices in step and restoring after a
+            reinstall. When you turn it on, this device uploads your structured
+            entries — meals and ingredients, symptoms and severities, Bristol
+            scores, stress and sleep values, and any note text — to our server
+            storage, along with deletion markers so a delete travels between your
+            devices. Meal photos are not part of it and stay on your device. The
+            app shows you this before the first upload and will not start without
+            your acknowledgement.
+          </p>
+          <h3>A Google Sheet you own</h3>
+          <p>
+            A readable mirror of your timeline in your own Google Drive. The app
+            creates one spreadsheet and can only touch that spreadsheet. The rows
+            carry the same columns as the CSV export, so no photo data goes into it.
+            The sheet is yours: disconnecting leaves it in your Drive, and deleting
+            it is between you and Google.
+          </p>
+
+          <h2>Exporting everything</h2>
+          <p>
+            Export is free on every account, is never behind Pro, and needs no
+            network. From Settings:
+          </p>
+          <ul>
+            <li>
+              <strong>Backup</strong> writes a single JSON file with your whole
+              timeline, photos included, which you can save wherever you keep files.
+              The same screen restores from one.
+            </li>
+            <li>
+              <strong>Export as CSV</strong> writes a spreadsheet of your timeline:
+              date and time, entry type, dish, confident and possible ingredients,
+              symptoms, Bristol score, stress, sleep, and your note.
+            </li>
+          </ul>
+
+          <h2>Deleting everything</h2>
+          <p>
+            Three separate things can be deleted, and you control each of them
+            without contacting us:
+          </p>
+          <ul>
+            <li>
+              <strong>The copy in SnapGut Cloud.</strong> Settings has a
+              <em>Delete cloud copy</em> control that erases every entry and
+              deletion marker we hold for you. Your on-device log is untouched, and
+              it works even if Pro has lapsed, so a former subscriber can always
+              remove their cloud copy.
+            </li>
+            <li>
+              <strong>Your account.</strong> Deleting the account removes your cloud
+              copy first and then the account record itself, including any pending
+              sign-in code. If any part of that fails, we report it as incomplete
+              and change nothing else, so you can simply repeat it rather than being
+              left with data we can no longer reach.
+            </li>
+            <li>
+              <strong>The data on your device.</strong> Delete individual entries in
+              the app, or clear the site's data in your browser to remove the whole
+              local store, photos and all. That is entirely local and does not
+              involve us.
+            </li>
+          </ul>
+          <p>
+            If you have connected a Google Sheet, that spreadsheet lives in your
+            Drive and is deleted from there.
+          </p>
+
+          <h2>Email we send you</h2>
+          <p>
+            Sign-in codes, sent through Resend, our email provider. That is the only
+            email the app sends: no marketing list, no notifications, nothing else.
+          </p>
+
+          <h2>Who else is involved</h2>
+          <p>
+            The service runs on Google Cloud: Cloud Run serves the app, Firestore
+            holds the account record and any cloud sync data, Cloud Storage holds
+            our food illustrations, and Vertex AI does the meal recognition. Stripe
+            handles payments and Resend sends the sign-in codes. Cloudflare sits in
+            front of the site.
+          </p>
+          <p>
+            These pages load no third-party scripts, embed nothing from another
+            domain, and set no tracking cookies. There is no analytics product, no
+            advertising network, and no SDK collecting anything in the background.
+          </p>
+
+          <h2>Changes to this page</h2>
+          <p>
+            When what the app does changes, this page changes with it — it describes
+            the software as it actually behaves, and we would rather correct it than
+            keep a comfortable sentence that is no longer true.
+          </p>
+
+          <p class="btn-row"><a class="btn btn-primary" href="/login">Open the app</a></p>
+        </div>
+      </section>
+    </main>
+
+    <!--#include footer-->
+  </body>
+</html>

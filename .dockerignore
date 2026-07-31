@@ -7,3 +7,6 @@ dist
 
 # Generated food illustration pack (served from GCS, never baked into the image)
 food-pack/
+
+# Icon sources — only used by `npm run icons`; the emitted icons live in public/
+brand/
