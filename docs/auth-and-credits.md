@@ -77,11 +77,14 @@ store is in-memory. Verified end-to-end: sign in → 10 free → snap consumes �
 Lifetime → Pro.
 
 ## Prod TODO
-- [ ] Set env/keys above; verified Resend sending domain.
-- [ ] Register Stripe webhook at `/api/billing/webhook`, subscribed to
-      `checkout.session.completed`, `invoice.paid`, and
-      `customer.subscription.deleted` — the three the handler acts on. Store the
-      signing secret Stripe issues at registration as `stripe-webhook-secret`.
+- [x] Env and keys are all set on the serving revision, and `mail.snapgut.com` is the
+      verified Resend sending domain (`EMAIL_FROM` = `SnapGut <notifications@mail.snapgut.com>`).
+      See [docs/configuration.md](configuration.md) for the per-variable status.
+- [x] Stripe webhook registered at `https://snapgut.com/api/billing/webhook`
+      (`we_1TzOMpJdwajaewjQ8JxIR9Qf`, live mode), subscribed to exactly
+      `checkout.session.completed`, `invoice.paid`, and `customer.subscription.deleted` —
+      the three the handler acts on. The signing secret Stripe issued at registration is
+      stored as `stripe-webhook-secret` and mounted as `STRIPE_WEBHOOK_SECRET`.
 - [x] Recurring plans are handled in the webhook: `invoice.paid` extends `proUntil`
       to the period the invoice paid for, `customer.subscription.deleted` clamps it
       down to the period already paid for, both idempotent under redelivery. Covered
