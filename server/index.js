@@ -1,5 +1,4 @@
 import { serve } from "@hono/node-server";
-import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { VertexAI } from "@google-cloud/vertexai";
 import { getStore, isPro, entitlement, FREE_AI_LIMIT } from "./store.js";
@@ -13,6 +12,17 @@ import {
 import { sendCode } from "./email.js";
 import { annotateIngredients, lookupSlug } from "./foodDict.js";
 import { registerSyncRoutes, purgeEventData, logSyncRequest, errorLabel } from "./sync.js";
+import { clientIp } from "./clientIp.js";
+// Route resolution derived from the Route_Table (Requirement 2.1). Mounted at the
+// bottom of this file, after every /api/* guard and handler (Requirement 2.8).
+import { registerSiteRoutes } from "./routes.js";
+// Per-class Cache-Control, X-Robots-Tag, Content-Type, and Content-Security-Policy,
+// from the design's route resolution table (Requirements 2.7, 8.6, 8.9, 11.1,
+// 11.4, 11.5, 11.7, 12.1–12.5).
+import { applySiteHeaders } from "./headers.js";
+// The Plan_Catalog lives in shared/ so the pricing page and the billing routes
+// read one definition (Requirements 7.6, 9.3, 9.8).
+import { PLANS } from "../shared/plans.js";
 
 const PORT = Number(process.env.PORT) || 8080;
 const PROJECT = process.env.GOOGLE_CLOUD_PROJECT;
@@ -24,38 +34,6 @@ const MODEL = process.env.VERTEX_MODEL || "gemini-2.5-flash-lite";
 const MOCK_AI = process.env.MOCK_AI === "1" || !PROJECT;
 
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY;
-const DAY = 86_400_000;
-
-// SnapGut Pro plans. One entitlement, sold three ways. Prices in cents.
-const PLANS = {
-  annual: {
-    price: 2999,
-    label: "Annual",
-    caption: "billed yearly",
-    per: "$2.50/mo",
-    mode: "subscription",
-    priceEnv: "STRIPE_PRICE_ANNUAL",
-    durationMs: 365 * DAY,
-  },
-  monthly: {
-    price: 499,
-    label: "Monthly",
-    caption: "billed monthly",
-    per: "$4.99/mo",
-    mode: "subscription",
-    priceEnv: "STRIPE_PRICE_MONTHLY",
-    durationMs: 31 * DAY,
-  },
-  lifetime: {
-    price: 7999,
-    label: "Lifetime",
-    caption: "one-time — yours forever",
-    per: "best value",
-    mode: "payment",
-    priceEnv: "STRIPE_PRICE_LIFETIME",
-    durationMs: null, // never expires
-  },
-};
 
 const IS_PROD = process.env.NODE_ENV === "production";
 
@@ -64,23 +42,21 @@ if (IS_PROD && !process.env.SESSION_SECRET) {
   throw new Error("SESSION_SECRET must be set in production (tokens are otherwise forgeable).");
 }
 
+// Fail fast: the Datastore_Backend defaults to an in-process map, which loses
+// every account, entitlement, and rate-limit window on the next revision. A
+// misconfigured revision must refuse to serve rather than take live sign-ups
+// into a store that is about to disappear (Requirement 18.3).
+if (IS_PROD && process.env.USERS_BACKEND !== "firestore") {
+  throw new Error(
+    'USERS_BACKEND must be "firestore" in production ' +
+      "(the in-process store loses every account on the next revision)."
+  );
+}
+
 const app = new Hono();
 
 // ---- security middleware ----
 const MAX_BODY = 8 * 1024 * 1024; // 8 MB (a downscaled meal photo is ~1–2 MB base64)
-
-const CSP = [
-  "default-src 'self'",
-  "base-uri 'self'",
-  "object-src 'none'",
-  "frame-ancestors 'none'",
-  "img-src 'self' data: blob: https://www.themealdb.com",
-  "style-src 'self' 'unsafe-inline'", // React inline style attributes
-  "script-src 'self'",
-  "connect-src 'self'",
-  "worker-src 'self'",
-  "manifest-src 'self'",
-].join("; ");
 
 app.use("*", async (c, next) => {
   await next();
@@ -88,8 +64,13 @@ app.use("*", async (c, next) => {
   c.header("X-Frame-Options", "DENY");
   c.header("Referrer-Policy", "strict-origin-when-cross-origin");
   c.header("Permissions-Policy", "camera=(self), microphone=(), geolocation=()");
-  c.header("Content-Security-Policy", CSP);
   if (IS_PROD) c.header("Strict-Transport-Security", "max-age=63072000; includeSubDomains");
+  // Adds Cache-Control, X-Robots-Tag, Content-Type, and the Content-Security-Policy
+  // for the class this path belongs to — the base policy everywhere, plus that
+  // page's JSON-LD hashes on a Marketing_Page (Requirements 11.4, 11.5). The
+  // policy lives in ./csp.js; nothing above is weakened and the /foods/*
+  // immutable directive is deliberately left alone.
+  applySiteHeaders(c);
 });
 
 // Reject oversized payloads early (mainly guards /api/recognize image uploads).
@@ -101,9 +82,9 @@ app.use("/api/*", async (c, next) => {
 });
 
 // ---- rate limiting (shared via the store, so it holds across instances) ----
-function clientIp(c) {
-  return (c.req.header("x-forwarded-for") || "").split(",")[0].trim() || "local";
-}
+// The Client_IP derivation lives in `./clientIp.js`, shared with the sync
+// limiter, and honours TRUSTED_PROXY so a client-supplied forwarding header
+// cannot mint a fresh bucket (Req 14.1, 14.1a, 14.2).
 
 // Cap auth abuse (email bombing / code brute force) per IP.
 app.use("/api/auth/*", async (c, next) => {
@@ -679,10 +660,12 @@ app.get("/api/admin/missing-foods", async (c) => {
   return c.json({ missing: (await store.listMissingFoods?.(limit)) ?? [] });
 });
 
-// Serve the built PWA (dist/) in production.
-app.use("/*", serveStatic({ root: "./dist" }));
-// SPA fallback so deep links load index.html.
-app.get("*", serveStatic({ path: "./dist/index.html" }));
+// ---- Route_Table resolution (must come after every /api/* route above) ----
+// Marketing pages, the App_Shell at /login and /app/*, real files in dist/, the
+// trailing-slash 301, and a terminal 404 carrying the not-found document. The
+// old `app.get("*", …App_Shell)` catch-all is gone: it answered every typo with
+// the sign-in form and status 200 (Requirements 2.2–2.6, 2.9, 3.8).
+registerSiteRoutes(app);
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`SnapGut server on http://localhost:${info.port}`);

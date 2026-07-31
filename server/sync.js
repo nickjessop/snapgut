@@ -11,6 +11,7 @@
 import { getStore, isPro, entitlement, norm } from "./store.js";
 import { verifyToken } from "./auth.js";
 import { getEventStore, MAX_PULL_LIMIT, storableId } from "./eventStore.js";
+import { clientIp } from "./clientIp.js";
 
 /** A sync request body may declare at most this many bytes (Req 19.1, 19.10). */
 export const MAX_SYNC_BODY_BYTES = 1_048_576;
@@ -47,13 +48,11 @@ const CTX_LOG = "syncLogMeta";
 const CLOUD_DELETE_PATH = "/api/sync/data";
 
 /**
- * The client IP as Cloud Run reports it. Same derivation as the auth throttle in
- * `index.js`; duplicated rather than imported because `index.js` starts a
- * listener on import.
+ * The Client_IP, derived by the one shared trusted-proxy-aware implementation in
+ * `server/clientIp.js` (Req 14.1a). Re-exported here so the existing importers of
+ * this module keep working; the limits it keys are unchanged.
  */
-export function clientIp(c) {
-  return (c.req.header("x-forwarded-for") || "").split(",")[0].trim() || "local";
-}
+export { clientIp };
 
 /** The Session_Token, only when presented as a Bearer credential (Req 2.1). */
 function bearer(c) {
