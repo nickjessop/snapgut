@@ -9,6 +9,9 @@ restating values.
 Compiled by reading the code, not the previous version of this file: every `process.env.*`
 in `server/`, `shared/`, and `scripts/`, and every `import.meta.env.*` in `src/`.
 
+What the datastore `USERS_BACKEND` selects actually holds — every collection, its key, its
+fields, whether it holds personal data, and what expires it — is in `docs/datastore.md`.
+
 ## How a value reaches the server
 
 Non-secrets are plain environment variables on the Cloud Run revision. Secrets live in
@@ -59,7 +62,7 @@ that last column; this table is the explanation. The gaps are real and tasks 10.
 | `STRIPE_PRICE_MONTHLY` | no | Degraded | Price id for the monthly plan | Read via `PLANS.monthly.priceEnv` in `/api/billing/checkout`; unset sends `price: undefined` to Stripe, which rejects the call — the route has no handler for it, so the request ends as an unhandled 500. Other plans still work | ❌ unset |
 | `STRIPE_PRICE_ANNUAL` | no | Degraded | Price id for the annual plan | Same as above for the annual plan (also the fallback plan when the request names an unknown one) | ❌ unset |
 | `STRIPE_PRICE_LIFETIME` | no | Degraded | Price id for the lifetime plan | Same as above for the lifetime plan | ❌ unset |
-| `ADMIN_TOKEN` | yes (`admin-token`) | Degraded | Guards `/api/admin/missing-foods`; also read by `scripts/missing-foods.mjs` | The endpoint is **inert**: it answers `not_configured` 404 rather than 401 (Req 18.7), so the Coverage_Tally is unreadable and the script prints nothing. No user-facing effect | ❌ entry declared, no version, not mounted — task 10.6 |
+| `ADMIN_TOKEN` | yes (`admin-token`) | Degraded | Guards `/api/admin/missing-foods`; also read by `scripts/missing-foods.mjs` | The endpoint is **inert**: it answers `not_configured` 404 rather than 401 (Req 18.7), so the Coverage_Tally is unreadable and the script prints nothing. No user-facing effect | ✅ mounted from Secret Manager (`admin-token`, `latest`) — verified on the revision |
 | `TRUSTED_PROXY` | no | Degraded | Which header `server/clientIp.js` trusts for the Client_IP: `cloudflare` reads `CF-Connecting-IP`, `cloudrun` takes the second-from-right `X-Forwarded-For` entry, unset takes the rightmost | Unset takes the rightmost `X-Forwarded-For` entry — never client-controlled, so never spoofable, but behind an edge that entry is the same proxy address for everyone, collapsing the auth throttle and the per-IP sync limiter into one shared bucket. Set it to match what actually fronts the origin: `cloudrun` while the `run.app` host is used directly, `cloudflare` after the cutover (task 11.1) | ✅ `cloudrun` |
 | `NODE_ENV` | no | Degraded | Marks a production revision | The production-only guards stay off: the `SESSION_SECRET` fail-fast, the `USERS_BACKEND` fail-fast, and HSTS. A production revision without it is the dangerous case, because the two fatal entries above stop being fatal | set to `production` by the image |
 | `FREE_AI_LIMIT` | no | Default | Free AI actions per account before the paywall | Defaults to 10. A non-numeric value becomes `NaN`, and the `>=` comparison then never trips, so **free AI becomes unlimited**; an empty value becomes 0, paywalling every AI action. Set it to an integer or leave it unset | unset → 10 |
