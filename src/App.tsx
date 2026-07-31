@@ -28,12 +28,28 @@ import {
 } from "./icons";
 import { sweepTombstones, type LogEvent } from "./db";
 import type { ComponentType } from "react";
+import { DEFAULT_APP_PATH, isAppPath } from "../shared/site.js";
+import { mayEnterApp, parseRoute, type AddressableFlow } from "./routes";
+import useRouter from "./useRouter";
 
-type Tab = "camera" | "logs" | "insights";
-type Flow = null | "capture" | "meal-details" | "symptom" | "bowel" | "checkin" | "settings";
+// Exported for `src/routes.ts`, which maps URLs onto these two unions rather
+// than restating them. Type-only, so the import is erased and no cycle exists
+// at runtime.
+export type Tab = "camera" | "logs" | "insights";
+export type Flow =
+  | null
+  | "capture"
+  | "meal-details"
+  | "symptom"
+  | "bowel"
+  | "checkin"
+  | "settings";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("camera");
+  // R4.8 — the App_Shell always opens with zero flows active. No route maps to an
+  // Ephemeral_Flow, so the only flow a URL can restore is the addressable one
+  // (`settings`), and it is applied by `onRoute` rather than seeded here.
   const [flow, setFlow] = useState<Flow>(null);
   const [editing, setEditing] = useState<LogEvent | null>(null);
   const [photo, setPhoto] = useState<Blob | null>(null);
@@ -59,6 +75,24 @@ export default function App() {
     setEnt(e);
     applyEntitlement({ pro: e.pro, proUntil: e.proUntil });
   }
+
+  /**
+   * The history binding. `enabled` is the boot gate: while the held Session_Token
+   * is being validated and while the app is signed out, the URL and the view state
+   * do not track each other, so the pre-auth placeholder and the sign-in screen
+   * leave the address bar exactly as it was (Requirement 3.6). Flipping it on is
+   * what makes a deep link survive the gate.
+   */
+  const { navigate, redirect } = useRouter({
+    tab,
+    flow,
+    enabled: authChecked && authed,
+    onRoute: (route) => {
+      setTab(route.tab);
+      setFlow(route.flow);
+    },
+    onCancelFlow: () => cancelFlow(),
+  });
 
   useEffect(() => {
     requestPersistentStorage();
@@ -107,9 +141,45 @@ export default function App() {
     return stopTriggers;
   }, []);
 
+  /**
+   * The boot-order redirects (Requirement 3), in the order of the design's
+   * decision ladder:
+   *
+   *   validating token .......... render the placeholder, URL untouched   (R3.6)
+   *   no token, URL is /app/* ... replaceState → /login?next=<path>       (R3.2)
+   *   token, URL is /login ...... replaceState → next ?? /app        (R3.1, R3.3)
+   *
+   * Both redirects replace the current entry rather than adding one, so a boot
+   * redirect leaves nothing to go back to. Nothing here runs before the session
+   * check settles, so a valid token never flashes the sign-in URL.
+   */
+  useEffect(() => {
+    if (!authChecked) return;
+    const { pathname, search } = window.location;
+
+    if (!mayEnterApp(authed)) {
+      // R3.2 — the App_Route asked for is carried across as `next`, so sign-in
+      // returns to it. `sanitizeNext` (inside `formatRoute`) reduces anything it
+      // does not recognise to the default App_Route.
+      if (isAppPath(pathname)) redirect({ kind: "login", next: pathname });
+      return;
+    }
+
+    // R3.1, R3.3 — a session at the Login_Route belongs in the app. `next` is
+    // already sanitized by `parseRoute`, and its absence means the default view.
+    const here = parseRoute(pathname, search);
+    if (here?.kind !== "login") return;
+    const target = parseRoute(here.next ?? DEFAULT_APP_PATH);
+    if (target?.kind === "app") redirect(target);
+  }, [authChecked, authed, redirect]);
+
   const signOut = () => {
     setAuthed(false);
     setEnt(null);
+    // R3.5 — a discarded Session_Token, whether from sign-out or from a 401, lands
+    // on the Login_Route. This is a real navigation, not a boot redirect: the entry
+    // the user was on stays in history.
+    navigate({ kind: "login", next: null });
   };
 
   // Gate order: validate session → sign in → first-run intro → app.
@@ -139,6 +209,18 @@ export default function App() {
     />
   );
 
+  /**
+   * A user-initiated switch between Addressable_Views: the camera, the logs, the
+   * insights, and settings. Routed rather than set directly, so the URL and the
+   * view state move together and exactly one history entry is added (R4.2). A tap
+   * on the view already showing is a no-op, so re-tapping the active tab does not
+   * stack a duplicate entry.
+   */
+  function goToView(target: Tab, targetFlow: AddressableFlow | null = null) {
+    if (tab === target && flow === targetFlow) return;
+    navigate({ kind: "app", tab: target, flow: targetFlow });
+  }
+
   function resetFlow() {
     setFlow(null);
     setEditing(null);
@@ -148,7 +230,12 @@ export default function App() {
   function finishFlow() {
     resetFlow();
     setReloadKey((k) => k + 1);
-    setTab("logs");
+    // R4.10 — saving a log still lands on the logs view, now expressed as a
+    // navigation to the logs App_Route. It replaces rather than pushes because the
+    // entry underneath is the sentinel the flow pushed (R4.5): consuming it leaves
+    // the flow with no history entry of its own, so a back gesture from the saved
+    // log goes where the flow was opened from instead of onto a dead entry.
+    redirect({ kind: "app", tab: "logs", flow: null });
     // Mirror the newly saved event to Google Sheets when connected (Req 5.1); the
     // single-flight guard collapses overlapping triggers (Req 5.5). Error status is
     // shown in Settings, so ignore the rejection here.
@@ -160,6 +247,13 @@ export default function App() {
     // the gate discards it when Cloud is off, not Pro, or signed out.
     void requestSync("local-write");
   }
+  /**
+   * The flow's existing cancel behavior, unchanged, and the path a backward
+   * navigation out of an Ephemeral_Flow runs (R4.6). The view change is left to
+   * the state → URL binding rather than routed here: whether the cancel came from
+   * a control or from the back gesture, the router corrects the URL by replacing
+   * the entry it is already on, so cancelling adds no history entry either way.
+   */
   function cancelFlow() {
     const wasNewMeal = flow === "capture" || (flow === "meal-details" && !editing);
     resetFlow();
@@ -253,7 +347,7 @@ export default function App() {
       <div className="app">
         <SettingsView
           entitlement={ent}
-          onClose={() => setFlow(null)}
+          onClose={() => goToView("logs")}
           onUpgrade={() => setPaywall("upsell")}
           onSignedOut={() => {
             resetFlow();
@@ -284,7 +378,7 @@ export default function App() {
           reloadKey={reloadKey}
           entitlement={ent}
           onUpgrade={() => setPaywall("upsell")}
-          onOpenSettings={() => setFlow("settings")}
+          onOpenSettings={() => goToView("logs", "settings")}
         />
       )}
       {tab === "insights" && (
@@ -307,7 +401,7 @@ export default function App() {
               sub="Photo → AI ingredients"
               onClick={() => {
                 setPlusOpen(false);
-                setTab("camera");
+                goToView("camera");
               }}
             />
             <ActionItem
@@ -345,7 +439,7 @@ export default function App() {
       )}
 
       <nav className="tabbar">
-        <button className={tab === "logs" ? "active" : ""} onClick={() => setTab("logs")}>
+        <button className={tab === "logs" ? "active" : ""} onClick={() => goToView("logs")}>
           <LogsIcon className="ico" size={22} />
           Logs
         </button>
@@ -354,7 +448,7 @@ export default function App() {
         </button>
         <button
           className={tab === "insights" ? "active" : ""}
-          onClick={() => setTab("insights")}
+          onClick={() => goToView("insights")}
         >
           <InsightsIcon className="ico" size={22} />
           Insights
