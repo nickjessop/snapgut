@@ -83,7 +83,6 @@
   --gutter: 20px;
   --measure: 68ch;
   --wrap: 1080px;
-  --shadow: 0 12px 30px rgba(45, 80, 66, 0.12);
 }
 
 /* ---------------------------------------------------------------- Reset */
@@ -120,7 +119,9 @@ h3,
 h4 {
   font-family: var(--font-display);
   color: var(--heading);
-  line-height: 1.15;
+  /* Tight: these are short display lines in a serif with a large x-height, and at
+     1.15 a two-line heading read as two separate lines rather than one phrase. */
+  line-height: 1.07;
   letter-spacing: -0.01em;
   margin: 0 0 0.5em;
   text-wrap: balance;
@@ -238,6 +239,10 @@ main:focus {
 
 .brand {
   display: inline-flex;
+  /* Centres the symbol on the wordmark's cap band rather than on its full box:
+     the wordmark's viewBox is padded to be symmetric about that band, and the
+     symbol's ink fills its own box edge to edge, so plain centring is exact.
+     The gap is GAP_TO_CAP (0.6) x the 15px cap height brand/lockup.mjs sets. */
   align-items: center;
   gap: 9px;
   color: var(--heading);
@@ -246,17 +251,13 @@ main:focus {
      wide viewport and wrap underneath on a narrow one. */
   margin-right: auto;
 }
-.brand-mark {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+/* Both marks carry their own width/height attributes, generated from the lockup
+   metrics, so the header reserves the box before this file arrives. */
+.brand-mark,
+.brand-wordmark {
+  display: block;
 }
-.brand-name {
-  font-family: var(--font-display);
-  font-size: 21px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-}
+
 
 .nav-links {
   display: flex;
@@ -383,16 +384,32 @@ main:focus {
   list-style: none;
 }
 
+/* Flat: the border and the card's own background carry the edge. A drop shadow
+   under every card competed with the illustrations for depth and made the grids
+   read as floating chrome rather than as content. */
 .card {
   min-width: 0;
   padding: 22px;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--r);
-  box-shadow: var(--shadow);
 }
 .card h3 {
   margin-top: 0;
+}
+
+/* The pillar icons. Small, on the same basil halo the step art uses, so the
+   three cards read as a set with the How-it-works row above them. */
+.card-icon {
+  display: block;
+  width: 44px;
+  height: auto;
+  margin: 0 0 12px;
+  background: radial-gradient(
+    circle at 50% 46%,
+    var(--green-50) 0%,
+    rgba(228, 241, 233, 0) 70%
+  );
 }
 .card p:last-child {
   margin-bottom: 0;
@@ -449,6 +466,164 @@ main:focus {
   transform: rotate(-45deg);
 }
 
+/* ------------------------------------------------- Media rows (art + copy)
+
+   A two-column row of copy beside an illustration, collapsing to one column on
+   a narrow viewport. Copy always comes first in the DOM so reading order starts
+   at the heading; `.media-reverse` only flips the *visual* order, and only once
+   there are two columns to flip between. */
+
+.media {
+  display: grid;
+  gap: clamp(22px, 4vw, 44px);
+  align-items: center;
+}
+
+.media-body {
+  min-width: 0;
+}
+.media-body > :last-child {
+  margin-bottom: 0;
+}
+/* Keeps the measure readable when the column is wider than the text wants to be. */
+.media-body p {
+  max-width: var(--measure);
+}
+
+.media-art {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+}
+.media-art img {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: min(460px, 100%);
+  height: auto;
+}
+@media (min-width: 760px) {
+  .media {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr);
+  }
+  .media-hero {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  }
+  .media-reverse .media-art {
+    order: -1;
+  }
+}
+
+/* ------------------------------------------------------------- How it works
+
+   Three cards, each with its illustration and its ordinal. The number comes from
+   the list counter rather than from the markup, so the sequence lives in one
+   place — the `<ol>` — and cannot disagree with itself. */
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
+  gap: 20px;
+  margin: 0 0 1.2em;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.step {
+  counter-increment: step;
+  position: relative;
+  min-width: 0;
+  padding: 28px 22px 22px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  text-align: center;
+}
+
+.step::before {
+  content: counter(step);
+  position: absolute;
+  top: -15px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--green-800);
+  color: var(--cream-50);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* The halo rides on the image itself here — the illustration is square and
+   centred, so it needs no extra element to sit on. */
+.step-art {
+  display: block;
+  width: 116px;
+  height: auto;
+  margin: 4px auto 12px;
+  background: radial-gradient(
+    circle at 50% 46%,
+    var(--green-50) 0%,
+    rgba(228, 241, 233, 0) 68%
+  );
+}
+
+.step h3 {
+  margin-bottom: 0.35em;
+}
+.step p {
+  margin-bottom: 0;
+}
+
+/* ----------------------------------------------------------- Store buttons
+
+   Inert by design: there is nothing to link to until the native apps ship, and a
+   focusable control that goes nowhere is worse than a label. These are list
+   items, not links or buttons, so they are not in the tab order at all — the
+   badge carries the whole message. The dashed border is the visual echo of that:
+   a shape that reads as "not yet" rather than as a control that failed. */
+
+.store-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0 0 1.2em;
+  padding: 0;
+  list-style: none;
+}
+
+/* No card around these: the badges are already self-contained artwork with their
+   own shape, and boxing them added a second border for no information. */
+.store-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* The badges are supplied artwork and must not be recoloured or restyled, so
+   this only sets the height both share. `width: auto` lets each keep its own
+   aspect ratio — Apple's badge is 2.99:1, Google's 3.36:1. */
+.store-badge {
+  display: block;
+  height: 40px;
+  width: auto;
+}
+
+.badge-soon {
+  align-self: flex-start;
+  background: var(--terracotta-100);
+  color: var(--terracotta-600);
+}
+
 /* Tables reflow by scrolling their own container, never the page. */
 .table-scroll {
   overflow-x: auto;
@@ -495,15 +670,24 @@ th {
   font-weight: 600;
 }
 
+/* Left-aligned under the links row rather than centred.
+ 
+   These two are narrower than the wrap, because small print needs a readable
+   measure. `.site-footer > *` gives every child `margin-inline: auto`, which
+   centres anything narrower than the wrap — that is what put the notes in the
+   middle of the page. Setting the start margin to the wrap's own left offset
+   pins them to the same line as the links above; `max(0px, …)` collapses it once
+   the viewport is narrower than the wrap, where the offset would go negative. */
 .footer-note {
   max-width: var(--measure);
-  margin: 0 auto 10px;
+  margin: 0 auto 10px max(0px, calc((100% - var(--wrap)) / 2));
   color: var(--muted);
   font-size: 15px;
 }
 
 .footer-legal {
-  margin: 18px auto 0;
+  max-width: var(--measure);
+  margin: 18px auto 0 max(0px, calc((100% - var(--wrap)) / 2));
   color: var(--muted);
   font-size: 14px;
 }

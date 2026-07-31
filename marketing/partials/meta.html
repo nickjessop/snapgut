@@ -34,6 +34,10 @@
 <meta name="twitter:description" content="{{description}}" />
 <meta name="twitter:image" content="https://snapgut.com/og.png" />
 
-<!-- Relative, so Vite resolves it against the including document and emits it
-     content-hashed (Req 7.3). The site's only stylesheet (Req 7.7). -->
-<link rel="stylesheet" href="./marketing.css" />
+<!-- Root-relative, so Vite emits it content-hashed (Req 7.3) *and* the href
+     resolves the same way in dev as in the build. It cannot be document-relative:
+     this partial is included by pages that the dev server rewrites to
+     internally, so the browser's URL stays `/pricing` while the document is
+     `marketing/pricing.html`, and `./marketing.css` would resolve against the
+     wrong directory and 404. The site's only stylesheet (Req 7.7). -->
+<link rel="stylesheet" href="/marketing/marketing.css" />

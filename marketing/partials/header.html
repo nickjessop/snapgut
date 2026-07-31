@@ -3,23 +3,15 @@
      than hidden, so it stays in the tab order and appears on focus (Req 10.1).
      Its target carries id="main" tabindex="-1" so focus lands there, not just
      the scroll position. header + nav are two of the four landmarks (Req 10.2).
-     The brand mark is decorative, so alt is empty (Req 10.4); it has intrinsic
-     dimensions and loads eagerly, being above the fold (Req 15.3). -->
+     The brand link's contents — the symbol and the wordmark beside it, with
+     their intrinsic dimensions and their accessibility treatment — are
+     generated into partials/brand.html by scripts/gen-brand.mjs. -->
 <a class="skip-link" href="#main">Skip to main content</a>
 
 <header class="site-header">
   <nav class="site-nav" aria-label="Main">
     <a class="brand" href="/">
-      <img
-        class="brand-mark"
-        src="/icon-192.png"
-        alt=""
-        width="28"
-        height="28"
-        loading="eager"
-        decoding="async"
-      />
-      <span class="brand-name">SnapGut</span>
+      <!--#include brand-->
     </a>
 
     <ul class="nav-links">

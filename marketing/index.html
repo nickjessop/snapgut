@@ -15,9 +15,23 @@
   it is presented as a Pro feature, never as free and never as forthcoming
   (Req 9.4).
 
+  Pro covers two things, and the page says so in both places it comes up: the AI
+  features, and syncing — to SnapGut Cloud or to a Google Sheet the reader owns.
+  Neither is offered on the free tier, so neither may be described as if it were.
+
   No prices appear here. `/pricing` renders them from the Plan_Catalog in
   `shared/plans.js` at build time, and repeating a number on this page is exactly
   the drift Requirement 9.3 exists to catch.
+
+  The illustrations come from `scripts/gen-marketing-images.mjs`, which sends the
+  same locked style clause as the food pack, so the art on this page and the 3,036
+  food thumbnails read as one collection. They live in `public/img/` and are kept
+  out of the Precache_Manifest by `vite/pwa.js`: they belong to a document the
+  Service_Worker never serves from cache.
+
+  The store rows for the native apps are inert list items, not links. There is
+  nothing to link to yet, and a focusable control that goes nowhere is worse than
+  a label.
 
   The whole page is static markup: readable with JavaScript disabled (Req 1.4)
   and nothing above the fold waits on a module (Req 15.6). Two scripts, and only
@@ -35,8 +49,12 @@
     <!--#include head-->
 
     <!-- The Standalone_Launch redirect (Req 6.4–6.7). Vite builds
-         ./standalone.ts to a hashed same-origin asset and rewrites this src, so
-         it stays a file reference and never becomes inline script (Req 11.3). It
+         /marketing/standalone.ts to a hashed same-origin asset and rewrites this
+         src, so it stays a file reference and never becomes inline script
+         (Req 11.3). The path is root-relative rather than document-relative
+         because the dev server rewrites `/` to this document internally: the
+         browser's URL stays `/`, so `./standalone.ts` would resolve to
+         `/standalone.ts` and 404. It
          sits here, first in <head> and with no defer or async of our own, so a
          Legacy_Install whose manifest still says start_url "/" is sent to /app
          before this page paints. This is the only document that references it —
@@ -44,7 +62,7 @@
          browser load of / performs zero redirects regardless of session state
          (Req 6.6, Decision D5). The module wraps its own work, so a throw or a
          failed load leaves this page readable (Req 6.7). -->
-    <script type="module" src="./standalone.ts"></script>
+    <script type="module" src="/marketing/standalone.ts"></script>
 
     <script type="application/ld+json">
       {
@@ -80,59 +98,94 @@
            tagline as the h1, the one-liner as the lede, then the three-bullet
            version, then the no-install line. -->
       <section class="section">
-        <div class="wrap">
-          <p class="eyebrow">Food and symptom diary</p>
-          <h1>Know what your gut is telling you</h1>
+        <div class="wrap media media-hero">
+          <div class="media-body">
+            <p class="eyebrow">Food and symptom diary</p>
+            <h1>Know what your gut is telling you</h1>
 
-          <p class="lede">
-            Snap your meals, log how you feel, and find the foods behind your
-            symptoms — without typing out a food diary or handing over your data.
-          </p>
+            <p class="lede">
+              Snap your meals, log how you feel, and find the foods behind your
+              symptoms.
+            </p>
 
-          <ul class="checklist">
-            <li>Logging takes seconds — photo in, ingredients out.</li>
-            <li>
-              Patterns measured against your own baseline, not a made-up score.
-            </li>
-            <li>
-              Your log stays on your device. You choose if it syncs anywhere at all.
-            </li>
-          </ul>
+            <ul class="checklist">
+              <li>Photo in, ingredients out.</li>
+              <li>Measured against your own baseline.</li>
+              <li>Your log stays on your device.</li>
+            </ul>
 
-          <p class="btn-row">
-            <a class="btn btn-primary" href="/login">Open the app</a>
-            <a class="btn btn-secondary" href="/pricing">See pricing</a>
-          </p>
+            <p class="btn-row">
+              <a class="btn btn-primary" href="/login">Open the app</a>
+              <a class="btn btn-secondary" href="/pricing">See pricing</a>
+            </p>
 
-          <p class="note">
-            No download. Open a link and start — add it to your home screen if you
-            like it.
-          </p>
+            <p class="note">No download. Open a link and start.</p>
+          </div>
+
+          <!-- The one eager image on the page: it is the hero, so it is the
+               largest thing above the fold and must not wait on a lazy pass
+               (Req 15.3, 15.4). Everything below the fold is lazy. -->
+          <div class="media-art">
+            <img
+              src="/img/hero-polaroid.webp"
+              alt="An illustrated instant camera print showing everyday meal foods: bread, yogurt, a tomato, cheese, oats and a cup of coffee"
+              width="460"
+              height="460"
+              loading="eager"
+              decoding="async"
+            />
+          </div>
         </div>
       </section>
 
       <!-- How it works. Three steps, matching what the app actually does today:
            camera as the home screen, one tap for how you feel, and stats that run
-           on the device. -->
+           on the device. Presented as an ordered list so the sequence survives
+           without the styling; the step numbers are drawn by CSS from the list
+           counter rather than written into the markup. -->
       <section class="section section-alt">
         <div class="wrap">
           <h2>How it works</h2>
 
-          <ol class="prose">
-            <li>
-              <strong>Snap the meal.</strong> The camera is the home screen. AI reads
-              the photo and lists the ingredients, so you are correcting a guess
-              instead of typing a diary entry.
+          <ol class="steps">
+            <li class="step">
+              <img
+                class="step-art"
+                src="/img/step-camera.webp"
+                alt=""
+                width="116"
+                height="116"
+                loading="lazy"
+                decoding="async"
+              />
+              <h3>Snap the meal</h3>
+              <p>Point it at your plate. AI lists the ingredients; you fix what's wrong.</p>
             </li>
-            <li>
-              <strong>Say how you feel.</strong> One tap for a symptom, a bowel
-              movement, or a check-in — each one timestamped, not dumped into a day
-              bucket.
+            <li class="step">
+              <img
+                class="step-art"
+                src="/img/step-journal.webp"
+                alt=""
+                width="116"
+                height="116"
+                loading="lazy"
+                decoding="async"
+              />
+              <h3>Say how you feel</h3>
+              <p>One tap logs a symptom, a bowel movement, or a check-in.</p>
             </li>
-            <li>
-              <strong>Read the ranking.</strong> Every food is compared against your
-              own baseline: how often symptoms follow meals with it, versus meals
-              without it. The maths runs on your device.
+            <li class="step">
+              <img
+                class="step-art"
+                src="/img/step-chart.webp"
+                alt=""
+                width="116"
+                height="116"
+                loading="lazy"
+                decoding="async"
+              />
+              <h3>Read the ranking</h3>
+              <p>Each food is weighed against your own baseline, on your device.</p>
             </li>
           </ol>
 
@@ -149,28 +202,51 @@
 
           <ul class="grid">
             <li class="card">
+              <img
+                class="card-icon"
+                src="/img/card-fast.webp"
+                alt=""
+                width="64"
+                height="64"
+                loading="lazy"
+                decoding="async"
+              />
               <h3>Fast</h3>
               <p>
-                Logging takes seconds, not minutes. The apps with real analytical
-                depth make you search and type every single food, and a multi-week
-                protocol lives or dies on whether you keep it up.
+                Logging takes seconds, not minutes. No searching a database for
+                every ingredient you ate.
               </p>
             </li>
             <li class="card">
+              <img
+                class="card-icon"
+                src="/img/card-honest.webp"
+                alt=""
+                width="64"
+                height="64"
+                loading="lazy"
+                decoding="async"
+              />
               <h3>Honest</h3>
               <p>
-                We won't call a food a trigger until the data earns it. A food needs
-                repeated exposures, a high enough follow rate, a clear lift over your
-                baseline, and enough comparison meals before it is flagged at all.
-                Confidence is shown, not hidden.
+                We won't call a food a trigger until the data earns it. Confidence is
+                shown, not hidden.
               </p>
             </li>
             <li class="card">
+              <img
+                class="card-icon"
+                src="/img/card-private.webp"
+                alt=""
+                width="64"
+                height="64"
+                loading="lazy"
+                decoding="async"
+              />
               <h3>Non-intrusive</h3>
               <p>
-                Your data, your device, your choice. No profile, no quiz — just an
-                email. Your log lives on your device, and you decide whether it syncs
-                anywhere.
+                No profile, no quiz — just an email. Your log lives on your device,
+                and you decide whether it syncs.
               </p>
             </li>
           </ul>
@@ -183,46 +259,69 @@
            the header's brand mark is the eager one above it. -->
       <section class="section section-alt">
         <div class="wrap">
-          <h2>Nothing to install — it's just a link</h2>
+          <h2>Start in your browser, in seconds</h2>
 
-          <img
-            src="/icon-192.png"
-            alt="The SnapGut home-screen icon: a green app tile"
-            width="96"
-            height="96"
-            loading="lazy"
-            decoding="async"
-          />
+          <p class="lede">
+            Tap the link and the camera is there. No download, no app store account,
+            no hundred-megabyte install.
+          </p>
 
           <ul class="checklist prose">
             <li>
-              <strong>Try it in seconds.</strong> Open a URL. No download, no app
-              store account, no hundred-megabyte install.
-            </li>
-            <li>
-              <strong>Runs anywhere from one URL</strong> — iOS, Android, desktop.
+              <strong>One URL, any device</strong> — iOS, Android, desktop.
             </li>
             <li>
               <strong>Add it to your home screen and it behaves like an app</strong> —
-              full screen, its own icon, opening straight to the camera.
+              full screen, its own icon, straight to the camera.
             </li>
             <li>
               <strong>It updates itself.</strong> No version to chase.
             </li>
-            <li>
-              <strong>Fewer strings attached.</strong> Nothing installed means no
-              device permissions beyond the camera and no app-store identity.
-            </li>
           </ul>
 
-          <p class="note">
-            Native iOS and Android apps are planned, mainly for app-store discovery
-            and for reminders a web app cannot deliver dependably — SnapGut sends
-            none today. When they arrive the web app stays the instant-try path: an
-            extra door, not a replacement. And a web app does sit under tighter
-            platform limits than a native build, with the home-screen step first on
-            iOS.
+          <p class="btn-row">
+            <a class="btn btn-primary" href="/login">Open the app</a>
           </p>
+
+          <!-- The official store badges, downloaded from Apple's Marketing Tools
+               and Google's badge resources rather than redrawn — both companies
+               require their own supplied artwork. Google ships its badge inside
+               its own mandated clear space; that transparent padding is trimmed so
+               CSS can set the spacing and both badges present at one height. The
+               artwork itself is untouched.
+
+               The rows are deliberately not links: there is nothing to link to
+               until the apps ship, and a focusable control that goes nowhere is
+               worse than a label. The `alt` names the platform rather than reading
+               "Download on the App Store", which would promise a download that is
+               not there yet. -->
+          <h3>Native apps</h3>
+          <ul class="store-row">
+            <li class="store-btn">
+              <img
+                class="store-badge"
+                src="/img/badge-app-store.svg"
+                alt="App Store"
+                width="120"
+                height="40"
+                loading="lazy"
+                decoding="async"
+              />
+              <span class="badge badge-soon">Coming soon</span>
+            </li>
+            <li class="store-btn">
+              <img
+                class="store-badge"
+                src="/img/badge-google-play.png"
+                alt="Google Play"
+                width="134"
+                height="40"
+                loading="lazy"
+                decoding="async"
+              />
+              <span class="badge badge-soon">Coming soon</span>
+            </li>
+          </ul>
         </div>
       </section>
 
@@ -230,33 +329,39 @@
            claim (Req 9.6). This section is the regulatory line, not just tone —
            see docs/research-and-insights.md. -->
       <section class="section">
-        <div class="wrap">
-          <h2>What we measure, and what we won't say</h2>
-
-          <div class="prose">
+        <!-- Copy first in the DOM so the reading and tab order start at the
+             heading; `.media-reverse` moves the art to the left column visually
+             once there are two columns to move it between. -->
+        <div class="wrap media media-reverse">
+          <div class="media-body">
+            <h2>What we measure, and what we won't say</h2>
             <p>
-              SnapGut looks for <strong>associations</strong>: foods that tend to show
-              up in the hours before you feel worse, more often than your own
-              baseline would explain. Symptoms are matched across windows from
-              30 minutes to 48 hours, because that is the range gut symptoms actually
-              behave over.
+              SnapGut looks for <strong>associations</strong>: foods that show up in
+              the hours before you feel worse, more often than your own baseline would
+              explain — matched across windows from 30 minutes to 48 hours.
             </p>
             <p>
-              A food is only ranked once there is enough of it in your log to say
-              anything — repeated exposures, symptoms following often enough, a clear
-              lift over meals without it, and meals without it to compare against.
-              Below that bar you see the pattern and its confidence, not a verdict.
+              A food is only ranked once your log holds enough of it to say anything.
+              Below that bar you see the pattern and its confidence, not a verdict —
+              and no opaque 0–100 score anywhere.
             </p>
             <p>
               What that is not: SnapGut is not a medical device, it does not diagnose
               anything, and it is not an allergy or intolerance test. A pattern in
-              your log is a place to look, and a conversation to have with a
-              clinician — not proof that one food caused one symptom.
+              your log is a place to look — not proof that one food caused one
+              symptom.
             </p>
-            <p>
-              There is no opaque 0–100 gut score here. You can see the numbers a
-              ranking came from, and export the log behind it whenever you like.
-            </p>
+          </div>
+
+          <div class="media-art">
+            <img
+              src="/img/measure-scene.webp"
+              alt="An illustrated bench scene: a balance scale beside stoppered jars, a notebook and a cup of tea"
+              width="460"
+              height="345"
+              loading="lazy"
+              decoding="async"
+            />
           </div>
         </div>
       </section>
@@ -265,41 +370,52 @@
            against the claims table in docs/positioning.md; the fuller version
            lives on /privacy. -->
       <section class="section section-alt">
-        <div class="wrap">
-          <h2>Your data, your device</h2>
+        <div class="wrap media">
+          <div class="media-body">
+            <h2>Your data, your device</h2>
 
-          <div class="prose">
             <p>
-              No profile, no quiz, no cloud by default. We ask for an email so that
-              you have an account, and that is the whole of it — no name, age,
-              weight, or onboarding questionnaire.
+              No profile, no quiz — just an email. Your log lives in your browser's
+              own storage. Meal photos are sent only to identify the meal, and we
+              don't keep them.
             </p>
-            <p>
-              Your log lives in your browser's own storage on your device. Meal photos
-              are sent only to identify the meal, and we don't keep them. AI insights
-              are built from a summary of your log rather than the raw entries.
-            </p>
+
+            <!-- The sync list sits in the copy column rather than in its own row
+                 below it. On its own it left the short paragraph floating beside a
+                 much taller illustration, and the empty space under it read as a
+                 break in the section. -->
+            <h3>You choose where it syncs</h3>
+
+            <ul class="checklist">
+              <li>
+                <strong>Local only.</strong> The default. The only thing sent anywhere
+                is a photo being identified.
+              </li>
+              <li>
+                <strong>A Google Sheet you own.</strong> Your log, mirrored into your
+                own spreadsheet. A <strong>Pro</strong> feature; photos are never
+                written to it.
+              </li>
+              <li>
+                <strong>SnapGut Cloud.</strong> Cross-device sync, opt-in, a
+                <strong>Pro</strong> feature. Your device stays the source of truth.
+              </li>
+            </ul>
           </div>
 
-          <h3>You choose where it syncs</h3>
+          <div class="media-art">
+            <img
+              src="/img/privacy-scene.webp"
+              alt="An illustrated desk scene: a closed keepsake box with a small brass lock, a key on a ring, and a potted herb"
+              width="460"
+              height="345"
+              loading="lazy"
+              decoding="async"
+            />
+          </div>
+        </div>
 
-          <ul class="checklist prose">
-            <li>
-              <strong>Local only.</strong> The default. Your log stays put; the only
-              thing sent anywhere is a photo being identified.
-            </li>
-            <li>
-              <strong>A Google Sheet you own.</strong> Your log, mirrored into your
-              own spreadsheet. It is a <strong>Pro</strong> feature, and photos are
-              never written to it.
-            </li>
-            <li>
-              <strong>SnapGut Cloud.</strong> Cross-device sync, for when you want
-              your log on your phone and your laptop. It is a <strong>Pro</strong>
-              feature, it is opt-in, and your device stays the source of truth.
-            </li>
-          </ul>
-
+        <div class="wrap">
           <p class="note">
             Switch destinations or turn them off at any time. Export everything to CSV
             or JSON, free, whenever you want — your data is yours, so keep a copy
@@ -316,9 +432,29 @@
            the Plan_Catalog (Req 9.3, 9.8). -->
       <section class="section">
         <div class="wrap">
-          <h2>Free to log. Pro adds the AI.</h2>
+          <h2>Free to log. Pro adds AI and sync.</h2>
 
+          <p class="lede">
+            Pro adds two things: the AI features, and sync — either to SnapGut Cloud
+            on our servers, or to a Google Sheet you own.
+          </p>
+
+          <!-- Pro first: it is the plan being sold, and the free column reads
+               better as the reassurance underneath it than as the opener. -->
           <ul class="grid">
+            <li class="card card-featured">
+              <h3>Pro <span class="badge">AI + sync</span></h3>
+              <ul class="checklist">
+                <li><strong>AI:</strong> photo recognition on every meal</li>
+                <li><strong>AI:</strong> written insights over your own patterns</li>
+                <li><strong>Sync:</strong> cross-device, through SnapGut Cloud</li>
+                <li><strong>Sync:</strong> a mirror in a Google Sheet you own</li>
+              </ul>
+              <p class="note">
+                Pro buys the AI and the syncing, not access to your own history.
+                Logging, your stats, and export are never paywalled.
+              </p>
+            </li>
             <li class="card">
               <h3>Free forever</h3>
               <ul class="checklist">
@@ -326,19 +462,6 @@
                 <li>On-device statistics and food ranking</li>
                 <li>CSV and JSON export</li>
               </ul>
-            </li>
-            <li class="card card-featured">
-              <h3>Pro <span class="badge">Adds AI</span></h3>
-              <ul class="checklist">
-                <li>Photo recognition for your meals</li>
-                <li>AI insights over your patterns</li>
-                <li>Cross-device sync with SnapGut Cloud</li>
-                <li>Sync to a Google Sheet you own</li>
-              </ul>
-              <p class="note">
-                Pro buys the AI, not access to your own history. Logging, your stats,
-                and export are never paywalled.
-              </p>
             </li>
           </ul>
 

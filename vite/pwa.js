@@ -45,6 +45,10 @@ export const marketingDocumentGlobs = () => [
  *
  *   - `**\/foods\/**` — thousands of illustrations; runtime-cached on demand
  *     instead, which is what keeps the install small (Requirement 5.6).
+ *   - `**\/img\/**` — the marketing homepage's illustrations. They belong to a
+ *     document the worker never serves from cache, so precaching them would add
+ *     weight to every install to speed up a page an installed user does not
+ *     visit. The Origin_Server serves them as ordinary static files.
  *   - the Marketing_Site documents — so the worker never answers `/` from cache
  *     and a copy edit is visible on the next load (Requirements 5.3, 5.4).
  *   - `csp-hashes.json` and `size-report.json` — build metadata for the server
@@ -54,6 +58,7 @@ export const marketingDocumentGlobs = () => [
  */
 export const precacheIgnores = () => [
   "**/foods/**",
+  "**/img/**",
   ...marketingDocumentGlobs(),
   GENERATED_FILES.cspHashes,
   GENERATED_FILES.sizeReport,

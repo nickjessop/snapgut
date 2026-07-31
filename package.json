@@ -8,6 +8,7 @@
     "build": "vite build",
     "icons": "node scripts/gen-icons.mjs",
     "og": "node scripts/gen-og.mjs",
+    "brand": "node scripts/gen-brand.mjs",
     "start": "node server/index.js",
     "preview": "npm run build && node server/index.js",
     "test": "vitest run"

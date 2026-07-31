@@ -1,22 +1,25 @@
 // Builds the Open Graph card the Marketing_Pages point `og:image` at
-// (Requirement 8.4), from the same brand source the app icons come from.
+// (Requirement 8.4), from the same brand sources every other mark comes from.
 //
-//   brand/app-icon.png -> public/og.png  (1200x630)
+//   brand/lockup.mjs (symbol + wordmark) -> public/og.png  (1200x630)
 //
-// Run with `npm run og` after the brand mark or the tagline changes. The output
+// Run with `npm run og` after the brand marks or the tagline change. The output
 // lands in `public/`, which Vite copies verbatim into the Build_Output, so the
 // card is a same-origin asset at the fixed path `/og.png`. Fixed rather than
 // content-hashed on purpose: crawlers read the URL as a literal string out of
 // `marketing/partials/meta.html`, so there is nowhere for a hash to come from —
 // the same reason the icons and the manifest keep fixed names.
+//
+// The card is one SVG rasterized once. It used to composite the app icon as a
+// separate rounded-corner raster; the symbol is vector, so it now goes into the
+// same plate as the type and needs no second pass.
 import { writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import sharp from "sharp";
+import { lockupGroup, lockupMetrics } from "../brand/lockup.mjs";
 
 const W = 1200;
 const H = 630;
 
-const ICON = fileURLToPath(new URL("../brand/app-icon.png", import.meta.url));
 const OUT = new URL("../public/og.png", import.meta.url);
 
 // The site palette, from marketing/marketing.css.
@@ -30,21 +33,24 @@ const CLAY = "#cd8560";
 const FONT_DISPLAY = "Iowan Old Style, Palatino, Georgia, Times New Roman, serif";
 const FONT_BODY = "Helvetica Neue, Helvetica, Arial, sans-serif";
 
-const MARK = 168; // brand mark edge length
 const PAD = 84; // outer padding
+const CAP = 72; // wordmark cap height; the lockup scales off this
 
-/** Rounded-corner mask for the brand mark, applied with `dest-in`. */
-const roundedMask = (size, radius) =>
-  Buffer.from(
-    `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
-       <rect width="${size}" height="${size}" rx="${radius}" ry="${radius}" fill="#fff"/>
-     </svg>`
-  );
+// The ground is a dark green wash, so the lockup takes the white symbol variant.
+// Both halves are inked in the site's cream rather than pure white so the mark
+// is the same tone as the type beneath it — pass `ink: "#ffffff"` for a card
+// that uses the white artwork verbatim.
+const lockup = lockupMetrics(CAP, "white");
 
 /**
- * Everything except the brand mark: the background wash, the accent rule, the
- * wordmark, the tagline, and the host line. One SVG so the type sits on exact
- * baselines rather than on composited guesses.
+ * The whole card: background wash, accent rule, the lockup, and the type. One
+ * SVG so everything sits on exact coordinates rather than on composited
+ * guesses.
+ *
+ * No `font-family` is used for the brand name: this SVG is rasterized by sharp,
+ * so a font stack resolves against whatever the *build machine* has installed.
+ * The wordmark is drawn geometry for exactly that reason (see
+ * brand/wordmark.mjs). The three text runs below still carry that risk.
  */
 const plate = () =>
   Buffer.from(
@@ -68,9 +74,7 @@ const plate = () =>
        <!-- Terracotta rule, the one warm note. -->
        <rect x="${PAD}" y="${H - 118}" width="132" height="6" rx="3" fill="${CLAY}"/>
 
-       <text x="${PAD + MARK + 34}" y="${PAD + 118}"
-             font-family="${FONT_DISPLAY}" font-size="104" font-weight="bold"
-             letter-spacing="-2" fill="${CREAM}">SnapGut</text>
+       ${lockupGroup({ x: PAD, y: PAD, capHeight: CAP, variant: "white", ink: CREAM })}
 
        <text x="${PAD}" y="${PAD + 268}"
              font-family="${FONT_DISPLAY}" font-size="58" font-weight="bold"
@@ -86,18 +90,12 @@ const plate = () =>
      </svg>`
   );
 
-const mark = await sharp(ICON)
-  .resize(MARK, MARK, { fit: "cover" })
-  .composite([{ input: roundedMask(MARK, 40), blend: "dest-in" }])
-  .png()
-  .toBuffer();
-
-const png = await sharp(plate())
-  .composite([{ input: mark, top: PAD, left: PAD }])
-  .png({ compressionLevel: 9 })
-  .toBuffer();
-
+const png = await sharp(plate()).png({ compressionLevel: 9 }).toBuffer();
 writeFileSync(OUT, png);
 
 const { width, height } = await sharp(png).metadata();
-console.log(`wrote public/og.png (${width}x${height}, ${(png.length / 1024).toFixed(1)} KB)`);
+console.log(
+  `wrote public/og.png (${width}x${height}, ${(png.length / 1024).toFixed(1)} KB)\n` +
+    `lockup at ${PAD},${PAD} — ${lockup.width}x${lockup.height}, ` +
+    `symbol ${lockup.symbol.width}x${lockup.symbol.height}, cap ${CAP}`
+);

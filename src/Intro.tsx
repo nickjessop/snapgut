@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { CameraIcon, SymptomIcon, InsightsIcon, MealIcon, type IconProps } from "./icons";
+import Wordmark from "./Wordmark";
 import type { ComponentType } from "react";
 
 export const ONBOARDED_KEY = "food-snap-onboarded";
@@ -49,7 +50,7 @@ export default function Intro({ onFinish }: { onFinish: () => void }) {
         <div className="intro-badge splash-badge">
           <MealIcon size={54} strokeWidth={1.75} />
         </div>
-        <div className="wordmark">SnapGut</div>
+        <Wordmark className="wordmark" cap={26} />
         <div className="tagline">Know what your gut is telling you</div>
       </div>
     );
