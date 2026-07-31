@@ -24,11 +24,13 @@
 // deliberately asserts none of that, and instead reads only the emitted
 // `dist/pricing.html` to confirm what the shipped page actually says.
 //
-// HTML comments ship in the Build_Output, so the scan covers comment text too.
-// That is intended: an explanatory comment is as capable of carrying a forbidden
-// phrase into a public response body as the copy is. Attribute-borne copy — the
-// meta description, the OG and Twitter text, `alt` — is scanned for the same
-// reason.
+// Source comments do *not* ship: `vite/marketing.js` strips them from the
+// flattened documents, so the editing notes in `marketing/` stay in the
+// repository instead of being served to every visitor as an annotated map of the
+// internals. That guarantee is asserted below, and the extraction still covers
+// comment text so a regression in the stripping cannot also silently shrink this
+// scan's corpus. Attribute-borne copy — the meta description, the OG and Twitter
+// text, `alt` — is scanned because a crawler reads it as copy.
 //
 // ── The "Cloud sync available" entry, handled explicitly ────────────────────
 //
@@ -393,10 +395,11 @@ describe("the built Marketing_Site contains no Forbidden_Claim (R9.1, R9.2)", ()
     expect(scanForClaims(file, readable.get(file)!)).toEqual([]);
   });
 
-  it("scans the comment text that ships in the response body", () => {
-    // Not a claim check — a check that the corpus includes comments at all, since
-    // a scan that quietly skipped them would pass this file's other assertions.
-    expect(readable.get("index.html")).toContain("the marketing home page (task 5.2)");
+  it.each(marketingDocuments)("%s ships no source comment", (file) => {
+    // The sources are heavily commented — which requirement a section serves,
+    // which wording is approved, which internals a sentence was checked against.
+    // None of that belongs in a public response body.
+    expect(built.get(file)).not.toContain("<!--");
   });
 
   it("scans the copy carried in attributes", () => {

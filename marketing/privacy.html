@@ -1,35 +1,28 @@
 <!doctype html>
 <!--
-  Task 5.4 — the plain-language privacy page called for as work item 4 in
+  The plain-language privacy page called for as work item 4 in
   `docs/positioning.md`, which Requirement 9.7 makes concrete: what is on the
   device, what is on the server, what is transmitted for recognition, and how to
   export and delete.
 
-  Every statement here is checked against the code rather than the marketing
-  instinct, because Requirement 9.1 forbids a claim the code does not support and
-  the claims table in `docs/positioning.md` is only as good as its last audit:
+  Every statement here is checked against the behaviour of the app rather than
+  the marketing instinct, because Requirement 9.1 forbids a claim the code does
+  not support.
 
-    - the account record — `server/store.js`, `newUser()`
-    - verification codes, attempts, expiry — `server/index.js`, /api/auth/*
-    - rate-limit counters and their keys — `server/index.js`, `server/store.js`
-    - the coverage tally — `store.recordMissingFood`, aggregate and unlinked
-    - what /api/recognize sends and keeps — `server/index.js`, nothing persisted
-    - what /api/insights sends — an on-device summary, not the raw log
-    - what SnapGut Cloud stores — `server/eventStore.js`, structured records only
-    - the Sheets mirror's columns — `rowFromEvent` in `src/googleSheets.ts`
-    - what lives on the device — `src/db.ts` (events, photos, outbox, meta)
-    - export — `exportBackup` and `toCSV`; deletion — DELETE /api/sync/data and
-      POST /api/account/delete
+  Two lines to hold on to when editing:
 
-  Requirement 9.5 is the line that matters most: photos ARE transmitted for
-  recognition, so the absolute "data stays put" framing that the Forbidden_Claim
-  list rules out is avoided everywhere. The wording throughout is the approved
-  one: your log stays on your device, photos are sent only to identify a meal,
-  and we do not keep them.
+    - Requirement 9.5: photos ARE transmitted for recognition, so the absolute
+      "your data never leaves the device" framing the Forbidden_Claim list rules
+      out is avoided everywhere. The approved wording is the one used throughout:
+      your log stays on your device, photos are sent only to identify a meal, and
+      we do not keep them.
 
-  Cross-device sync shipped as a Pro feature (the `cloud-sync` spec), so it is
-  described in the present tense. Task 12.4 will add the canonical SnapGut Cloud
-  doc; this page does not depend on it.
+    - Describe behaviour, not internals. This page deliberately does not name our
+      field names, our infrastructure components, or the specific vendor behind
+      each function: those change without the user-facing promise changing, and a
+      page that enumerates them is a page that goes stale and doubles as a map of
+      the stack. Categories of provider, and what each category receives, is the
+      level of detail that is both true and useful.
 -->
 <html lang="en">
   <head>
@@ -51,7 +44,7 @@
           <h2>The short version</h2>
           <ul class="checklist">
             <li>Your meals, symptoms, and photos live in your browser's own storage on your device.</li>
-            <li>Our server holds an account record: your email address, whether Pro is active, and a couple of counters.</li>
+            <li>All we hold about you is your email address and whether Pro is active.</li>
             <li>A meal photo is sent to identify the dish, and is not stored on our servers.</li>
             <li>We ask for no name, age, gender, weight, or onboarding quiz.</li>
             <li>Nothing syncs anywhere unless you switch a destination on yourself.</li>
@@ -61,17 +54,15 @@
 
           <h2>What stays on your device</h2>
           <p>
-            The app keeps your timeline in IndexedDB, the browser's own on-device
-            database. That is the source of truth: everything you see in the app is
-            read from there, and every statistic is calculated there.
+            The app keeps your timeline in your browser's own on-device database.
+            That is the source of truth: everything you see in the app is read from
+            there, and every statistic is calculated there.
           </p>
           <ul>
             <li>Meals — the dish name, the ingredients and how confident the recognition was, and any note you write.</li>
             <li>Meal photos, as image files. Photos are only ever stored on your device.</li>
             <li>Symptoms and their severities, Bristol stool scores, and stress and sleep check-ins.</li>
-            <li>Deletion markers, so an entry you delete on one device stays deleted on the others.</li>
-            <li>A queue of entries still waiting to sync, if you have turned a sync destination on.</li>
-            <li>Your sign-in token and your settings, in the browser's local storage.</li>
+            <li>Your sign-in session and your settings.</li>
           </ul>
           <p>
             Deleting the app's data in your browser, or removing the app from your
@@ -82,70 +73,30 @@
 
           <h2>What we keep on our servers</h2>
           <p>
-            One record per account, and it is this short:
-          </p>
-          <div class="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">Field</th>
-                  <th scope="col">What it holds</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><code>email</code></td>
-                  <td>The address you sign in with. The only personal detail we ask for.</td>
-                </tr>
-                <tr>
-                  <td><code>pro</code></td>
-                  <td>Whether Pro is switched on for the account.</td>
-                </tr>
-                <tr>
-                  <td><code>proUntil</code></td>
-                  <td>When Pro runs out, or empty for a lifetime purchase.</td>
-                </tr>
-                <tr>
-                  <td><code>freeAiUsed</code></td>
-                  <td>How many free AI actions you have used, so the trial can be counted.</td>
-                </tr>
-                <tr>
-                  <td><code>stripeCustomerId</code></td>
-                  <td>Stripe's reference for your payments, set only if you buy Pro.</td>
-                </tr>
-                <tr>
-                  <td><code>createdAt</code></td>
-                  <td>When the account was created.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p>
-            There is no field for your log, your photos, your symptoms, or a profile.
-            Alongside that record, the server holds a few short-lived operational
-            things:
+            One short record per account. There is no profile, and no field for your
+            log, your photos, or your symptoms:
           </p>
           <ul>
             <li>
-              A one-time sign-in code, stored as a hash rather than the code itself,
-              with an expiry ten minutes out and a count of wrong attempts. It is
-              deleted the moment you use it.
+              <strong>Your email address</strong> — the only personal detail we ask
+              for. It is what you sign in with and where a sign-in code goes.
             </li>
             <li>
-              Rate-limit counters, keyed by your email address or by the network
-              address a request arrived from, so the sign-in endpoint cannot be
-              hammered. They expire with their time window.
-            </li>
-            <li>
-              A tally of foods we could not illustrate, which tells us what to draw
-              next. It records a food name and a count, and is not linked to an
-              account.
+              <strong>Whether Pro is active</strong>, and enough to bill it
+              correctly: when it renews, and how much of the free AI trial you have
+              used.
             </li>
           </ul>
           <p>
-            If you buy Pro, the payment itself happens on Stripe's own checkout
-            page. We never see or hold your card details — only the customer
-            reference in the table above.
+            Alongside that, the server holds short-lived operational data: a
+            one-time sign-in code, kept as a hash rather than the code itself and
+            deleted the moment you use it, and counters that stop the sign-in
+            endpoint being hammered, which expire on their own. Neither is part of
+            your log.
+          </p>
+          <p>
+            If you buy Pro, the payment happens on Stripe's own checkout page. We
+            never see or hold your card details.
           </p>
 
           <h2>What is transmitted to recognise a meal</h2>
@@ -154,12 +105,11 @@
             precise about.
           </p>
           <p>
-            When you snap a meal, the photo is sent to our server, which passes it
-            to Google's Vertex AI to identify the dish and its ingredients. The
-            names come back, the app writes them into your on-device log, and the
-            photo is not written to any database, bucket, or log file on our side.
-            We keep the picture nowhere; the copy in your timeline is on your
-            device.
+            When you snap a meal, the photo is sent to our server, which passes it to
+            an AI vision provider to identify the dish and its ingredients. The names
+            come back, the app writes them into your on-device log, and the photo is
+            not written to any database, storage bucket, or log file on our side. We
+            keep the picture nowhere; the copy in your timeline is on your device.
           </p>
           <p>
             The AI insight feature works from a summary your device calculates
@@ -180,13 +130,12 @@
           <h3>SnapGut Cloud</h3>
           <p>
             Our own sync, for keeping two devices in step and restoring after a
-            reinstall. When you turn it on, this device uploads your structured
-            entries — meals and ingredients, symptoms and severities, Bristol
-            scores, stress and sleep values, and any note text — to our server
-            storage, along with deletion markers so a delete travels between your
-            devices. Meal photos are not part of it and stay on your device. The
-            app shows you this before the first upload and will not start without
-            your acknowledgement.
+            reinstall. When you turn it on, this device uploads your entries — meals
+            and ingredients, symptoms and severities, Bristol scores, stress and
+            sleep values, and any note text — so they can reach your other devices,
+            including the fact that you deleted something. Meal photos are not part
+            of it and stay on your device. The app shows you this before the first
+            upload and will not start without your acknowledgement.
           </p>
           <h3>A Google Sheet you own</h3>
           <p>
@@ -223,17 +172,16 @@
           <ul>
             <li>
               <strong>The copy in SnapGut Cloud.</strong> Settings has a
-              <em>Delete cloud copy</em> control that erases every entry and
-              deletion marker we hold for you. Your on-device log is untouched, and
-              it works even if Pro has lapsed, so a former subscriber can always
-              remove their cloud copy.
+              <em>Delete cloud copy</em> control that erases everything we hold from
+              your log. Your on-device log is untouched, and it works even if Pro has
+              lapsed, so a former subscriber can always remove their cloud copy.
             </li>
             <li>
               <strong>Your account.</strong> Deleting the account removes your cloud
-              copy first and then the account record itself, including any pending
-              sign-in code. If any part of that fails, we report it as incomplete
-              and change nothing else, so you can simply repeat it rather than being
-              left with data we can no longer reach.
+              copy first and then the account record itself. If any part of that
+              fails, we report it as incomplete and change nothing else, so you can
+              simply repeat it rather than being left with data we can no longer
+              reach.
             </li>
             <li>
               <strong>The data on your device.</strong> Delete individual entries in
@@ -249,17 +197,24 @@
 
           <h2>Email we send you</h2>
           <p>
-            Sign-in codes, sent through Resend, our email provider. That is the only
+            Sign-in codes, sent through an email delivery provider. That is the only
             email the app sends: no marketing list, no notifications, nothing else.
           </p>
 
           <h2>Who else is involved</h2>
           <p>
-            The service runs on Google Cloud: Cloud Run serves the app, Firestore
-            holds the account record and any cloud sync data, Cloud Storage holds
-            our food illustrations, and Vertex AI does the meal recognition. Stripe
-            handles payments and Resend sends the sign-in codes. Cloudflare sits in
-            front of the site.
+            We use a small number of providers to run the service, and each one
+            receives only what its job needs:
+          </p>
+          <ul>
+            <li>A cloud platform that hosts the app and stores the account record and any cloud sync data.</li>
+            <li>An AI provider that identifies a meal from a photo, and generates insight text from an on-device summary.</li>
+            <li>Stripe, for payments and subscription management.</li>
+            <li>An email provider, for sign-in codes.</li>
+          </ul>
+          <p>
+            None of them receives your log for any purpose of their own, and we do
+            not sell or share your data with anyone.
           </p>
           <p>
             These pages load no third-party scripts, embed nothing from another

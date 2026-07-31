@@ -1,7 +1,7 @@
 /**
  * The Marketing_Site half of the multi-page build.
  *
- * Three jobs, all driven by the Route_Table in `shared/site.js`:
+ * Four jobs, all driven by the Route_Table in `shared/site.js`:
  *
  *   1. **Inputs.** `marketingInputs()` produces the `rollupOptions.input` map —
  *      the App_Shell plus one entry per Marketing_Page plus the not-found
@@ -16,7 +16,12 @@
  *      document and fails the build if it references an asset that is not in the
  *      Build_Output (Requirement 7.4).
  *
- *   3. **The generated artifacts.** Once the documents are flat and verified, the
+ *   3. **Comment stripping.** The sources carry editing notes — which requirement
+ *      a section exists for, which wording is approved — that belong in the
+ *      repository and not on the wire. They are removed from the flattened
+ *      documents before anything is derived from them.
+ *
+ *   4. **The generated artifacts.** Once the documents are flat and verified, the
  *      same step writes the four files nothing else in the repo can derive:
  *
  *        dist/robots.txt        allow the Marketing_Pages, disallow the
@@ -164,6 +169,70 @@ const isLocalAsset = (ref) => {
 
 /** Strip the query and fragment, and make the path relative to the output root. */
 const toOutputPath = (ref) => ref.trim().split("#")[0].split("?")[0].replace(/^\/+/, "");
+
+/**
+ * `<!-- … -->`, except a conditional comment, which is markup a browser acts on.
+ * Non-greedy, so two comments in a document are two matches rather than one span
+ * swallowing everything between them.
+ */
+const HTML_COMMENT = /<!--(?!\[if)[\s\S]*?-->/g;
+
+/** Script and style bodies, where a `<!--` is content rather than a comment. */
+const VERBATIM_ELEMENT = /<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi;
+
+/** Three or more newlines — what removing a block comment tends to leave behind. */
+const BLANK_RUN = /\n\s*\n\s*\n+/g;
+
+/**
+ * Drop the source comments from an emitted document.
+ *
+ * The marketing sources carry substantial notes to whoever edits them next: which
+ * requirement a section exists for, which wording is approved, which claim is
+ * forbidden. Those are for the repository, not for the wire — shipped, they cost
+ * every visitor bytes and hand a reader an annotated map of the internals. The
+ * privacy page is the sharpest case: its whole point is that the user does not
+ * have to care how the thing is built.
+ *
+ * Script and style bodies are passed through untouched, so a `<!--` inside
+ * structured data cannot be mistaken for a comment opener. That also keeps the
+ * `application/ld+json` bodies byte-identical, which matters because their CSP
+ * hashes are computed from the emitted document further down.
+ *
+ * Conditional comments survive: they are markup, not commentary.
+ *
+ * @param {string} html
+ * @returns {string}
+ */
+export function stripComments(html) {
+  /** @type {string[]} */
+  const verbatim = [];
+  // Park script/style bodies behind a placeholder that cannot occur in HTML text,
+  // strip over what is left, then put them back exactly as they were.
+  const parked = html.replace(VERBATIM_ELEMENT, (element) => {
+    verbatim.push(element);
+    return `\u0000verbatim:${verbatim.length - 1}\u0000`;
+  });
+
+  return parked
+    .replace(HTML_COMMENT, "")
+    .replace(BLANK_RUN, "\n\n")
+    .replace(/\u0000verbatim:(\d+)\u0000/g, (_marker, index) => verbatim[Number(index)]);
+}
+
+/**
+ * Rewrite each emitted document without its source comments.
+ *
+ * @param {string} outDir absolute path of the Build_Output root
+ * @param {string[]} documents document paths relative to `outDir`
+ */
+function stripDocumentComments(outDir, documents) {
+  for (const document of documents) {
+    const file = path.join(outDir, document);
+    const html = readFileSync(file, "utf8");
+    const stripped = stripComments(html);
+    if (stripped !== html) writeFileSync(file, stripped);
+  }
+}
 
 /**
  * Move each emitted marketing document from `dist/marketing/` to the flat `file`
@@ -436,6 +505,10 @@ export function marketingBuild({ dir = SOURCE_DIR } = {}) {
     },
     writeBundle() {
       const documents = flattenDocuments(outDir, dir);
+      // Before the asset check and before any artifact is derived from a
+      // document, so the CSP hashes and the size report describe the bytes that
+      // actually ship.
+      stripDocumentComments(outDir, documents);
       assertAssetsExist(outDir, documents);
       // After the check, so a build that would ship a broken page fails before
       // it produces a sitemap advertising that page.

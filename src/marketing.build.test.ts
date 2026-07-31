@@ -1,7 +1,7 @@
 // @vitest-environment node
 //
-// The multi-page build inputs, the flatten/asset-check step, and the generated
-// artifacts in `vite/marketing.js`.
+// The multi-page build inputs, the flatten/strip/asset-check steps, and the
+// generated artifacts in `vite/marketing.js`.
 //
 // Validates: Requirements 7.1, 7.3, 7.4, 7.8, 7.9, 8.7, 8.8, 11.4, 15.5
 //
@@ -17,7 +17,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { gzipSync } from "node:zlib";
 // prettier-ignore
 // @ts-ignore -- untyped ESM JavaScript (vite/ is not TypeScript)
-import { documentSizes, GENERATED_FILES, jsonLdHashes, marketingBuild, marketingInputs, referencedAssets, robotsTxt, sitemapXml } from "../vite/marketing.js";
+import { documentSizes, GENERATED_FILES, jsonLdHashes, marketingBuild, marketingInputs, referencedAssets, robotsTxt, sitemapXml, stripComments } from "../vite/marketing.js";
 // @ts-ignore -- untyped ESM JavaScript (shared/ is not TypeScript)
 import {
   APP_PREFIX,
@@ -109,6 +109,55 @@ describe("the flattening step", () => {
     run();
     mkdirSync(path.join(outDir, "marketing"), { recursive: true });
     expect(run).not.toThrow();
+  });
+});
+
+describe("the comment-stripping step", () => {
+  it("removes source comments from every emitted document", () => {
+    emit("index.html", '<!-- checked against server/store.js --><h1>Home</h1>');
+    run();
+    const html = readFileSync(path.join(outDir, "index.html"), "utf8");
+    expect(html).not.toContain("<!--");
+    expect(html).not.toContain("server/store.js");
+    expect(html).toContain("<h1>Home</h1>");
+  });
+
+  it("hashes structured data as it ships, after the comments are gone", () => {
+    const body = '{"@type":"WebSite"}';
+    emit(
+      "index.html",
+      `<!-- a note --><script type="application/ld+json">${body}</script>`
+    );
+    run();
+    const hashes = generatedJson<Record<string, string[]>>(GENERATED_FILES.cspHashes);
+    expect(hashes["/"]).toEqual([
+      `sha256-${createHash("sha256").update(body, "utf8").digest("base64")}`,
+    ]);
+  });
+});
+
+describe("stripComments", () => {
+  it("drops a comment but keeps the markup around it", () => {
+    expect(stripComments("<p>a</p><!-- note --><p>b</p>")).toBe("<p>a</p><p>b</p>");
+  });
+
+  it("drops each of several comments rather than everything between them", () => {
+    expect(stripComments("<!--a--><p>keep</p><!--b-->")).toBe("<p>keep</p>");
+  });
+
+  it("leaves script and style bodies untouched", () => {
+    const html = '<script type="application/ld+json">{"note":"<!-- x -->"}</script><style>/*<!--*/</style>';
+    expect(stripComments(html)).toBe(html);
+  });
+
+  it("keeps a conditional comment, which is markup rather than commentary", () => {
+    const html = "<!--[if IE]><p>old</p><![endif]-->";
+    expect(stripComments(html)).toBe(html);
+  });
+
+  it("is idempotent", () => {
+    const once = stripComments("<!doctype html>\n<!-- note -->\n<html lang=\"en\"></html>");
+    expect(stripComments(once)).toBe(once);
   });
 });
 
