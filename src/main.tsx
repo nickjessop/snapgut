@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { registerSW } from "virtual:pwa-register";
+import { registerServiceWorker } from "./swUpdate";
 import App from "./App";
 import { initTheme } from "./theme";
 import "./styles.css";
@@ -13,9 +13,10 @@ initTheme();
 // document the build emits, marketing pages included — and those must load
 // nothing from the app's output (Requirements 7.7, 11.3).
 //
-// `autoUpdate` behavior is unchanged: the generated worker takes control
-// immediately and this reloads the page once a newer one activates.
-registerSW({ immediate: true });
+// Updates still apply on their own, with no prompt and no approval — but the reload
+// waits for a moment when nothing unsaved is open, because a captured photo lives
+// only in memory. See src/swUpdate.ts.
+registerServiceWorker();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

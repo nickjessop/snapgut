@@ -1,6 +1,25 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+import { readFileSync } from "node:fs";
+
+/**
+ * The build id shown in Settings and attached to every metric tick, so a counter
+ * cohort and a bug report are both attributable to a specific deploy.
+ *
+ * Derived from `package.json` plus the build timestamp rather than from a git SHA,
+ * because `.git` is excluded from the Docker build context (`.dockerignore`) — a
+ * `git rev-parse` would work locally and silently produce nothing in Cloud Build,
+ * which is the worst of the two failure modes. The timestamp is always available
+ * and always increases, which is what the field is for.
+ */
+const pkgVersion = JSON.parse(readFileSync("./package.json", "utf8")).version;
+const buildStamp = new Date()
+  .toISOString()
+  .replace(/[-:]/g, "")
+  .replace("T", "-")
+  .slice(0, 13);
+const APP_BUILD = `${pkgVersion}+${buildStamp}`;
 // @ts-expect-error -- untyped ESM JavaScript (vite/ is plain JS, like server/ and shared/)
 import { marketingPartials } from "./vite/partials.js";
 // @ts-expect-error -- untyped ESM JavaScript (vite/ is plain JS, like server/ and shared/)
@@ -31,15 +50,26 @@ export default defineConfig({
     // the build on an asset a page references but the build did not emit.
     marketingBuild(),
     VitePWA({
-      registerType: "autoUpdate",
+      // "prompt" rather than "autoUpdate", and *not* to show a prompt.
+      //
+      // Under "autoUpdate" the generated worker calls skipWaiting/clientsClaim on
+      // its own and the virtual module reloads the page the instant it takes
+      // control. That reload cannot be timed, and a captured photo is an in-memory
+      // Blob: an update landing mid-capture discards it (Requirement 4.8 — a load
+      // can never restore an Ephemeral_Flow). Most likely right after a deploy,
+      // when traffic is highest.
+      //
+      // "prompt" leaves the new worker waiting until the page asks for it, which is
+      // the control that was missing. Updates stay invisible — `src/swUpdate.ts`
+      // applies them automatically, with no toast and no approval — but it waits
+      // for a moment when nothing unsaved is open.
+      registerType: "prompt",
       // The plugin's own injection is document-blind: it would add
       // <script src="/registerSW.js"> to every HTML input, so a Marketing_Page
       // would register the Service_Worker and pull in a script from the app's
-      // output (Requirements 7.7, 11.3). Registration lives in src/main.tsx
-      // instead — the App_Shell is the only document that loads the app bundle,
-      // so it is the only document that starts the worker. `autoUpdate` is
-      // unaffected: the generated worker still calls skipWaiting/clientsClaim
-      // and the virtual module reloads the page when the new one takes over.
+      // output (Requirements 7.7, 11.3). Registration lives in src/swUpdate.ts,
+      // called from src/main.tsx — the App_Shell is the only document that loads
+      // the app bundle, so it is the only document that starts the worker.
       injectRegister: null,
       includeAssets: [
         "favicon.svg",
@@ -47,14 +77,22 @@ export default defineConfig({
         "favicon-32.png",
         "favicon-96.png",
         "apple-touch-icon.png",
+        // The badge the splash and the sign-in screen draw (src/AppIcon.tsx).
+        // Named here because Workbox's default globPatterns cover png/svg/ico but
+        // not webp, and 10 KB in the precache is what makes a first run offline
+        // show the icon rather than the bare gradient placeholder under it.
+        "app-icon-384.webp",
       ],
       manifest: {
         name: "SnapGut",
         short_name: "SnapGut",
         description: "Snap your meals, spot your triggers, feel better.",
         theme_color: "#111111",
-        // The basil tile the icons sit on, so Android's launch splash reads as
-        // one field of green behind the mark instead of framing it in black.
+        // Deep basil, a shade under the icon's own gradient tile (#3da57b ->
+        // #2f7d5f). Android draws the masked icon on this field, so the launch
+        // splash reads as the badge on brand green rather than on black — and it
+        // is the same colour as the #boot screen in app/index.html, so the
+        // handover between the two is seamless.
         background_color: "#2d5d4d",
         display: "standalone",
         orientation: "portrait",
@@ -70,8 +108,9 @@ export default defineConfig({
           { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
           {
             // Padded into the centre 80% so Android's adaptive masks can crop
-            // 10% off each edge without clipping the mark. The padding is the
-            // same basil green as the tile, so the inset seam is invisible.
+            // 10% off each edge without clipping the mark. The padding continues
+            // the tile's own gradient (scripts/gen-icons.mjs), so the inset seam
+            // is invisible.
             src: "/icon-maskable-512.png",
             sizes: "512x512",
             type: "image/png",
@@ -130,6 +169,11 @@ export default defineConfig({
     proxy: {
       "/api": "http://localhost:8080",
     },
+  },
+  // Replaced at build time, so the running client can name its own build. Declared
+  // in `src/vite-env.d.ts`.
+  define: {
+    __APP_BUILD__: JSON.stringify(APP_BUILD),
   },
   build: {
     outDir: "dist",

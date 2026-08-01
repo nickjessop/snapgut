@@ -10,3 +10,9 @@ food-pack/
 
 # Icon sources — only used by `npm run icons`; the emitted icons live in public/
 brand/
+
+# Local scratch and planning, neither of which the build reads. Keeps the context
+# (and so the upload on every `gcloud run deploy --source`) small.
+.playwright-mcp/
+.kiro/
+.vscode/
