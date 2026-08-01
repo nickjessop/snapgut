@@ -267,21 +267,50 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-html,
-body,
-#root {
+/* App-like viewport: the document itself never scrolls or bounces, and every
+   scroll happens inside a surface that owns it.
+ *
+ * Two faults this fixes. The bottom gap came from a height mismatch — `html`/`body`
+ * at `height: 100%` resolve against the *initial* viewport, which on mobile
+ * includes the strip under the collapsing URL bar, while `.app` was `100dvh`, the
+ * dynamic one. The two disagreed by exactly the toolbar's height.
+ *
+ * The whole-screen vertical drag came from the document being scrollable at all.
+ * `overscroll-behavior: none` on `body` alone does not stop the iOS document
+ * bounce; pinning `body` to the visual viewport with `position: fixed` does, and it
+ * also makes `height: 100%` unambiguous for everything inside it.
+ *
+ * Scrolling is preserved because it was never the document's job: `.history`,
+ * `.insights`, `.sheet`, and `.settings-scroll` are the scroll containers, each
+ * with `overscroll-behavior: contain` so reaching the end does not chain outward.
+ *
+ * Scoped to the app bundle. The Marketing_Site has its own stylesheet and must keep
+ * scrolling like an ordinary page. */
+html {
   height: 100%;
-  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-body);
-  overscroll-behavior: none;
   user-select: none;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+#root {
+  height: 100%;
+  margin: 0;
 }
 
 /* Subtle depth: a soft tinted glow at the top of scrollable surfaces. */
@@ -295,7 +324,10 @@ body {
 }
 
 .app {
-  height: 100dvh;
+  /* `100%` of the fixed body, not `100dvh`: the body is already pinned to the
+     visual viewport, so inheriting from it cannot disagree with it the way two
+     independent viewport units could. */
+  height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -416,6 +448,50 @@ body {
   transform: scale(0.9);
 }
 
+/* The two alternatives flanking the shutter: pick from the library, or log with
+   no photo at all. Deliberately smaller and translucent so the shutter stays the
+   obvious primary action — these are escapes, not competing options. */
+.cam-aux {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  padding: 0;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+.cam-aux:active {
+  transform: scale(0.9);
+  background: rgba(0, 0, 0, 0.5);
+}
+.cam-aux:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/* Same two escapes on the no-live-camera fallback, where they matter more. */
+.cam-fallback-alts {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-top: 10px;
+}
+
+/* The exact date/time field revealed by the "Date…" chip in WhenPicker. */
+.when-exact {
+  margin-top: 10px;
+  width: 100%;
+}
+
 .top-bar {
   position: absolute;
   top: calc(12px + var(--safe-top));
@@ -460,9 +536,16 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 20px 20px calc(20px + var(--safe-bottom));
+  /* The top inset was missing while the bottom one was already here, which is why
+     the Cancel/Back control in `.log-header` sat under the status bar and notch on
+     every log and edit screen. */
+  padding: calc(20px + var(--safe-top)) 20px calc(20px + var(--safe-bottom));
   gap: 18px;
   overflow-y: auto;
+  /* A scroll that reaches the end must not chain to the document, which is what
+     lets the whole screen drag on iOS. */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .thumb {
@@ -902,12 +985,6 @@ body {
   margin: 0;
   line-height: 1;
 }
-.insights .disclaimer {
-  font-size: 12px;
-  color: var(--muted);
-  margin-bottom: 18px;
-  line-height: 1.4;
-}
 .stat-cards {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -954,6 +1031,156 @@ body {
 .assoc .conf {
   font-size: 12px;
   color: var(--muted);
+}
+
+/* A tappable association row: same shape as the static one, so the list does not
+   change rhythm depending on whether we happen to have reference copy for a term. */
+.assoc-btn {
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  gap: 12px;
+}
+.assoc-btn:active {
+  background: var(--glow);
+}
+.assoc-btn:focus-visible {
+  outline: 2px solid var(--accent, currentColor);
+  outline-offset: -2px;
+}
+/* Quiet: the row's job is the pattern, not the footnote. */
+.assoc-why {
+  margin-left: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ---------- Trigger reference sheet ---------- */
+.ti-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 2px 10px;
+}
+.ti-title {
+  font-size: 19px;
+  font-weight: 700;
+}
+.ti-tag {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border-radius: var(--r-pill);
+  background: var(--glow);
+  color: var(--muted);
+}
+.ti-summary {
+  margin: 0 2px 14px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.ti-label {
+  margin: 0 2px 4px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ti-body {
+  margin: 0 2px 14px;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--text);
+}
+.ti-caveat {
+  margin: 4px 2px 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+/* A long entry scrolls inside the sheet rather than pushing Close off screen. */
+.trigger-info {
+  max-height: 88dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* ---------- Past insights ---------- */
+.past-insights {
+  margin-top: 22px;
+  border-top: 1px solid var(--border);
+}
+.past-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 2px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.past-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.past-caret {
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+.past-caret.open {
+  transform: rotate(-135deg);
+}
+.past-item {
+  padding: 12px 2px 14px;
+  border-top: 1px solid var(--border);
+}
+.past-date {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+.past-meta {
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.past-headline {
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+.past-body {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--muted);
+  white-space: pre-wrap;
 }
 .redflag {
   background: var(--bad-soft);
@@ -1087,6 +1314,7 @@ body {
   to { opacity: 1; }
 }
 .action-sheet {
+  position: relative;
   width: 100%;
   background: var(--card);
   border-top: 1px solid var(--border);
@@ -1101,6 +1329,29 @@ body {
 @keyframes slideup {
   from { transform: translateY(100%); }
   to { transform: translateY(0); }
+}
+/* The tray must never leave the bottom edge, but `--spring` overshoots on
+   purpose: its curve peaks at ~1.098 of the travel, so mid-animation the sheet
+   sits about 9.8% of its own height above where it lands and a strip of backdrop
+   would show underneath. This continues the sheet's surface past the viewport
+   edge instead of retuning the easing, so the slide keeps its spring.
+
+   The height is a percentage of the sheet — the same quantity the overshoot is a
+   percentage of — so the cover holds at every sheet size with room to spare, and
+   the safe-area padding riding along with the transform is covered too.
+
+   Absolutely positioned, so it is not a flex item and the `gap` above does not
+   see it. Nothing here may set `overflow` on `.action-sheet`, which would clip
+   it. */
+.action-sheet::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 15%;
+  background: var(--card);
+  pointer-events: none;
 }
 .action-grip {
   width: 40px;
@@ -1157,11 +1408,43 @@ body {
   cursor: pointer;
 }
 
+/* The one back affordance (src/BackButton.tsx). Sized as a proper touch target and
+   nudged left so the chevron's optical edge lines up with the content beside it
+   rather than its bounding box. */
+.back-btn {
+  width: 40px;
+  height: 40px;
+  margin-left: -9px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+.back-btn:active {
+  transform: scale(0.92);
+  background: var(--chip-bg, rgba(0, 0, 0, 0.06));
+}
+.back-btn:focus-visible {
+  outline: 2px solid var(--accent, currentColor);
+  outline-offset: 2px;
+}
+
 /* ---------- Log screen headers ---------- */
 .log-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* Enough height that the back control is a comfortable target rather than a
+     line of text wedged against the top of the sheet. */
+  min-height: 36px;
+  flex: 0 0 auto;
 }
 .log-title {
   font-size: 17px;
@@ -1602,36 +1885,30 @@ body {
   white-space: nowrap;
 }
 
-/* ---------- Install hint ---------- */
-.install-hint {
+/* ---------- Install nudge ----------
+   Was an inline card in the Logs list; now a sheet raised over the tab shell, so it
+   is seen wherever the user is rather than only on one tab. Borrows the paywall's
+   head styles, since it is the same kind of ask. */
+.install-steps {
+  margin: 0 2px 14px;
+  padding-left: 22px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  background: var(--card);
-  border: 2px solid var(--pop);
-  border-radius: 14px;
-  padding: 14px 16px;
-  margin-bottom: 16px;
+  gap: 9px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--text);
 }
-.install-text {
-  flex: 1;
+.install-steps strong {
+  font-weight: 700;
 }
-.install-text strong {
-  font-size: 14px;
-}
-.install-sub {
+/* Quieter than "Not now": a permanent refusal should be available but not inviting. */
+.install-never {
+  display: block;
+  width: 100%;
+  margin-top: 2px;
+  font-size: 12.5px;
   color: var(--muted);
-  font-size: 12px;
-  margin-top: 3px;
-  line-height: 1.4;
-}
-.install-actions {
-  display: flex;
-  gap: 10px;
-}
-.install-actions .chip {
-  flex: 1;
-  justify-content: center;
 }
 
 /* ---------- Motion polish ---------- */
@@ -1650,7 +1927,7 @@ body {
 .stat-cards,
 .rank-group,
 .nudge,
-.install-hint,
+.info-note,
 .redflag {
   animation: fade-up 0.28s var(--spring) both;
 }
@@ -1727,6 +2004,21 @@ body {
   background: var(--accent-grad);
   box-shadow: var(--shadow-accent);
   animation: pop 0.4s var(--spring) both;
+  /* The app-icon variant fills the badge edge to edge, so its own corners have
+     to be cut to the badge's. The intro slides put a stroked icon inside the
+     same box instead and are unaffected. */
+  overflow: hidden;
+}
+
+/* The delivered app icon (src/AppIcon.tsx) rather than a drawn mark: full-bleed,
+   so the artwork's gradient replaces the badge's own. The badge keeps painting
+   `--accent-grad` underneath as the placeholder — same ramp, so the fetch is
+   invisible. */
+.app-icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
 }
 
 @keyframes pop {
@@ -1744,10 +2036,14 @@ body {
 .splash-screen {
   gap: 18px;
 }
+/* A rounded square rather than the circle this was: the badge now shows the
+   installed icon itself, and a circle would crop the corners of its tile and bite
+   into the mark. The radius is ~28% of the box, close to iOS's squircle, so the
+   splash reads as the icon the user tapped. */
 .splash-badge {
-  border-radius: 50%;
   width: 116px;
   height: 116px;
+  border-radius: 32px;
 }
 /* The drawn wordmark (src/Wordmark.tsx). Sized by its `cap` prop rather than
    here, so the box is reserved before this stylesheet lands; colour comes from
@@ -1878,6 +2174,73 @@ body {
   font-size: 14px;
   line-height: 1.55;
   margin: 0 2px 14px;
+  /* A multi-paragraph explainer on a short viewport scrolls inside the sheet
+     rather than pushing the dismiss button off screen. The sheet itself must stay
+     `overflow: visible` — see the note on `.action-sheet::after`. */
+  max-height: 56dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.info-copy p {
+  margin: 0 0 10px;
+}
+.info-copy p:last-child {
+  margin-bottom: 0;
+}
+.info-copy strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* ---------- Info note (the alert-style disclaimer, src/InfoNote.tsx) ---------- */
+.info-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  border-radius: 14px;
+  padding: 11px 11px 11px 13px;
+  margin-bottom: 16px;
+}
+.info-note-ico {
+  display: flex;
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--accent);
+}
+.info-note-text {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+}
+/* The affordance that opens the fuller explanation. 32px square so the tap
+   target clears the minimum while the glyph stays small. */
+.info-note-more {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  margin: -5px -5px -5px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  transition: transform 0.16s var(--spring), background 0.15s ease;
+}
+.info-note-more:active {
+  transform: scale(0.9);
+  background: var(--accent-soft);
+}
+.info-note-more:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 /* ---------- Auth gate ---------- */
@@ -2073,7 +2436,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px 10px;
+  /* Top inset was missing here too, so the back control sat under the status bar. */
+  padding: calc(14px + var(--safe-top)) 16px 10px;
   flex: 0 0 auto;
 }
 .settings-header h1 {
@@ -2084,8 +2448,9 @@ body {
 .settings-scroll {
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: 4px 16px 40px;
+  padding: 4px 16px calc(40px + var(--safe-bottom));
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 .settings-section {
   margin-bottom: 26px;

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import SymptomPicker from "./SymptomPicker";
 import WhenPicker from "./WhenPicker";
+import BackButton from "./BackButton";
 import { putEvent, type LoggedSymptom, type SymptomEvent } from "./db";
 import type { Severity } from "./symptoms";
 
@@ -38,9 +39,7 @@ export default function SymptomLogView({ editing, onDone, onCancel }: Props) {
   return (
     <div className="sheet">
       <div className="log-header">
-        <button className="link-btn" onClick={onCancel}>
-          Cancel
-        </button>
+        <BackButton onClick={onCancel} label="Back, without saving these symptoms" />
         <span className="log-title">How's your gut?</span>
         <span style={{ width: 60 }} />
       </div>

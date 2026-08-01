@@ -1,5 +1,6 @@
 import { useState } from "react";
 import WhenPicker from "./WhenPicker";
+import BackButton from "./BackButton";
 import {
   putEvent,
   type CheckinEvent,
@@ -50,9 +51,7 @@ export default function CheckinLogView({ editing, onDone, onCancel }: Props) {
   return (
     <div className="sheet">
       <div className="log-header">
-        <button className="link-btn" onClick={onCancel}>
-          Cancel
-        </button>
+        <BackButton onClick={onCancel} label="Back, without saving this check-in" />
         <span className="log-title">Stress & sleep</span>
         <span style={{ width: 60 }} />
       </div>
