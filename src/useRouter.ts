@@ -103,9 +103,13 @@ export function useRouter(options: UseRouterOptions): Router {
 
   /**
    * False while the URL is authoritative and the view state has not caught up
-   * yet — the window between applying a boot URL and the resulting render. The
-   * state → URL effect stays quiet in that window, otherwise booting at
-   * `/app/settings` would immediately push `/app` over the top of it.
+   * yet — the window between a URL-first write and the render that applies it.
+   * Every URL-first write opens that window: the boot URL, a `popstate`, and
+   * `navigate`/`redirect`, all of which set the URL and then hand `onRoute` the
+   * job of moving the state to match. The state → URL effect stays quiet in that
+   * window, otherwise booting at `/app/settings` would immediately push `/app`
+   * over the top of it, and a view change committed one render behind a
+   * navigation would be pushed as if it were a new one.
    */
   const syncedRef = useRef(false);
 
@@ -119,8 +123,10 @@ export function useRouter(options: UseRouterOptions): Router {
   const write = useCallback((mode: "push" | "replace", url: string, state: HistoryState) => {
     if (mode === "push") window.history.pushState(state, "", url);
     else window.history.replaceState(state, "", url);
-    // A deliberate write puts the two in step, so the next view change is a real
-    // view change rather than the tail of a boot redirect.
+    // A write made *from* the current view state puts the two in step, so the next
+    // mismatch is a real view change rather than the tail of a boot redirect. The
+    // URL-first callers — `navigate` and `redirect` — clear this again immediately,
+    // because for them the state is the side that still has to catch up.
     syncedRef.current = true;
     setRoute(parseRoute(window.location.pathname, window.location.search));
   }, []);
@@ -128,6 +134,12 @@ export function useRouter(options: UseRouterOptions): Router {
   const navigate = useCallback(
     (target: Route) => {
       write("push", formatRoute(target), null);
+      // The URL leads again: `onRoute` only *schedules* the matching view state,
+      // so until a render observes it the two are out of step for the same reason
+      // they are at boot. Marking that explicitly is what stops an intermediate
+      // render — one that carries an earlier pending update and not this
+      // target — from being mistaken for a fresh view change and pushed.
+      syncedRef.current = false;
       if (target.kind === "app") optionsRef.current.onRoute(target);
     },
     [write]
@@ -136,6 +148,9 @@ export function useRouter(options: UseRouterOptions): Router {
   const redirect = useCallback(
     (target: Route) => {
       write("replace", formatRoute(target), null);
+      // Same reasoning as `navigate`: the write is URL-first, so the state has
+      // not caught up yet.
+      syncedRef.current = false;
       if (target.kind === "app") optionsRef.current.onRoute(target);
     },
     [write]

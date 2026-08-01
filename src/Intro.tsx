@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { CameraIcon, SymptomIcon, InsightsIcon, MealIcon, type IconProps } from "./icons";
+import { CameraIcon, SymptomIcon, InsightsIcon, type IconProps } from "./icons";
+import AppIcon from "./AppIcon";
 import Wordmark from "./Wordmark";
 import type { ComponentType } from "react";
 
@@ -47,8 +48,10 @@ export default function Intro({ onFinish }: { onFinish: () => void }) {
   if (phase === "splash") {
     return (
       <div className="app intro splash-screen">
+        {/* The app icon, decorative here — the wordmark under it is the labelled
+            one, exactly as in the marketing header's lockup. */}
         <div className="intro-badge splash-badge">
-          <MealIcon size={54} strokeWidth={1.75} />
+          <AppIcon size={116} />
         </div>
         <Wordmark className="wordmark" cap={26} />
         <div className="tagline">Know what your gut is telling you</div>

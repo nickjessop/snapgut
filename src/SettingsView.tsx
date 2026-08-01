@@ -47,7 +47,6 @@ import {
   type ThemePref,
 } from "./theme";
 import {
-  BackIcon,
   ChevronIcon,
   InsightsIcon,
   BillingIcon,
@@ -62,8 +61,12 @@ import {
   type IconProps,
 } from "./icons";
 import type { ComponentType } from "react";
+import { APP_BUILD } from "./build";
+import BackButton from "./BackButton";
+import { clearInsights, listInsights } from "./insightHistory";
 
-const APP_VERSION = "0.1.0";
+// Was a hand-typed literal that never changed, and so said nothing about what was
+// actually running. Now derived from the build (see src/build.ts).
 const DB_NAME = "food-snap"; // internal storage key (kept for back-compat)
 
 /**
@@ -240,6 +243,10 @@ function describeDeleteFailure(failure: SyncFailure | null): string {
 
 interface Props {
   entitlement: Entitlement | null;
+  /** Whether a session is held. Without one there is no account to manage,
+   *  no subscription to buy, and nothing server-side to delete. */
+  authed?: boolean;
+  onNeedSignIn?: () => void;
   onClose: () => void;
   onUpgrade: () => void;
   onSignedOut: () => void;
@@ -248,6 +255,8 @@ interface Props {
 
 export default function SettingsView({
   entitlement,
+  authed = true,
+  onNeedSignIn,
   onClose,
   onUpgrade,
   onSignedOut,
@@ -263,6 +272,9 @@ export default function SettingsView({
   // SnapGut Cloud block (Req 1.1, 1.2, 3.3, 12.1–12.7).
   const [cloudState, setCloudState] = useState<SyncState>(() => getSyncState());
   const [cloudEnabled, setCloudEnabled] = useState(() => isDestinationEnabled("cloud"));
+  /** Whether any past insight is stored, so the clear control appears only when it
+   *  would do something. */
+  const [insightsStored, setInsightsStored] = useState(false);
   /**
    * The shared entitlement snapshot both destination blocks gate on (Req 1.2,
    * 15.1). It comes from `syncSettings`, not from the `entitlement` prop, so a
@@ -293,6 +305,13 @@ export default function SettingsView({
     setTheme(pref);
     setThemePref(pref);
   }
+
+  // Independent of the session. Insights are generated while signed in but stay on
+  // the device afterwards, so someone who has signed out must still be able to
+  // remove them — putting this behind the `fetchMe` guard would strand them.
+  useEffect(() => {
+    void listInsights().then((list) => setInsightsStored(list.length > 0));
+  }, []);
 
   useEffect(() => {
     fetchMe().then((me) => {
@@ -645,11 +664,9 @@ export default function SettingsView({
   return (
     <div className="settings">
       <div className="settings-header">
-        <button className="icon-round" onClick={onClose} aria-label="Back">
-          <BackIcon size={22} />
-        </button>
+        <BackButton onClick={onClose} label="Back to your log" />
         <h1>Settings</h1>
-        <div style={{ width: 36 }} />
+        <div style={{ width: 40 }} />
       </div>
 
       <div className="settings-scroll">
@@ -657,17 +674,30 @@ export default function SettingsView({
         <section className="settings-section">
           <div className="settings-label">Account</div>
           <div className="settings-card">
-            <Row label="Email" value={email || "—"} />
+            <Row label="Email" value={authed ? email || "—" : "Not signed in"} />
             <div className="settings-divider" />
-            <Row label="Plan" value={planLabel} />
-            {!pro && (
+            <Row label="Plan" value={authed ? planLabel : "No account"} />
+            {authed && !pro && (
               <>
                 <div className="settings-divider" />
                 <Row label="Free AI left" value={`${freeLeft} of ${entitlement?.freeAiLimit ?? 0}`} />
               </>
             )}
           </div>
-          {pro ? (
+          {/* Nothing to sell or manage without an account. Offer the free step
+              first: sign-in is what unlocks the AI trial, and Pro is what unlocks
+              it without limit. Reversing that order would ask for money to solve
+              a problem an email address solves. */}
+          {!authed ? (
+            <SettingsItem
+              icon={InsightsIcon}
+              title="Sign in"
+              sub="Keeps your logs on this device — unlocks AI recognition & insights"
+              chevron
+              accent
+              onClick={() => onNeedSignIn?.()}
+            />
+          ) : pro ? (
             <SettingsItem
               icon={BillingIcon}
               title="Manage subscription"
@@ -739,6 +769,23 @@ export default function SettingsView({
             chevron
             onClick={exportCSV}
           />
+          {/* Insights are now kept rather than discarded on navigation, so there has
+              to be a way to remove them. They are AI-written text about someone's
+              health log: new stored data needs a delete control in the same place as
+              every other one, not only an account-wide wipe. */}
+          {insightsStored && (
+            <SettingsItem
+              icon={DeleteIcon}
+              title="Clear past insights"
+              sub="Removes saved AI insights from this device — your log is untouched"
+              onClick={async () => {
+                await clearInsights();
+                setInsightsStored(false);
+                setToast("Past insights cleared");
+                onChanged();
+              }}
+            />
+          )}
 
           {/* SnapGut Cloud — an independent destination, always shown so a free
               user can see what Pro unlocks (Req 1.2, 3.3) */}
@@ -796,20 +843,47 @@ export default function SettingsView({
             </div>
           )}
 
-          {/* Req 1.2, 13.5 — the separate control that opens the upgrade flow */}
-          {!proEntitled && (
+          {/* Req 1.2, 13.5 — the control that resumes a lapsed Cloud sync.
+              With no account there is nothing to upgrade: Cloud sync is keyed to an
+              email, so sign-in is the step that has to come first.
+
+              A plain "Upgrade to SnapGut Pro" used to sit here too, which meant a
+              signed-in free user saw the identical row twice on one screen — once
+              under Account and again here. The Account row is the canonical one, so
+              this now appears only in the case that row cannot express: Pro has
+              lapsed while Cloud sync is still switched on, and the cloud copy is
+              waiting to be resumed rather than bought for the first time. */}
+          {!authed ? (
             <SettingsItem
               icon={InsightsIcon}
-              title={cloudEnabled ? "Restore SnapGut Pro" : "Upgrade to SnapGut Pro"}
-              sub={
-                cloudEnabled
-                  ? "Resume Cloud sync — your cloud copy is still there"
-                  : "Unlocks Cloud sync across your devices"
-              }
+              title="Sign in to use Cloud sync"
+              sub="Cloud sync needs an account — your logs stay on this device until you turn it on"
               chevron
               accent
-              onClick={onUpgrade}
+              onClick={() => onNeedSignIn?.()}
             />
+          ) : (
+            !proEntitled && (
+              <SettingsItem
+                icon={InsightsIcon}
+                // Retitled rather than removed. The duplication complaint was real —
+                // this row and the one under Account both read "Upgrade to SnapGut
+                // Pro", so the same CTA appeared twice on one screen — but the row
+                // itself is required: the Cloud toggle above is locked, and
+                // cloud-sync Requirement 1.2 wants an interactive way to unlock it
+                // next to the thing being unlocked. Naming what *this* one buys
+                // removes the repetition without removing the affordance.
+                title={cloudEnabled ? "Restore SnapGut Pro" : "Unlock Cloud sync"}
+                sub={
+                  cloudEnabled
+                    ? "Resume Cloud sync — your cloud copy is still there"
+                    : "Unlocks Cloud sync across your devices"
+                }
+                chevron
+                accent
+                onClick={onUpgrade}
+              />
+            )
           )}
 
           {proEntitled && cloudEnabled && (
@@ -934,21 +1008,27 @@ export default function SettingsView({
           )}
         </section>
 
-        {/* Session */}
+        {/* Session. Both controls need an account: there is no session to end and
+            no server-side record to remove without one. The local timeline is
+            still reachable — export it from Data above, or clear the site data. */}
         <section className="settings-section">
-          <SettingsItem
-            icon={SignOutIcon}
-            title="Sign out"
-            sub="Your logs stay on this device"
-            onClick={signOut}
-          />
-          <SettingsItem
-            icon={DeleteIcon}
-            title="Delete account & data"
-            sub="Removes your account and wipes this device"
-            danger
-            onClick={() => setConfirmDelete(true)}
-          />
+          {authed && (
+            <>
+              <SettingsItem
+                icon={SignOutIcon}
+                title="Sign out"
+                sub="Your logs stay on this device"
+                onClick={signOut}
+              />
+              <SettingsItem
+                icon={DeleteIcon}
+                title="Delete account & data"
+                sub="Removes your account and wipes this device"
+                danger
+                onClick={() => setConfirmDelete(true)}
+              />
+            </>
+          )}
 
           {/* Req 17.7 — the account was not deleted: say so, and offer the only
               control that repeats the request (nothing retries on its own) */}
@@ -966,7 +1046,9 @@ export default function SettingsView({
           )}
         </section>
 
-        <div className="settings-about">SnapGut v{APP_VERSION}</div>
+        {/* The full build id, not just the semver: it is what a bug report needs to
+            be actionable, and what `/api/admin/metrics` groups a cohort by. */}
+        <div className="settings-about">SnapGut {APP_BUILD}</div>
       </div>
 
       <input

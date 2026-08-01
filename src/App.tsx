@@ -26,11 +26,16 @@ import {
   AddIcon,
   type IconProps,
 } from "./icons";
-import { sweepTombstones, type LogEvent } from "./db";
+import { getEvents, sweepTombstones, type LogEvent } from "./db";
+import InstallHint from "./InstallHint";
+import { countLogSaved } from "./metrics";
+import { schedulePreload } from "./preload";
 import type { ComponentType } from "react";
 import { DEFAULT_APP_PATH, isAppPath } from "../shared/site.js";
 import { mayEnterApp, parseRoute, type AddressableFlow } from "./routes";
-import useRouter from "./useRouter";
+import useRouter, { isEphemeralFlow } from "./useRouter";
+import { setSafeToReload } from "./swUpdate";
+import useSwipeNav from "./useSwipeNav";
 
 // Exported for `src/routes.ts`, which maps URLs onto these two unions rather
 // than restating them. Type-only, so the import is erased and no cycle exists
@@ -63,6 +68,22 @@ export default function App() {
   const [authed, setAuthed] = useState(false);
   const [ent, setEnt] = useState<Entitlement | null>(null);
   const [paywall, setPaywall] = useState<null | "out" | "upsell">(null);
+  /**
+   * Which sign-in screen is showing, if any. Deferred sign-in replaced the
+   * blanket auth gate with two distinct reasons to ask for an email:
+   *
+   *   "route"  — the visitor is at the Login_Route. They came to sign in, so this
+   *              owns the screen and the URL, exactly as the old gate did.
+   *   "prompt" — an AI call site needs a session. The visitor came to log a meal,
+   *              so the URL is left alone, the flow's in-memory photo stays in
+   *              this component's state, and declining returns them to it.
+   */
+  const [signIn, setSignIn] = useState<null | "route" | "prompt">(null);
+  /**
+   * How many logs this device holds. Read for one reason only: the install nudge
+   * waits until there is something worth protecting before it asks.
+   */
+  const [logCount, setLogCount] = useState(0);
 
   /**
    * The single funnel for every entitlement-carrying server response the UI
@@ -78,15 +99,55 @@ export default function App() {
 
   /**
    * The history binding. `enabled` is the boot gate: while the held Session_Token
-   * is being validated and while the app is signed out, the URL and the view state
-   * do not track each other, so the pre-auth placeholder and the sign-in screen
-   * leave the address bar exactly as it was (Requirement 3.6). Flipping it on is
-   * what makes a deep link survive the gate.
+   * is being validated, and while the Login_Route's sign-in screen owns the
+   * display, the URL and the view state do not track each other, so neither the
+   * pre-auth placeholder nor that screen moves the address bar (Requirement 3.6).
+   * Flipping it on is what makes a deep link survive the gate.
+   *
+   * Being signed out is no longer part of this condition — that is the deferred
+   * sign-in change. An anonymous visitor routes normally, because every
+   * Addressable_View now works without a session. The `"prompt"` sign-in screen
+   * likewise leaves routing enabled: it is raised over a view the visitor is
+   * already on, and its URL should stay that view's.
    */
+  /**
+   * Whether a service worker update may reload the page right now.
+   *
+   * One derived condition rather than a flag per flow. Unsafe whenever an
+   * Ephemeral_Flow is open, because each of them holds something a reload cannot
+   * restore — `capture` and `meal-details` hold the photo `Blob`, the other three
+   * hold unsaved form input (Requirement 4.8) — and while a sign-in screen is up,
+   * since reloading mid-verification loses the emailed code's context.
+   *
+   * `settings` is deliberately safe: it is an Addressable_View, its state is
+   * persisted, and a reload returns to it.
+   */
+  useEffect(() => {
+    const busy = isEphemeralFlow(flow) || signIn !== null;
+    setSafeToReload(!busy);
+  }, [flow, signIn]);
+
+  // Re-read after every save, which is when the count can have crossed the install
+  // nudge's threshold. Failures are ignored: a missing count only means the nudge
+  // waits, which is the safe direction.
+  useEffect(() => {
+    getEvents()
+      .then((events) => setLogCount(events.length))
+      .catch(() => {});
+  }, [reloadKey]);
+
+  /**
+   * Left-to-right order for the swipe gesture, matching where each view sits in the
+   * tab bar: Logs on the left, Insights on the right, the camera in the middle as
+   * home. Settings is absent on purpose — it is reached deliberately and swiping into
+   * it by accident would be a surprise.
+   */
+  const SWIPE_ORDER: Tab[] = ["logs", "camera", "insights"];
+
   const { navigate, redirect } = useRouter({
     tab,
     flow,
-    enabled: authChecked && authed,
+    enabled: authChecked && signIn !== "route",
     onRoute: (route) => {
       setTab(route.tab);
       setFlow(route.flow);
@@ -96,6 +157,10 @@ export default function App() {
 
   useEffect(() => {
     requestPersistentStorage();
+    // Uses the idle moment after launch to warm the thumbnails for the foods this
+    // device logs most, so the Logs and Foods lists stop popping in one image at a
+    // time. Scheduled, not awaited: it must never delay the first paint.
+    schedulePreload();
     // Ambient triggers: `online` (Req 11.4) and the ≥60 s foreground return
     // (Req 11.9), plus the automatic retry timer. Torn down on unmount so no
     // listener and no armed retry outlives this App instance. A trigger that
@@ -142,32 +207,41 @@ export default function App() {
   }, []);
 
   /**
-   * The boot-order redirects (Requirement 3), in the order of the design's
+   * The boot-order decisions (Requirement 3), in the order of the design's
    * decision ladder:
    *
    *   validating token .......... render the placeholder, URL untouched   (R3.6)
-   *   no token, URL is /app/* ... replaceState → /login?next=<path>       (R3.2)
+   *   no token, URL is /login ... show the sign-in screen, URL untouched
+   *   no token, URL is /app/* ... nothing — the app is open (deferred sign-in)
    *   token, URL is /login ...... replaceState → next ?? /app        (R3.1, R3.3)
    *
-   * Both redirects replace the current entry rather than adding one, so a boot
+   * The third line is what changed. `mayEnterApp` is now unconditional, so the
+   * redirect below is unreachable; the call is kept because restoring the gate is
+   * then a one-line change in `src/routes.ts` rather than a rewrite here.
+   *
+   * The redirect replaces the current entry rather than adding one, so a boot
    * redirect leaves nothing to go back to. Nothing here runs before the session
    * check settles, so a valid token never flashes the sign-in URL.
    */
   useEffect(() => {
     if (!authChecked) return;
     const { pathname, search } = window.location;
+    const here = parseRoute(pathname, search);
 
-    if (!mayEnterApp(authed)) {
-      // R3.2 — the App_Route asked for is carried across as `next`, so sign-in
-      // returns to it. `sanitizeNext` (inside `formatRoute`) reduces anything it
-      // does not recognise to the default App_Route.
-      if (isAppPath(pathname)) redirect({ kind: "login", next: pathname });
+    if (!authed) {
+      // The Login_Route is the one path that still means "sign in" — a visitor
+      // who navigated here, or who was sent here by sign-out, wants the form.
+      if (here?.kind === "login") setSignIn("route");
+      // R3.2, retained but unreachable while `mayEnterApp` is unconditional.
+      else if (!mayEnterApp(authed) && isAppPath(pathname)) {
+        redirect({ kind: "login", next: pathname });
+      }
       return;
     }
 
+    setSignIn(null);
     // R3.1, R3.3 — a session at the Login_Route belongs in the app. `next` is
     // already sanitized by `parseRoute`, and its absence means the default view.
-    const here = parseRoute(pathname, search);
     if (here?.kind !== "login") return;
     const target = parseRoute(here.next ?? DEFAULT_APP_PATH);
     if (target?.kind === "app") redirect(target);
@@ -178,19 +252,64 @@ export default function App() {
     setEnt(null);
     // R3.5 — a discarded Session_Token, whether from sign-out or from a 401, lands
     // on the Login_Route. This is a real navigation, not a boot redirect: the entry
-    // the user was on stays in history.
+    // the user was on stays in history. The boot effect then raises the sign-in
+    // screen for it, so signing out still ends on the form.
     navigate({ kind: "login", next: null });
   };
 
-  // Gate order: validate session → sign in → first-run intro → app.
+  /**
+   * Swipe between the tab-shell views. Routed through `goToView`, so a gesture and a
+   * tab tap produce the same URL and the same single history entry (R4.2).
+   *
+   * Declared here, above the boot-gate early returns below, because it is a hook: on
+   * a render that returns early it would otherwise not be called, and the hook order
+   * would change between renders.
+   *
+   * Active only while the tab shell is actually showing. A flow, a sheet, or the
+   * sign-in screen owns the horizontal gesture, and swiping the page out from under an
+   * unsaved form would discard it. Stops at the ends rather than wrapping, so the
+   * gesture cannot loop a user back where they started.
+   */
+  useSwipeNav({
+    enabled: flow === null && signIn === null && paywall === null && !plusOpen,
+    onSwipe: (direction) => {
+      const from = SWIPE_ORDER.indexOf(tab);
+      if (from === -1) return;
+      const to = from + (direction === "next" ? 1 : -1);
+      if (to < 0 || to >= SWIPE_ORDER.length) return;
+      // `goToView` is a hoisted function declaration below; the callback runs long
+      // after this render, so referencing it here is safe.
+      goToView(SWIPE_ORDER[to]);
+    },
+  });
+
+  /** Applied by both sign-in screens: the session, the entitlement, and dismissal. */
+  const onAuthed = (me: Entitlement) => {
+    setAuthed(true);
+    applyEnt(me);
+    setSignIn(null);
+  };
+
+  /**
+   * Gate order: validate session → a sign-in screen if one is asked for → the
+   * first-run intro → the app.
+   *
+   * The blanket auth gate is gone. An anonymous visitor falls straight through to
+   * the intro and then to the camera, and is asked for an email only when they
+   * reach something that needs the server — which is what `"prompt"` is for.
+   */
   if (!authChecked) return <div className="app" />;
-  if (!authed) {
+  if (signIn !== null) {
     return (
       <AuthGate
-        onAuthed={(me) => {
-          setAuthed(true);
-          applyEnt(me);
-        }}
+        onAuthed={onAuthed}
+        {...(signIn === "prompt"
+          ? {
+              onCancel: () => setSignIn(null),
+              heading: "Sign in to use AI",
+              sub: "AI recognition and insights run on our server, so they need an account. Logging stays free and stays on your device.",
+            }
+          : {})}
       />
     );
   }
@@ -230,6 +349,10 @@ export default function App() {
   function finishFlow() {
     resetFlow();
     setReloadKey((k) => k + 1);
+    // Aggregate, identifier-free, and the only funnel event the Origin_Server
+    // cannot observe for itself: a log is written to IndexedDB and never sent.
+    // See `src/metrics.ts` for exactly what leaves the device.
+    countLogSaved();
     // R4.10 — saving a log still lands on the logs view, now expressed as a
     // navigation to the logs App_Route. It replaces rather than pushes because the
     // entry underneath is the sentinel the flow pushed (R4.5): consuming it leaves
@@ -287,21 +410,29 @@ export default function App() {
       </div>
     );
   }
-  if (flow === "meal-details" && photo) {
+  // No `&& photo` here: a meal may be logged without one. The `capture` flow above
+  // still requires a photo, because its whole job is previewing one.
+  if (flow === "meal-details") {
     return (
       <div className="app">
         <MealDetails
           photo={photo}
           initialNote={mealNote}
           editing={editing?.type === "meal" ? editing : undefined}
+          entitlement={ent}
+          authed={authed}
           onSaved={finishFlow}
           onEntitlement={(e) => e && applyEnt(e)}
           onNeedUpgrade={() => setPaywall("out")}
+          onNeedSignIn={() => setSignIn("prompt")}
           onSignedOut={signOut}
+          onAddPhoto={() => goToView("camera")}
           onBack={() => {
-            // new meal → back to caption screen; editing → cancel out
+            // Editing → cancel out. A new meal → back to the caption screen, unless
+            // there is no photo to caption, in which case back means the camera.
             if (editing) cancelFlow();
-            else setFlow("capture");
+            else if (photo) setFlow("capture");
+            else cancelFlow();
           }}
         />
         {paywallEl}
@@ -347,6 +478,8 @@ export default function App() {
       <div className="app">
         <SettingsView
           entitlement={ent}
+          authed={authed}
+          onNeedSignIn={() => setSignIn("prompt")}
           onClose={() => goToView("logs")}
           onUpgrade={() => setPaywall("upsell")}
           onSignedOut={() => {
@@ -370,6 +503,13 @@ export default function App() {
             setMealNote("");
             setFlow("capture");
           }}
+          // Straight to the details screen: there is no photo to preview or
+          // caption, so the capture step has nothing to do.
+          onSkipPhoto={() => {
+            setPhoto(null);
+            setMealNote("");
+            setFlow("meal-details");
+          }}
         />
       )}
       {tab === "logs" && (
@@ -385,8 +525,10 @@ export default function App() {
         <InsightsView
           reloadKey={reloadKey}
           entitlement={ent}
+          authed={authed}
           onEntitlement={(e) => e && applyEnt(e)}
           onNeedUpgrade={() => setPaywall("out")}
+          onNeedSignIn={() => setSignIn("prompt")}
           onSignedOut={signOut}
         />
       )}
@@ -437,6 +579,11 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Rendered from the tab shell rather than from one tab, so it is seen wherever
+          the user happens to be — and only here, so it can never cover an open flow
+          or the sign-in screen. */}
+      <InstallHint logCount={logCount} />
 
       <nav className="tabbar">
         <button className={tab === "logs" ? "active" : ""} onClick={() => goToView("logs")}>
