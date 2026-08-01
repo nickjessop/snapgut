@@ -5,7 +5,14 @@ lowest-friction "cloud backup" for most people, and an alternative to relying on
 on local storage. When enabled, we keep storing locally (local stays the source of
 truth) and turn off the backup reminders.
 
-Status: **proposed / not yet built.** Requires user-side OAuth setup (below).
+Status: **built and shipped** (`src/googleSheets.ts`), but inert in production until
+`VITE_GOOGLE_CLIENT_ID` is set at build time; it is not set today. Requires user-side
+OAuth setup (below). It is one of two independent sync destinations — the other is
+SnapGut Cloud, which also shipped. `docs/cloud-sync.md` describes both, the Pro gate
+they share, what each stores, and the deletion paths.
+
+This document is the design and the setup guide. Where it and the code differ, the code
+and `docs/cloud-sync.md` win.
 
 ---
 
@@ -29,8 +36,10 @@ fully offline-capable; the sheet is the durable copy + easy export.
   readable backup that can also be re-imported. Simple, robust, no conflict handling.
 - **Two-way / multi-device merge**: editing on multiple devices and merging is hard
   over Sheets (conflict resolution, delete detection); Sheets isn't built for it.
-  If true multi-device editing is required, use **Firestore** instead (see Phase 2
-  in security-and-infra-todo.md), not Sheets.
+  That is what SnapGut Cloud does instead, and it is **built** — `/api/sync/*` over
+  Firestore, with a total merge rule and deletion markers (`docs/cloud-sync.md`). It is
+  no longer future work, so this decision stands as shipped: Sheets remains the one-way
+  readable mirror, Cloud does multi-device.
 
 ### 2. Photos are NOT synced to Sheets
 Sheets can't hold image files (only a URL via the `IMAGE()` formula). So the sheet
@@ -71,18 +80,23 @@ so the existing CSV serializer can be largely reused. Header row written on crea
 3. Configure the **OAuth consent screen**; add yourself/testers as test users.
 4. Provide the **client ID** to the app (env/config).
 
-## What we'd build
-- `googleSheets.ts`: GIS init, connect/disconnect, ensure-spreadsheet (create once,
-  store spreadsheet id locally), `syncAll(events)` (upsert rows), reuse CSV columns.
-- Settings/Data entry: "Connect Google Sheets", status line, "Sync now", disconnect.
-- Wire into save/app-open; gate the backup nudge on `isSheetsConnected()`.
-- Config: `VITE_GOOGLE_CLIENT_ID` (build behind config so it's inert until set).
+## What was built
+- `src/googleSheets.ts`: GIS init, connect/disconnect, ensure-spreadsheet (create once,
+  store spreadsheet id locally), `syncAll` (upsert rows by id), re-import, the CSV
+  columns plus an appended `id` column.
+- Settings: connect, status line, "Sync now", re-import, disconnect — all hidden while
+  no client ID is configured, and non-interactive while Pro is off.
+- The enabled flag, the Pro gate, and the backup-nudge suppression moved to
+  `src/syncSettings.ts`, shared with the Cloud destination.
+- Config: `VITE_GOOGLE_CLIENT_ID`, build-time, inert until set — and unset in the
+  production image today.
 
-## MVP recommendation
+## Shipped shape
 One-way mirror · `drive.file` scope · structured data only (no photos) · local stays
-primary · reminders off when connected. Multi-device editing → Firestore later.
+primary · reminders off while a destination is active · Pro-gated client-side.
+Multi-device editing is SnapGut Cloud's job, not this one.
 
 ## Open questions
-- [ ] Confirm one-way MVP vs waiting for full multi-device (Firestore).
-- [ ] Set up OAuth client ID now (test live) or build behind config for later?
+- [ ] Set `VITE_GOOGLE_CLIENT_ID` in the production build, or leave the destination
+      inert? Public use also needs Google OAuth verification.
 - [ ] Later: sync photos via Drive? (extra scope + storage considerations)
