@@ -103,8 +103,14 @@ describe("sanitizeNext", () => {
 });
 
 describe("mayEnterApp", () => {
-  it("is exactly the session predicate", () => {
-    expect(mayEnterApp(true)).toBe(true);
-    expect(mayEnterApp(false)).toBe(false);
+  // Deferred sign-in: an App_Route no longer requires a session. The gate moved
+  // to the AI call sites, which are the only places a request needs an account.
+  // Logging, the on-device stats, and the Foods ranking all work without one.
+  it("admits a visitor with no session", () => {
+    expect(mayEnterApp(false)).toBe(true);
+  });
+
+  it("is unconditional, so the session is no longer the question it asks", () => {
+    expect(mayEnterApp(true)).toBe(mayEnterApp(false));
   });
 });

@@ -85,11 +85,6 @@ function url(): string {
   return window.location.pathname + window.location.search;
 }
 
-/** The `next` parameter carried by the current URL, or `null`. */
-function nextParam(): string | null {
-  return new URLSearchParams(window.location.search).get("next");
-}
-
 /**
  * Put the browser at `path` and mount the app there. `pushState` rather than
  * `replaceState` so any forward entry left by an earlier test is pruned and a
@@ -228,33 +223,51 @@ describe("boot while a Session_Token is held (Req 3.1, 3.3)", () => {
   });
 });
 
-describe("boot while no Session_Token is held (Req 3.2)", () => {
+describe("boot while no Session_Token is held — deferred sign-in", () => {
   beforeEach(() => {
     h.token = null;
   });
 
   it.each(APP_VIEWS.map((v) => v.path))(
-    "replaces %s with the Login_Route carrying it as next",
+    "opens %s without asking for an email",
     async (path) => {
       bootAt(path);
-      await screen.findByText("Sign in to SnapGut");
+      if (path === "/app/settings") await screen.findByRole("heading", { name: "Settings" });
+      else await shell();
 
-      // R3.2 — the App_Route asked for is carried across so sign-in returns to it,
-      // and the redirect adds no entry.
-      expect(window.location.pathname).toBe(LOGIN_PATH);
-      expect(nextParam()).toBe(path);
+      // The behaviour this change exists to create: an anonymous visitor lands in
+      // the app, at the route they asked for, with no sign-in form in the way and
+      // no redirect at all. Previously each of these replaced the URL with
+      // `/login?next=<path>`.
+      expect(url()).toBe(path);
       expect(pushed).toEqual([]);
+      expect(replaced).toEqual([]);
+      expect(screen.queryByText("Sign in to SnapGut")).toBeNull();
     }
   );
 
-  it("leaves the Login_Route alone", async () => {
+  it("still shows the sign-in screen at the Login_Route", async () => {
     bootAt(LOGIN_PATH);
     await screen.findByText("Sign in to SnapGut");
 
-    // Already where it belongs: no redirect, no entry, and the URL untouched.
+    // The one path that still means "sign in": someone who navigated here, or who
+    // was sent here by signing out, wants the form. No redirect, no entry, URL
+    // untouched.
     expect(url()).toBe(LOGIN_PATH);
     expect(pushed).toEqual([]);
     expect(replaced).toEqual([]);
+  });
+
+  it("shows the first-run intro before the app, with no account", async () => {
+    localStorage.removeItem(ONBOARDED_KEY);
+    bootAt(DEFAULT_APP_PATH);
+
+    // The intro used to sit *behind* the sign-in gate, so a new visitor met a
+    // six-digit-code form before they were told what the product was. Now the
+    // intro is the first thing, and it needs no account.
+    await waitFor(() => expect(inTabShell()).toBe(false));
+    expect(screen.queryByText("Sign in to SnapGut")).toBeNull();
+    expect(url()).toBe(DEFAULT_APP_PATH);
   });
 });
 

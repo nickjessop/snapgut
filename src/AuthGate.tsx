@@ -1,9 +1,23 @@
 import { useState } from "react";
 import { requestCode, verifyCode, type Me } from "./session";
-import { MealIcon } from "./icons";
+import AppIcon from "./AppIcon";
+
+interface Props {
+  onAuthed: (me: Me) => void;
+  /**
+   * Present when sign-in was asked for by an AI call site rather than reached at
+   * the Login_Route. Renders a way back, because the visitor did not come here to
+   * sign in — they came to log a meal, and declining has to leave them where they
+   * were with their photo intact.
+   */
+  onCancel?: () => void;
+  /** Overrides the heading and subheading, so the prompt can say why it appeared. */
+  heading?: string;
+  sub?: string;
+}
 
 /** Email + 6-digit code sign-in. Calls onAuthed with the user's entitlement. */
-export default function AuthGate({ onAuthed }: { onAuthed: (me: Me) => void }) {
+export default function AuthGate({ onAuthed, onCancel, heading, sub }: Props) {
   const [phase, setPhase] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -41,16 +55,19 @@ export default function AuthGate({ onAuthed }: { onAuthed: (me: Me) => void }) {
   return (
     <div className="app intro auth-gate">
       <div className="auth-body">
+        {/* The heading below names the product, so the icon stays decorative. */}
         <div className="intro-badge">
-          <MealIcon size={48} strokeWidth={1.75} />
+          <AppIcon size={108} />
         </div>
         <h1 className="intro-title">
-          {phase === "email" ? "Sign in to SnapGut" : "Check your email"}
+          {phase === "code"
+            ? "Check your email"
+            : (heading ?? "Sign in to SnapGut")}
         </h1>
         <p className="intro-sub">
-          {phase === "email"
-            ? "We'll email you a 6-digit code. No password needed."
-            : `Enter the code we sent to ${email}.`}
+          {phase === "code"
+            ? `Enter the code we sent to ${email}.`
+            : (sub ?? "We'll email you a 6-digit code. No password needed.")}
         </p>
 
         {phase === "email" ? (
@@ -87,13 +104,20 @@ export default function AuthGate({ onAuthed }: { onAuthed: (me: Me) => void }) {
 
       <div className="intro-footer">
         {phase === "email" ? (
-          <button
-            className="primary"
-            disabled={busy || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)}
-            onClick={sendCode}
-          >
-            {busy ? "Sending…" : "Send code"}
-          </button>
+          <>
+            <button
+              className="primary"
+              disabled={busy || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)}
+              onClick={sendCode}
+            >
+              {busy ? "Sending…" : "Send code"}
+            </button>
+            {onCancel && (
+              <button className="link-btn" onClick={onCancel}>
+                Not now
+              </button>
+            )}
+          </>
         ) : (
           <>
             <button className="primary" disabled={busy || code.length !== 6} onClick={verify}>

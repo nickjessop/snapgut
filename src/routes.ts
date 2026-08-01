@@ -124,10 +124,19 @@ export function sanitizeNext(raw: string | null): string {
 }
 
 /**
- * The one and only route guard (Requirement 16.1). Deferred sign-in later makes
- * this `() => true` and moves the gate to the AI call sites; nothing else in the
- * routing layer changes when it does.
+ * The one and only route guard (Requirement 16.1).
+ *
+ * Deferred sign-in has landed, so this is now unconditional: an App_Route no
+ * longer requires a session, and the gate has moved to the AI call sites, which
+ * ask for an email only when a request is about to be made that needs one. A
+ * visitor can open the app, read the intro, and log meals, symptoms, bowel
+ * movements, and check-ins without an account, because none of that touches the
+ * Origin_Server.
+ *
+ * The parameter is kept, and `src/App.tsx` still calls this before its
+ * redirect-to-login branch, so restoring the gate is a one-line change here
+ * rather than a re-plumbing of the routing layer.
  */
-export function mayEnterApp(hasSession: boolean): boolean {
-  return hasSession;
+export function mayEnterApp(_hasSession: boolean): boolean {
+  return true;
 }
