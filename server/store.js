@@ -21,6 +21,23 @@ const norm = (email) => String(email || "").trim().toLowerCase();
 const MISSING_FOOD_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
 
 /**
+ * How long a daily metric bucket is kept. Long enough to read a launch cohort
+ * months later, and bounded so the collection cannot grow without limit.
+ *
+ * Unlike `rateLimits`, these documents hold no personal data at all — a UTC day,
+ * an event name, and an integer — so the expiry is housekeeping rather than a
+ * privacy control, and a missing TTL policy is a storage cost rather than a
+ * disclosure. `expireAt` is written regardless so a policy can be added later
+ * without a migration.
+ */
+const METRIC_TTL_MS = 400 * 24 * 60 * 60 * 1000; // ~13 months
+
+/** The UTC day an instant belongs to, as `YYYY-MM-DD`. */
+export function metricDay(nowMs = Date.now()) {
+  return new Date(nowMs).toISOString().slice(0, 10);
+}
+
+/**
  * The `rateLimits` document a request at `nowMs` belongs to, and the instant that document
  * may be deleted (Requirement 19.4).
  *
@@ -53,6 +70,11 @@ function newUser(email) {
     freeAiUsed: 0,
     stripeCustomerId: null,
     createdAt: Date.now(),
+    // Last time this account was seen by `/api/me`, rounded to the day. Retention
+    // for accounts is measurable from this and `createdAt` without any new
+    // identifier, because an account already is one. Day granularity is
+    // deliberate: it answers "did they come back" without recording a schedule.
+    lastSeenDay: metricDay(),
   };
 }
 
@@ -78,7 +100,39 @@ function memoryStore() {
   const codes = new Map();
   const rl = new Map(); // key -> timestamps[]
   const missing = new Map(); // food slug -> { slug, count, lastSeen }
+  const metrics = new Map(); // `${day}:${name}` -> { day, name, count }
   return {
+    async incMetric(name, day = metricDay()) {
+      const key = `${day}:${name}`;
+      const rec = metrics.get(key) || { day, name, count: 0 };
+      rec.count += 1;
+      metrics.set(key, rec);
+    },
+    async listMetrics(sinceDay) {
+      return [...metrics.values()]
+        .filter((m) => !sinceDay || m.day >= sinceDay)
+        .sort((a, b) => (a.day === b.day ? a.name.localeCompare(b.name) : a.day < b.day ? 1 : -1));
+    },
+    async touchUser(email, day = metricDay()) {
+      const u = users.get(norm(email));
+      if (u) u.lastSeenDay = day;
+    },
+    async userStats(dayCutoffs) {
+      const all = [...users.values()];
+      const count = (from) => all.filter((u) => (u.lastSeenDay ?? "") >= from).length;
+      return {
+        total: all.length,
+        seenSince: Object.fromEntries(
+          Object.entries(dayCutoffs).map(([label, day]) => [label, count(day)])
+        ),
+        createdSince: Object.fromEntries(
+          Object.entries(dayCutoffs).map(([label, day]) => [
+            label,
+            all.filter((u) => metricDay(u.createdAt ?? 0) >= day).length,
+          ])
+        ),
+      };
+    },
     async recordMissingFood(slug, reason = "no_image") {
       const rec = missing.get(slug) || { slug, count: 0, lastSeen: 0, reason };
       rec.count += 1;
@@ -159,7 +213,63 @@ async function firestoreStore() {
   const codesCol = db.collection("authCodes");
   const rlCol = db.collection("rateLimits");
   const missingCol = db.collection("missingFoods");
+  const metricsCol = db.collection("metrics");
   return {
+    /**
+     * One document per UTC day per event name, holding a count and nothing else.
+     * No identifier, no session, no per-request row — so the collection cannot be
+     * mined for a visitor's behaviour even in principle, only for daily totals.
+     */
+    async incMetric(name, day = metricDay()) {
+      const now = Date.now();
+      await metricsCol.doc(`${day}:${name}`).set(
+        {
+          day,
+          name,
+          count: FieldValue.increment(1),
+          expireAt: Timestamp.fromMillis(now + METRIC_TTL_MS),
+        },
+        { merge: true }
+      );
+    },
+    /**
+     * Ordered newest day first. `day` is a lexicographically sortable
+     * `YYYY-MM-DD`, so the range filter and the ordering are the same field and
+     * Firestore's automatic single-field index serves both — no composite index.
+     */
+    async listMetrics(sinceDay) {
+      let q = metricsCol.orderBy("day", "desc");
+      if (sinceDay) q = metricsCol.where("day", ">=", sinceDay).orderBy("day", "desc");
+      const snap = await q.limit(2000).get();
+      return snap.docs.map((d) => {
+        const { expireAt, ...rest } = d.data();
+        return rest;
+      });
+    },
+    /**
+     * Day-granular last-seen. Written on `/api/me`, which the client calls once
+     * per launch, so this is one small merge per session rather than per request.
+     * A same-day repeat writes the identical value, which keeps it idempotent.
+     */
+    async touchUser(email, day = metricDay()) {
+      await usersCol.doc(norm(email)).set({ lastSeenDay: day }, { merge: true });
+    },
+    async userStats(dayCutoffs) {
+      const total = (await usersCol.count().get()).data().count;
+      const countWhere = async (field, from) =>
+        (await usersCol.where(field, ">=", from).count().get()).data().count;
+      const seenSince = {};
+      const createdSince = {};
+      for (const [label, day] of Object.entries(dayCutoffs)) {
+        seenSince[label] = await countWhere("lastSeenDay", day);
+        // `createdAt` is epoch ms, so the cutoff is converted rather than compared
+        // as a string. Both are single-field range filters.
+        createdSince[label] = (
+          await usersCol.where("createdAt", ">=", Date.parse(`${day}T00:00:00Z`)).count().get()
+        ).data().count;
+      }
+      return { total, seenSince, createdSince };
+    },
     /**
      * A logged food we can't illustrate. `reason` is "no_image" (a known canonical
      * food we haven't drawn yet) or "unknown" (not in the food dictionary at all).

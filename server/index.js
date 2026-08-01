@@ -1,7 +1,7 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { VertexAI } from "@google-cloud/vertexai";
-import { getStore, isPro, entitlement, FREE_AI_LIMIT } from "./store.js";
+import { getStore, isPro, entitlement, FREE_AI_LIMIT, metricDay } from "./store.js";
 import {
   signToken,
   verifyToken,
@@ -16,6 +16,9 @@ import { clientIp } from "./clientIp.js";
 // Route resolution derived from the Route_Table (Requirement 2.1). Mounted at the
 // bottom of this file, after every /api/* guard and handler (Requirement 2.8).
 import { registerSiteRoutes } from "./routes.js";
+// Route classes for the aggregate page-view counter, from the same Route_Table
+// every other layer reads, so a new Marketing_Page is counted without an edit here.
+import { isAppPath, isMarketingPath, LOGIN_PATH } from "../shared/site.js";
 // Per-class Cache-Control, X-Robots-Tag, Content-Type, and Content-Security-Policy,
 // from the design's route resolution table (Requirements 2.7, 8.6, 8.9, 11.1,
 // 11.4, 11.5, 11.7, 12.1–12.5).
@@ -114,6 +117,83 @@ app.use("/api/auth/*", async (c, next) => {
     return c.json({ error: "rate_limited" }, 429);
   }
   return next();
+});
+
+// ---- aggregate counters ----
+//
+// Per-day totals per event name. No identifier is recorded anywhere in this
+// path: not an IP, not a Session_Token, not a cookie, not a user agent, and no
+// per-request row that could later be correlated. The store keeps
+// `{ day, name, count }` and nothing else, so the data cannot answer "who" or
+// "when" beyond the day, only "how many".
+//
+// That is a deliberate ceiling, not an oversight. It supports the launch funnel
+// (visits → first log → sign-up → AI use) and cannot support anonymous cohort
+// retention, which would need a per-device id. Retention is therefore measured
+// only for accounts, from `createdAt` and `lastSeenDay` on the user record.
+//
+// Known limitation, worth remembering when reading the numbers: a page view is a
+// request, so crawlers and preview bots are counted. Treat `view:*` as an upper
+// bound and the client-reported log events as the honest signal.
+
+/** Fire-and-forget: a counter must never delay or fail the response it counts. */
+function count(name) {
+  getStore()
+    .then((store) => store.incMetric?.(name))
+    .catch(() => {});
+}
+
+/** Count document loads by route class. Assets, `/api/*`, and errors are skipped. */
+app.use("*", async (c, next) => {
+  await next();
+  if (c.req.method !== "GET" || c.res.status !== 200) return;
+  const path = new URL(c.req.url).pathname;
+  if (path.startsWith("/api/")) return;
+  if (isMarketingPath(path)) count(`view:${path === "/" ? "home" : path.slice(1)}`);
+  else if (isAppPath(path)) count("view:app");
+  else if (path === LOGIN_PATH) count("view:login");
+});
+
+/**
+ * The two events the Origin_Server cannot observe: a log was saved, and it was
+ * this device's first. Logging writes to IndexedDB and never reaches the network,
+ * so without this the effect of deferring sign-in would be invisible.
+ *
+ * Unauthenticated by design — the whole point is to count anonymous visitors —
+ * so it is rate-limited per IP and accepts only the two names below. The IP is
+ * used for the limit and is not recorded. See `src/metrics.ts` for the client
+ * half and for what it deliberately does not send.
+ */
+const METRIC_EVENTS = new Set(["first_log", "log_saved"]);
+
+/**
+ * A client-reported build id, reduced to something safe to use as part of a
+ * document key. Shared by every client on a deploy, so it identifies a release and
+ * not a person — but it arrives from the client, so it is bounded and filtered to a
+ * conservative character set rather than trusted.
+ */
+function safeBuild(value) {
+  const raw = typeof value === "string" ? value : "";
+  const clean = raw.replace(/[^A-Za-z0-9.+-]/g, "").slice(0, 32);
+  return clean || "unknown";
+}
+
+app.post("/api/metrics", async (c) => {
+  const store = await getStore();
+  if (!(await store.rateLimit(`metrics-ip:${clientIp(c)}`, 60, 60_000))) {
+    // Answered as success: a dropped counter is not the client's problem, and a
+    // 429 here would surface as an error in a path that must never do that.
+    return c.body(null, 204);
+  }
+  const body = await c.req.json().catch(() => null);
+  const event = typeof body?.event === "string" ? body.event : "";
+  if (METRIC_EVENTS.has(event)) {
+    count(event);
+    // Counted a second time under the build, so the plain name stays comparable
+    // across releases while a regression can still be pinned to one.
+    count(`${event}@${safeBuild(body?.build)}`);
+  }
+  return c.body(null, 204);
 });
 
 // ---- auth helpers ----
@@ -281,6 +361,7 @@ app.post("/api/recognize", async (c) => {
     meal.ingredients = await annotateIngredients(meal.ingredients, recordMissingFood);
 
     if (!pro) await store.incFreeAi(email); // count a free-trial use
+    count("ai_recognize");
     return c.json({ ...meal, entitlement: entitlement(await store.getUser(email)) });
   } catch (err) {
     console.error("recognize error:", err);
@@ -390,6 +471,7 @@ app.post("/api/insights", async (c) => {
     }
 
     if (!pro) await store.incFreeAi(email);
+    count("ai_insights");
     return c.json({ ...out, entitlement: entitlement(await store.getUser(email)) });
   } catch (err) {
     console.error("insights error:", err);
@@ -442,7 +524,13 @@ app.post("/api/auth/verify", async (c) => {
     }
 
     await store.clearCode(key);
+    const existing = await store.getUser(key);
     const user = await store.upsertUser(key);
+    // A first verification is a sign-up; a later one is a returning visitor
+    // signing in on a new device or after clearing storage. Counting them apart
+    // is what makes the funnel readable — repeat sign-ins would otherwise look
+    // like growth.
+    count(existing ? "signin_return" : "signup_new");
     return c.json({ token: signToken(key), email: key, ...entitlement(user) });
   } catch (err) {
     console.error("auth/verify error:", err);
@@ -455,6 +543,11 @@ app.get("/api/me", async (c) => {
   if (!email) return c.json({ error: "unauthorized" }, 401);
   const store = await getStore();
   const user = (await store.getUser(email)) || (await store.upsertUser(email));
+  // The client calls this once per launch, so it is the natural place to record a
+  // day-granular last-seen — the one field account retention is computed from. A
+  // same-day repeat writes the identical value. Fire-and-forget: a failed write
+  // must not turn a session check into an error.
+  void store.touchUser?.(email).catch(() => {});
   return c.json({ email: user.email, ...entitlement(user) });
 });
 
@@ -870,6 +963,50 @@ app.get("/api/admin/missing-foods", async (c) => {
   const store = await getStore();
   const limit = Math.min(Number(c.req.query("limit") || 200), 1000);
   return c.json({ missing: (await store.listMissingFoods?.(limit)) ?? [] });
+});
+
+/**
+ * Ops: the launch funnel. Requires ADMIN_TOKEN. Returns daily aggregate counts
+ * and account totals — no email, no IP, no per-visitor row, nothing that
+ * identifies anyone.
+ *
+ * `?days=N` bounds the window (default 30). `accounts.seenSince` and
+ * `accounts.createdSince` together give retention for accounts: how many exist,
+ * how many were created inside a window, and how many have been seen inside one.
+ * Anonymous retention is deliberately absent — see the note on the counter
+ * middleware above for why.
+ */
+app.get("/api/admin/metrics", async (c) => {
+  const expected = process.env.ADMIN_TOKEN;
+  if (!expected) return c.json({ error: "not_configured" }, 404);
+  if (c.req.header("x-admin-token") !== expected) {
+    return c.json({ error: "unauthorized" }, 401);
+  }
+  const store = await getStore();
+  const days = Math.min(Math.max(Number(c.req.query("days") || 30), 1), 400);
+  const dayMs = 86_400_000;
+  const dayAgo = (n) => metricDay(Date.now() - n * dayMs);
+
+  const events = (await store.listMetrics?.(dayAgo(days))) ?? [];
+  // Roll the daily rows up per event name so the response leads with the totals
+  // and keeps the per-day series underneath it.
+  const totals = {};
+  for (const e of events) totals[e.name] = (totals[e.name] ?? 0) + (e.count ?? 0);
+
+  let accounts = null;
+  try {
+    accounts = await store.userStats?.({
+      d2: dayAgo(2),
+      d7: dayAgo(7),
+      d30: dayAgo(30),
+    });
+  } catch (err) {
+    // A count aggregation can fail on a missing index; the daily counters are the
+    // more important half and must still be readable.
+    console.error("metrics userStats error:", err?.message);
+  }
+
+  return c.json({ since: dayAgo(days), totals, accounts, events });
 });
 
 // ---- Route_Table resolution (must come after every /api/* route above) ----
