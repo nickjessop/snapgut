@@ -24,6 +24,10 @@ import {
   Moon,
   CircleHalf,
   Flame,
+  Info,
+  Question,
+  Images,
+  ForkKnife as ForkKnifeOutline,
   type IconProps as PhosphorIconProps,
 } from "@phosphor-icons/react";
 
@@ -67,3 +71,13 @@ export const LightIcon = (p: IconProps) => <Sun {...base} {...p} />;
 export const DarkIcon = (p: IconProps) => <Moon {...base} {...p} />;
 export const AutoThemeIcon = (p: IconProps) => <CircleHalf {...base} {...p} />;
 export const StreakIcon = (p: IconProps) => <Flame {...base} {...p} />;
+export const InfoIcon = (p: IconProps) => <Info {...base} {...p} />;
+export const HelpIcon = (p: IconProps) => <Question {...base} {...p} />;
+
+// The two camera-screen alternatives to taking a photo right now.
+export const LibraryIcon = (p: IconProps) => <Images {...base} {...p} />;
+/** "Log a meal, no photo" — the meal mark in outline, so it reads as the
+ *  photo-less sibling of the shutter rather than as a second capture button. */
+export const NoPhotoIcon = (p: IconProps) => (
+  <ForkKnifeOutline weight="regular" {...p} />
+);

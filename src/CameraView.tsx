@@ -1,27 +1,46 @@
 import { useEffect, useRef, useState } from "react";
-import { CameraIcon } from "./icons";
+import { CameraIcon, LibraryIcon, NoPhotoIcon } from "./icons";
+import { acquireCamera, releaseCamera } from "./cameraStream";
 
 interface Props {
   onCapture: (photo: Blob) => void;
+  /** Log a meal with no photo at all — for something already eaten. */
+  onSkipPhoto?: () => void;
 }
 
-export default function CameraView({ onCapture }: Props) {
+export default function CameraView({ onCapture, onSkipPhoto }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  /**
+   * The library picker. Separate from `fileRef` because the two want opposite
+   * hints: the fallback below asks for the camera (`capture="environment"`),
+   * while this one must offer the existing photo library, and a single input
+   * cannot mean both.
+   */
+  const libraryRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
+    // Checked synchronously, before anything is awaited: where there is no camera
+    // API at all — an insecure origin, an embedded view, a desktop without a
+    // device — the fallback is the answer and there is nothing to wait for. Going
+    // through the async path just to fail would render the live view for a frame
+    // first and settle the fallback a tick later.
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("live");
+      return;
+    }
+
     async function start() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: false,
-        });
+        // Shared across mounts, so switching to Logs and back does not re-acquire
+        // the device. See src/cameraStream.ts for what that does and does not fix.
+        const stream = await acquireCamera();
         if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
+          releaseCamera();
           return;
         }
         streamRef.current = stream;
@@ -29,15 +48,25 @@ export default function CameraView({ onCapture }: Props) {
           videoRef.current.srcObject = stream;
         }
       } catch {
-        // Fallback: no live camera access (e.g. permission denied or http).
-        setError("live");
+        // Fallback: no live camera access (e.g. permission denied, an insecure
+        // origin, or no camera at all).
+        //
+        // Guarded on `cancelled` for the same reason the success path is: this
+        // rejection can arrive after the view has gone, and updating state on an
+        // unmounted component is both a warning and a real ordering hazard — the
+        // update is left pending and lands during whatever renders next.
+        if (!cancelled) setError("live");
       }
     }
 
     start();
     return () => {
       cancelled = true;
-      streamRef.current?.getTracks().forEach((t) => t.stop());
+      // Detach from this element but do not stop the tracks — the stream outlives
+      // this mount on purpose. `releaseCamera` stops it once nobody comes back.
+      if (videoRef.current) videoRef.current.srcObject = null;
+      streamRef.current = null;
+      releaseCamera();
     };
   }, []);
 
@@ -80,6 +109,16 @@ export default function CameraView({ onCapture }: Props) {
           <button className="primary cam-cta" onClick={() => fileRef.current?.click()}>
             Take photo
           </button>
+          {/* The same two alternatives as the live view. They matter more here,
+              not less: this branch is reached when the camera is unavailable. */}
+          <div className="cam-fallback-alts">
+            <button className="link-btn" onClick={() => libraryRef.current?.click()}>
+              Choose from library
+            </button>
+            <button className="link-btn" onClick={() => onSkipPhoto?.()}>
+              Log without a photo
+            </button>
+          </div>
         </div>
       ) : (
         <>
@@ -87,16 +126,43 @@ export default function CameraView({ onCapture }: Props) {
           <div className="camera-scrim" />
           <div className="camera-hint">Point at your plate</div>
           <div className="camera-controls">
+            {/* Either side of the shutter: the two ways to log a meal you are not
+                photographing right now. Both are secondary to the shutter, which
+                keeps its size and position. */}
+            <button
+              className="cam-aux"
+              aria-label="Choose a photo from your library"
+              onClick={() => libraryRef.current?.click()}
+            >
+              <LibraryIcon size={22} />
+            </button>
             <button className="shutter" aria-label="Take photo" onClick={snap} />
+            <button
+              className="cam-aux"
+              aria-label="Log a meal without a photo"
+              onClick={() => onSkipPhoto?.()}
+            >
+              <NoPhotoIcon size={22} />
+            </button>
           </div>
         </>
       )}
 
+      {/* The camera-first input, used by the no-live-camera fallback above. */}
       <input
         ref={fileRef}
         type="file"
         accept="image/*"
         capture="environment"
+        style={{ display: "none" }}
+        onChange={onFilePicked}
+      />
+      {/* No `capture` attribute, so this opens the photo library rather than the
+          camera — the whole reason it is a second input. */}
+      <input
+        ref={libraryRef}
+        type="file"
+        accept="image/*"
         style={{ display: "none" }}
         onChange={onFilePicked}
       />

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CloseIcon } from "./icons";
+import { BackIcon } from "./icons";
 
 interface Props {
   photo: Blob;
@@ -27,8 +27,15 @@ export default function CapturePreview({ photo, initialNote = "", onProceed, onR
     <div className="capture">
       <img className="capture-img" src={photoUrl} alt="Your meal" />
 
-      <button className="circle-btn capture-close" onClick={onRetake} aria-label="Retake">
-        <CloseIcon size={24} />
+      {/* A chevron rather than an X, matching every other back control. It does
+          discard the photo, so the label says so — the glyph alone should not have
+          to carry that. */}
+      <button
+        className="circle-btn capture-close"
+        onClick={onRetake}
+        aria-label="Back to the camera, discarding this photo"
+      >
+        <BackIcon size={24} />
       </button>
 
       <div className="capture-bottom">
