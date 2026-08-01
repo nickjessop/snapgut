@@ -18,7 +18,8 @@ import {
 } from "./icons";
 import type { Entitlement } from "./session";
 import HeaderStats from "./HeaderStats";
-import InstallHint from "./InstallHint";
+
+
 import {
   exportBackup,
   getLastBackupAt,
@@ -138,7 +139,17 @@ export default function LogsView({
         </div>
       </div>
 
-      <InstallHint />
+
+
+      {/* The timeline's standing disclaimer used to sit here and has been removed. It
+          was explaining a screen that needs no explaining — a list of what you logged
+          — and it was the first thing above the log every single time.
+ 
+          Nothing it said is lost. The medical disclaimer lives on Insights, which is
+          the surface that interprets rather than records and therefore the one that
+          needs it. The backup warning is carried by the nudge below, which appears
+          when it is actually due. The privacy statement is in Settings and on
+          /privacy. */}
 
       {due && (
         <div className="nudge">
@@ -342,7 +353,14 @@ function TimelineRow({
 function MealContent({ event }: { event: MealEvent }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
-    if (!event.photo) return;
+    // Clearing first matters: returning early on an absent photo used to leave the
+    // previous object URL in state, so a row could keep showing a revoked — or
+    // worse, a different meal's — image after a re-read handed it a record with no
+    // Blob. An absent photo now renders as no photo.
+    if (!event.photo) {
+      setUrl(null);
+      return;
+    }
     const u = URL.createObjectURL(event.photo);
     setUrl(u);
     return () => URL.revokeObjectURL(u);

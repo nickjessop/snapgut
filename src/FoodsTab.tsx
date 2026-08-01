@@ -8,6 +8,7 @@ import {
   type FoodRank,
 } from "./foodScores";
 import FoodImage from "./FoodImage";
+import InfoNote from "./InfoNote";
 import { InsightsIcon as SparklesIcon } from "./icons";
 
 export default function FoodsTab({ reloadKey = 0 }: { reloadKey?: number }) {
@@ -32,10 +33,37 @@ export default function FoodsTab({ reloadKey = 0 }: { reloadKey?: number }) {
 
   return (
     <div>
-      <p className="disclaimer">
-        How often each food was followed by symptoms within 24h. These are personal
-        patterns from your logs, not allergy tests or medical advice.
-      </p>
+      <InfoNote
+        title="How foods get ranked"
+        explanation={
+          <>
+            <p>
+              A food's rank is how often a symptom followed it within 24 hours,
+              compared with how often you get symptoms generally. Eating it a lot
+              without trouble moves it up; symptoms clustering after it move it down.
+            </p>
+            <p>
+              Ranks move as you log more. A food you have eaten two or three times
+              sits in "not enough data" until there is something to compare, and a
+              food marked low confidence is a hint to keep logging, not a verdict.
+            </p>
+            <p>
+              Something you eat with almost every meal may stay unranked however often
+              you log it. Judging a food needs meals <em>without</em> it to compare
+              against, and a daily staple leaves too few — so it is held back rather
+              than blamed for whatever else was on the plate.
+            </p>
+            <p>
+              These are your own patterns, not allergy tests or medical advice.
+              SnapGut cannot tell an intolerance apart from a coincidence — a
+              clinician can, and this list is what to bring them.
+            </p>
+          </>
+        }
+      >
+        Ranked by how often symptoms followed each food within 24h — your patterns,
+        not an allergy test.
+      </InfoNote>
 
       {!hasMeals ? (
         <div className="empty-state">

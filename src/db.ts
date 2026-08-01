@@ -633,7 +633,22 @@ export async function clearOutbox(): Promise<void> {
 
 // ---- meta (cursor, timestamps, counters) ----
 
-export type MetaKey = "cursor" | "lastSyncAt" | "lastSkipped" | "lastTombstoneSweepAt";
+export type MetaKey =
+  | "cursor"
+  | "lastSyncAt"
+  | "lastSkipped"
+  | "lastTombstoneSweepAt"
+  /**
+   * Past AI insights, newest first. Kept in `meta` rather than in a store of their
+   * own so this needs no schema version bump: they are a bounded list of small text
+   * records, not a queryable collection, and `meta` is exactly the place for that.
+   *
+   * They also stay local by consequence rather than by accident — the Sync_Service
+   * carries `events`, never `meta`, so a narrative generated on one device does not
+   * travel to another. That is the conservative default for text derived from a
+   * health log.
+   */
+  | "insightHistory";
 
 export async function getMeta<T>(key: MetaKey): Promise<T | undefined> {
   const db = await getDB();
