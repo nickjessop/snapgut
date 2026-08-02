@@ -506,9 +506,15 @@ export default function SettingsView({
     if (!file) return;
     setBusy("Restoring…");
     try {
-      const n = await importBackup(file);
+      const { imported, skipped } = await importBackup(file);
       onChanged();
-      setToast(`Restored ${n} item${n === 1 ? "" : "s"}`);
+      // A partial restore is reported as partial. Saying "Restored 40 items" while
+      // quietly dropping three is the kind of reassurance that costs trust later.
+      setToast(
+        skipped > 0
+          ? `Restored ${imported} item${imported === 1 ? "" : "s"} · ${skipped} couldn't be read`
+          : `Restored ${imported} item${imported === 1 ? "" : "s"}`
+      );
     } catch (err) {
       setToast((err as Error).message);
     }
@@ -762,6 +768,18 @@ export default function SettingsView({
             chevron
             onClick={() => fileRef.current?.click()}
           />
+          {/* Said plainly, next to the control that prevents it.
+ 
+              Removing an installed web app deletes its storage with it, on iOS and
+              Android both, and there is no uninstall event to warn on — by the time
+              the OS acts, no code of ours runs again. So the only honest place for
+              this is before it happens, beside the backup controls, rather than a
+              confirmation that can never fire. */}
+          <div className="settings-hint">
+            Deleting SnapGut from your Home Screen deletes this log with it, and
+            clearing your browser's site data does the same. A backup file, or Cloud
+            sync, is what survives that.
+          </div>
           <SettingsItem
             icon={CsvIcon}
             title="Export as CSV"

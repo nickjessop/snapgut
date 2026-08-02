@@ -35,11 +35,13 @@ function backupFile(entries: Record<string, unknown>[]): File {
 describe("importBackup on the v3 write path", () => {
   it("sets updatedAt = createdAt for an entry that carries no Revision_Time (Req 5.7)", async () => {
     const id = freshId();
-    const n = await importBackup(
+    // `importBackup` now reports imported and skipped separately, so a partial
+    // restore can be reported as partial rather than counted as a clean success.
+    const result = await importBackup(
       backupFile([{ id, type: "checkin", createdAt: 1_700_000_000_000, stress: "low" }]),
     );
 
-    expect(n).toBe(1);
+    expect(result).toEqual({ imported: 1, skipped: 0 });
     const stored = await getRecord(id);
     expect(stored?.updatedAt).toBe(1_700_000_000_000);
   });
