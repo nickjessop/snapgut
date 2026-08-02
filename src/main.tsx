@@ -3,9 +3,15 @@ import ReactDOM from "react-dom/client";
 import { registerServiceWorker } from "./swUpdate";
 import App from "./App";
 import { initTheme } from "./theme";
+import { startAppHeightSync } from "./appHeight";
 import "./styles.css";
 
 initTheme();
+
+// Before first render, so the frame is never laid out at the wrong height and then
+// corrected — a visible jump on a cold launch. Runs for the life of the document, so
+// the returned teardown is not needed.
+startAppHeightSync();
 
 // The App_Shell is the only document that registers the Service_Worker. The
 // plugin's automatic injection is off (`injectRegister: null` in

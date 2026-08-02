@@ -171,6 +171,35 @@ ship together, and feature work that carries a design decision.
   does not. Verified on production: `documentElement.scrollHeight === innerHeight`.
   Inner scroll preserved — the scroll containers each got `overscroll-behavior:
   contain` so reaching the end does not chain outward.
+
+  **That fixed a real bug on Chromium and did not fix iOS.** Three further attempts on
+  an installed iOS app all failed: removing the over-constraining `height: 100%` from
+  the fixed body, painting `html` in `--bg` so an uncovered strip would not be black,
+  and a `min-height: 100dvh` floor on `.app`. The band under the tab bar survived all
+  three, and the user also saw it on the edit-event sheet — a different element, which
+  pointed at a shared ancestor rather than at either component.
+
+  Cause: in standalone mode with `viewport-fit=cover`, the CSS viewport that `inset:
+  0`, `100vh`, and `100dvh` all resolve against is the one *inside* the safe areas,
+  while the web view covers the whole screen. So every one of those boxes was correct
+  by the box model and still ended above the home indicator. There is no CSS unit for
+  what was needed.
+
+  Fix: `src/appHeight.ts` writes `window.innerHeight` — which in standalone reports the
+  web view's own height, safe areas included — to `--app-height` on the root element,
+  and `body`, `.sheet-backdrop`, and `.photo-overlay` size off it. `.app` is `100%` of
+  the body as before, so every screen inherits it, the sheet included. Called from
+  `main.tsx` before first render so a cold launch never lays out short and corrects
+  itself. `visualViewport.height` was rejected: it shrinks with the keyboard, and
+  collapsing the frame around a keyboard is a different bug.
+
+  Verified in a browser by forcing `--app-height` 34px past the CSS viewport: the
+  frame, the tab bar, and the sheet all followed to the new bottom and
+  `documentElement.scrollHeight` stayed at the viewport, so nothing gained a scrollbar
+  or a bounce. `src/appHeight.test.ts` covers the measurement contract. **The iOS
+  condition itself still cannot be reproduced off-device** — an emulator reports a zero
+  inset — so the diagnostics panel (tap the build id in Settings) now also prints the
+  measured `--app-height` next to `innerHeight` and the frame's real bottom.
 - ☑ **A5. Respect the top safe area.** `.sheet`, `.log-header`, and
   `.settings-header` were the three that never got `--safe-top` while already having
   `--safe-bottom`, which is exactly why the back control sat under the notch on every

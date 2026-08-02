@@ -48,8 +48,17 @@ export default function LayoutDiagnostics() {
         window.matchMedia?.("(display-mode: standalone)").matches ||
         (navigator as unknown as { standalone?: boolean }).standalone === true;
 
+      const measured =
+        getComputedStyle(document.documentElement)
+          .getPropertyValue("--app-height")
+          .trim() || "not set";
+
       setRows([
         ["viewport", `${window.innerHeight}px (visual ${Math.round(window.visualViewport?.height ?? 0)})`],
+        // What src/appHeight.ts wrote. If this matches "viewport" and "app height"
+        // matches both, the frame is the full web view and any remaining band is
+        // outside the document entirely.
+        ["measured --app-height", measured],
         ["screen", `${window.screen.height}px · dpr ${window.devicePixelRatio}`],
         ["safe top / bottom", `${insets.top} / ${insets.bottom}`],
         ["app height", app ? `${Math.round(app.height)}px` : "—"],
