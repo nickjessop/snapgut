@@ -26,8 +26,8 @@ import {
   AddIcon,
   type IconProps,
 } from "./icons";
-import { getEvents, sweepTombstones, type LogEvent } from "./db";
-import InstallHint from "./InstallHint";
+import { sweepTombstones, type LogEvent } from "./db";
+import InstallToast from "./InstallToast";
 import { countLogSaved } from "./metrics";
 import { schedulePreload } from "./preload";
 import type { ComponentType } from "react";
@@ -79,11 +79,6 @@ export default function App() {
    *              this component's state, and declining returns them to it.
    */
   const [signIn, setSignIn] = useState<null | "route" | "prompt">(null);
-  /**
-   * How many logs this device holds. Read for one reason only: the install nudge
-   * waits until there is something worth protecting before it asks.
-   */
-  const [logCount, setLogCount] = useState(0);
 
   /**
    * The single funnel for every entitlement-carrying server response the UI
@@ -126,15 +121,6 @@ export default function App() {
     const busy = isEphemeralFlow(flow) || signIn !== null;
     setSafeToReload(!busy);
   }, [flow, signIn]);
-
-  // Re-read after every save, which is when the count can have crossed the install
-  // nudge's threshold. Failures are ignored: a missing count only means the nudge
-  // waits, which is the safe direction.
-  useEffect(() => {
-    getEvents()
-      .then((events) => setLogCount(events.length))
-      .catch(() => {});
-  }, [reloadKey]);
 
   /**
    * Left-to-right order for the swipe gesture, matching where each view sits in the
@@ -580,10 +566,11 @@ export default function App() {
         </div>
       )}
 
-      {/* Rendered from the tab shell rather than from one tab, so it is seen wherever
-          the user happens to be — and only here, so it can never cover an open flow
-          or the sign-in screen. */}
-      <InstallHint logCount={logCount} />
+      {/* Rendered from the tab shell rather than from one tab, so it rides above the
+          nav on every screen including the camera — and only here, so it can never
+          cover an open flow or the sign-in screen. Stays until dismissed once; after
+          that the offer lives in Settings. */}
+      <InstallToast />
 
       <nav className="tabbar">
         <button className={tab === "logs" ? "active" : ""} onClick={() => goToView("logs")}>

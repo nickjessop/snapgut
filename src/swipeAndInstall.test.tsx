@@ -219,107 +219,98 @@ describe("swiping between views", () => {
 });
 
 describe("the install nudge", () => {
-  /** Enough saved logs to have something worth protecting. */
-  function withLogs(n: number) {
-    h.events = Array.from({ length: n }, (_, i) => ({
-      id: `e${i}`,
-      type: "symptom",
-      createdAt: Date.now() - i * 1000,
-      updatedAt: Date.now() - i * 1000,
-      symptoms: [],
-    }));
-  }
-
   beforeEach(() => {
-    // The nudge only offers manual steps on iOS, and only a button where the browser
-    // has given us a real install prompt to fire. iOS is the case worth asserting,
-    // because it is where installing actually protects the data.
+    // iOS is the case worth asserting: it is where installing actually protects the
+    // data, and where there is no install API so the steps have to be described.
     vi.stubGlobal("navigator", {
       ...navigator,
       userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
     });
   });
 
-  it("stays quiet before the user has logged anything", async () => {
-    withLogs(0);
+  const NUDGE = "Add SnapGut to your Home Screen";
+
+  it("rides above the nav from the start, with nothing to earn first", async () => {
+    // It used to be a modal sheet withheld until a couple of logs had been saved,
+    // because interrupting someone with a dialog has to be justified. A bar that sits
+    // above the nav does not interrupt, so there is nothing to wait for — and waiting
+    // meant most people never met it at all.
     render(<App />);
     await screen.findByLabelText("Add log");
-
-    // Asking a visitor who has logged nothing is how a prompt gets trained away.
-    expect(screen.queryByText("Keep your log safe")).toBeNull();
+    expect(screen.getByRole("region", { name: NUDGE })).toBeTruthy();
   });
 
-  it("stays quiet after a single log", async () => {
-    withLogs(1);
+  it("stays put across screens rather than belonging to one tab", async () => {
     render(<App />);
     await screen.findByLabelText("Add log");
-
-    expect(screen.queryByText("Keep your log safe")).toBeNull();
-  });
-
-  it("appears once the habit has started", async () => {
-    withLogs(2);
-    render(<App />);
-
-    // The reason it matters on iOS specifically: an uninstalled PWA's storage can be
-    // cleared after a week of not visiting, which would take the log with it.
-    await screen.findByText("Keep your log safe");
-    expect(screen.getByText("Add to Home Screen")).toBeTruthy();
-  });
-
-  it("snoozes on 'Not now' rather than disappearing forever", async () => {
-    withLogs(3);
-    render(<App />);
-    await screen.findByText("Keep your log safe");
+    expect(screen.getByRole("region", { name: NUDGE })).toBeTruthy();
 
     await act(async () => {
-      fireEvent.click(screen.getByText("Not now"));
+      fireEvent.click(screen.getByText("Logs"));
     });
-    expect(screen.queryByText("Keep your log safe")).toBeNull();
+    // Mounted by the tab shell, so switching tabs cannot take it away.
+    expect(screen.getByRole("region", { name: NUDGE })).toBeTruthy();
+  });
 
-    // Remounting inside the snooze window stays quiet.
-    cleanup();
+  it("offers the manual steps where there is no install API to call", async () => {
     render(<App />);
     await screen.findByLabelText("Add log");
-    expect(screen.queryByText("Keep your log safe")).toBeNull();
-
-    // A snooze is a timestamp, not a permanent flag — so it can lapse.
-    expect(localStorage.getItem("food-snap-install-snoozed-at")).toBeTruthy();
-    expect(localStorage.getItem("food-snap-install-hint-dismissed")).toBeNull();
-  });
-
-  it("returns after the snooze lapses", async () => {
-    withLogs(3);
-    const eightDaysAgo = Date.now() - 8 * 24 * 60 * 60 * 1000;
-    localStorage.setItem("food-snap-install-snoozed-at", String(eightDaysAgo));
-
-    render(<App />);
-    await screen.findByText("Keep your log safe");
-  });
-
-  it("stays gone after 'Don't ask again'", async () => {
-    withLogs(3);
-    render(<App />);
-    await screen.findByText("Keep your log safe");
 
     await act(async () => {
-      fireEvent.click(screen.getByText("Don't ask again"));
+      fireEvent.click(screen.getByText("Add"));
     });
+    // A button that silently does nothing would be worse than describing the route.
+    expect(screen.getByRole("dialog", { name: NUDGE })).toBeTruthy();
+    expect(screen.getByText(/Scroll down and choose/)).toBeTruthy();
+  });
+
+  it("takes one dismissal as final and remembers it", async () => {
+    render(<App />);
+    await screen.findByLabelText("Add log");
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Dismiss"));
+    });
+    expect(screen.queryByRole("region", { name: NUDGE })).toBeNull();
+
+    // No snooze to lapse: a nudge that comes back is one people learn to ignore.
+    expect(localStorage.getItem("food-snap-install-dismissed")).toBe("1");
 
     cleanup();
     render(<App />);
     await screen.findByLabelText("Add log");
-    expect(screen.queryByText("Keep your log safe")).toBeNull();
+    expect(screen.queryByRole("region", { name: NUDGE })).toBeNull();
+  });
+
+  it("keeps the offer in Settings after the nudge is dismissed", async () => {
+    localStorage.setItem("food-snap-install-dismissed", "1");
+    render(<App />);
+    await screen.findByLabelText("Add log");
+    expect(screen.queryByRole("region", { name: NUDGE })).toBeNull();
+
+    // The gear lives in the Logs header, so get there first.
+    await act(async () => {
+      fireEvent.click(screen.getByText("Logs"));
+    });
+    await act(async () => {
+      fireEvent.click(await screen.findByLabelText("Settings"));
+    });
+    // Dismissing the nudge answers the nudge, not the question — someone who changes
+    // their mind has one place to look.
+    expect(await screen.findByText(NUDGE)).toBeTruthy();
   });
 
   it("stays quiet when already installed", async () => {
-    withLogs(5);
-    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+    vi.stubGlobal("matchMedia", () => ({
+      matches: true,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
 
     render(<App />);
     await screen.findByLabelText("Add log");
 
     // Standalone means the job is done; asking again would be noise.
-    expect(screen.queryByText("Keep your log safe")).toBeNull();
+    expect(screen.queryByRole("region", { name: NUDGE })).toBeNull();
   });
 });

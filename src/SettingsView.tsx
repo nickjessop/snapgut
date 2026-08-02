@@ -65,6 +65,8 @@ import { APP_BUILD } from "./build";
 import BackButton from "./BackButton";
 import { clearInsights, listInsights } from "./insightHistory";
 import LayoutDiagnostics from "./LayoutDiagnostics";
+import InstallSteps from "./InstallSteps";
+import { canInstall, isIOS, promptInstall, subscribeInstall } from "./installPrompt";
 
 // Was a hand-typed literal that never changed, and so said nothing about what was
 // actually running. Now derived from the build (see src/build.ts).
@@ -278,6 +280,21 @@ export default function SettingsView({
   const [insightsStored, setInsightsStored] = useState(false);
   /** Layout numbers, revealed by tapping the build id. See the note at its render. */
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  /**
+   * Whether to offer the Home Screen install here. Re-read on notification because on
+   * Chromium the browser tells us it has a prompt some time after mount.
+   */
+  const [installOffer, setInstallOffer] = useState(() => canInstall());
+  /** The manual steps sheet, for iOS and for browsers that give us no prompt. */
+  const [installSteps, setInstallSteps] = useState(false);
+
+  useEffect(() => subscribeInstall(() => setInstallOffer(canInstall())), []);
+
+  async function addToHomeScreen() {
+    // Same branch as the toast: fire the real prompt where there is one, fall back to
+    // instructions rather than a button that does nothing.
+    if (isIOS() || !(await promptInstall())) setInstallSteps(true);
+  }
   /**
    * The shared entitlement snapshot both destination blocks gate on (Req 1.2,
    * 15.1). It comes from `syncSettings`, not from the `entitlement` prop, so a
@@ -726,6 +743,26 @@ export default function SettingsView({
           )}
         </section>
 
+        {/* Home Screen — where the offer goes once the floating nudge is dismissed.
+            Shown whenever the app is not already installed, dismissed or not, because
+            someone who changes their mind looks here and nowhere else. */}
+        {installOffer && (
+          <section className="settings-section">
+            <div className="settings-label">Home Screen</div>
+            <SettingsItem
+              icon={BackupIcon}
+              title="Add SnapGut to your Home Screen"
+              sub="Opens straight to the camera, and keeps your log from being cleared"
+              chevron
+              onClick={addToHomeScreen}
+            />
+            <div className="settings-hint">
+              Your log lives on this device. A browser can clear a site's data after a
+              stretch of not visiting — being installed is what prevents that.
+            </div>
+          </section>
+        )}
+
         {/* Appearance */}
         <section className="settings-section">
           <div className="settings-label">Appearance</div>
@@ -1094,6 +1131,13 @@ export default function SettingsView({
 
       {toast && <div className="toast">{toast}</div>}
       {busy && <div className="toast">{busy}</div>}
+
+      {installSteps && (
+        <InstallSteps
+          onClose={() => setInstallSteps(false)}
+          onDone={() => setInstallSteps(false)}
+        />
+      )}
 
       {/* Req 18.6, 18.9 — the disclosure, shown on open and before the first enable */}
       {disclosure && (

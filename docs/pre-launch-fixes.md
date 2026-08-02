@@ -402,3 +402,77 @@ failure from that file.
   and whether the fixed-body layout behaves with the keyboard open.
 - The A9 decision above.
 - All of batch B.
+
+## Silence as a signal: meal outcomes
+
+The question that started this: *if you eat, feel fine, and therefore never open the
+app, is that absence being counted as the good news it is?*
+
+Partly, and the part that was missing turned out to be a bug rather than a gap.
+
+**Already right.** `foodScores.ts` has always divided symptom-follows by exposures,
+so a food eaten often without trouble earns "Agrees with you". Symptom-free meals
+were counted in a food's favour from the start.
+
+**Wrong.** "No symptom logged" was read as "no symptom occurred", with no conditions
+attached, and that collapses three different situations into one:
+
+1. The window has closed and the user was demonstrably still using the app without
+   reporting anything. Their silence is about the food.
+2. The window has not closed yet. Nothing is decided — and counting a meal logged
+   twenty minutes ago as symptom-free is not conservative, it is wrong. It also
+   biases the *most recent* foods hardest, which is exactly when someone is looking.
+3. The window has closed but the app has not been opened since. Absent data wearing
+   the costume of good news.
+
+`src/mealOutcome.ts` now classifies each meal as `symptom`, `clear`, `pending`, or
+`unobserved`, and both analyses share it so they cannot drift on what "after a meal"
+means. Only `symptom` and `clear` reach a rate.
+
+Excluding the other two costs less than it sounds. `unobserved` can only ever be the
+tail of a logging streak, because **writing anything resolves every meal whose window
+has already closed** — so for anyone using the app at all, nearly every symptom-free
+meal still counts. Presence is read from `updatedAt` rather than `createdAt` on
+purpose: `createdAt` is backdatable and proves nothing about when someone was present.
+
+**Saying it outright.** `MealEvent.outcome?: "fine"` is the user stating it rather than
+us inferring it — the one form of this evidence that cannot be confounded by simply
+not opening the app. Optional and only ever `"fine"`, so absence means "not stated"
+and every meal logged before the field existed keeps its meaning. There is no "felt
+bad": that is what a symptom event is for.
+
+It syncs (wire codec, allowlist, round-trip property), because otherwise two devices
+would compute different rankings from the same data.
+
+**Nothing is set in stone.** The control is a toggle in both places it appears —
+`ConfirmOutcomes` in Insights, and the meal's own edit screen for the life of the
+meal. Clearing an answer removes the key rather than storing `undefined`, so "not
+stated" is byte-identical to never having been asked. The Insights list deliberately
+does *not* re-key on an answer: the row stays put so the undo is still there.
+
+Foods now show the positive evidence too. A bare "17%" reads as an accusation with no
+defence; "17%, 5 symptom-free, 1 not yet counted" is the same number and an honest
+claim.
+
+`src/mealOutcome.test.ts` covers it — 19 cases, and worth noting the scoring logic had
+**no tests at all** before this.
+
+## Install nudge: a bar, not a dialog
+
+Reworked from a modal sheet gated on two saved logs into a floating bar above the nav,
+on every screen including the camera, until dismissed once.
+
+The old gate existed because interrupting someone with a dialog has to be earned. A
+bar that sits above the nav does not interrupt, so there is nothing to earn — and
+waiting meant most people never met it. Identical on both platforms; only the final
+action branches, and where there is no install API (iOS, or a browser that offers no
+prompt) the Share-sheet steps are the fallback rather than a button that does nothing.
+
+One dismissal, final and remembered — no snooze, because a nudge that returns is one
+people learn to ignore. Afterwards the offer lives in Settings under "Home Screen",
+shown whenever the app is not installed, which is where someone who changes their mind
+will look.
+
+`beforeinstallprompt` is captured at module load in `src/installPrompt.ts`, not in an
+effect. Chromium fires it once and early, often before React mounts; an
+effect-registered listener misses it and the install button then never appears at all.

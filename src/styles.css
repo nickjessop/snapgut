@@ -2927,3 +2927,209 @@ body {
   padding: 0 2px 12px;
   margin: 0;
 }
+
+/* ---------- Meal outcome: "did this sit okay?" ---------- */
+
+/* A toggle, and it has to read as one in both states — a set answer that looks like
+   plain text is an answer the user will not think to change. */
+.outcome-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--card-2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease;
+}
+.outcome-toggle.on {
+  border-color: transparent;
+  background: var(--good, #2e7d32);
+  color: #fff;
+}
+.outcome-toggle.compact {
+  flex: 0 0 auto;
+  padding: 7px 12px;
+  font-size: 13px;
+}
+/* Reserved whether or not the tick is there, so setting an answer does not shift the
+   row sideways under the finger. */
+.outcome-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+}
+
+.confirm-outcomes {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md, 18px);
+  background: var(--card);
+  padding: 14px 16px 8px;
+  margin: 0 0 16px;
+}
+.confirm-outcomes-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.confirm-outcomes-head h2 {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 700;
+}
+.confirm-outcomes-close {
+  flex: 0 0 auto;
+  border: none;
+  background: none;
+  padding: 4px 0;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.confirm-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+.confirm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+.confirm-meal {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.confirm-dish {
+  font-size: 14.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.confirm-when {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* The counts behind a food's rate, so the positive evidence is as legible as the
+   negative. */
+.food-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 3px;
+  font-size: 11.5px;
+}
+.food-clear {
+  color: var(--good, #2e7d32);
+  font-weight: 600;
+}
+.food-unsettled {
+  color: var(--muted);
+}
+
+/* ---------- Install nudge (floating, above the nav) ---------- */
+
+/* Rides above the tab bar on every screen until dismissed once, the camera included —
+   which is why it is `fixed` and offset by the bar's height plus the home-indicator
+   inset rather than sitting in the flow of any one view.
+ *
+ * z-index sits above the tab bar (5) and below sheets (10): it must clear the raised
+ * FAB, and it must go behind a modal backdrop rather than float over a dialog. */
+.install-toast {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(84px + var(--safe-bottom));
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px 11px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--toast-border);
+  background: var(--toast-bg);
+  color: var(--toast-text);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  animation: install-rise 0.24s var(--spring) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .install-toast {
+    animation: none;
+  }
+}
+@keyframes install-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.install-toast-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.install-toast-copy strong {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+.install-toast-copy span {
+  font-size: 11.5px;
+  line-height: 1.35;
+  opacity: 0.78;
+}
+.install-toast-add {
+  flex: 0 0 auto;
+  border: none;
+  border-radius: var(--r-pill);
+  padding: 8px 15px;
+  background: var(--accent, #2e7d32);
+  color: #fff;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.install-toast-x {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* A 32px box around a 16px glyph: the dismiss is the smallest target here and the
+     one most often aimed at while walking. */
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+}
+.install-toast-x:active {
+  opacity: 1;
+}
