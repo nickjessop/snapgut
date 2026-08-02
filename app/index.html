@@ -14,7 +14,26 @@
     <meta name="theme-color" content="#fdfcf6" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!--
+      Deliberately NOT `black-translucent`, and this is the fix for the band below the
+      tab bar that four CSS attempts could not touch.
+
+      With `black-translucent`, an installed iPhone 16 reported: screen 852px, web view
+      793px, safe-area top inset 59px. 852 − 59 = 793 exactly. iOS was placing the web
+      view at y=0 so the status bar overlaid our content — the full-bleed that flag is
+      for — while still sizing it as though the status bar had been reserved. The
+      document filled its web view perfectly (the frame's bottom edge and the CSS
+      viewport's bottom edge measured identical, with nothing uncovered), so there was
+      never a CSS bug to find: the 59px simply was not ours to paint. The app paid the
+      top inset twice, once as padding and once as dead strip.
+
+      `viewport-fit=cover` stays. Between them iOS is now self-consistent — either the
+      web view covers the screen and reports real insets, or it reserves the status bar
+      and starts below it — and both of those are gapless. The cost is that content no
+      longer runs under the status bar; going back to full-bleed there means finding a
+      way to make iOS report a height that matches the view it gives you.
+    -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="SnapGut" />
     <!-- The App_Shell is never indexable; the server sends X-Robots-Tag too. -->
     <meta name="robots" content="noindex" />

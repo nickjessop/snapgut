@@ -72,6 +72,15 @@ export default function LayoutDiagnostics() {
         // difference is the band.
         ["css viewport", `${document.documentElement.clientHeight}px`],
         ["screen", `${window.screen.height}px · dpr ${window.devicePixelRatio}`],
+        // The one line that named the bug. A non-zero deficit is screen space the web
+        // view was never given, so no CSS can reach it; when it equals the top inset,
+        // the status-bar style is what to look at, not the stylesheet.
+        [
+          "screen − viewport",
+          `${window.screen.height - window.innerHeight}px${
+            window.screen.height - window.innerHeight > 0 ? " ← unreachable" : ""
+          }`,
+        ],
         ["safe top / bottom", `${insets.top} / ${insets.bottom}`],
         ["app height", app ? `${Math.round(app.height)}px` : "—"],
         ["app bottom", app ? `${Math.round(app.bottom)}px` : "—"],
