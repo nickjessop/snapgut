@@ -296,6 +296,10 @@ export const arbMealEvent: fc.Arbitrary<SyncMealEvent> = fc
       { arbitrary: emptyArray<Ingredient>(), weight: 1 },
       { arbitrary: arbNonEmptyIngredients, weight: 3 },
     ),
+    // "fine" is the only value, so the domain is just present-or-absent — and absent
+    // has to survive the round trip as absent, because "not stated" is a distinct
+    // meaning from "fine" (see MealEvent.outcome).
+    outcome: fc.option(fc.constant("fine" as const), { nil: undefined }),
   })
   .map(omitUndefined);
 
@@ -479,6 +483,7 @@ export function toWireLike(r: SyncStoredRecord): Record<string, unknown> {
   if (r.type === "meal") {
     wire.dish = r.dish;
     wire.ingredients = r.ingredients.map((i) => ({ ...i }));
+    if (r.outcome !== undefined) wire.outcome = r.outcome;
     // `photo` is intentionally never projected (Req 16.1, 20.2).
   } else if (r.type === "symptom") {
     wire.symptoms = r.symptoms.map((s) => ({ ...s }));

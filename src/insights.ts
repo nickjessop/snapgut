@@ -8,8 +8,8 @@ import {
   type LogEvent,
   type MealEvent,
   type CheckinEvent,
-  type LoggedSymptom,
 } from "./db";
+import { classifyMeals, symptomMoments, LAG_WINDOW_MS } from "./mealOutcome";
 import { getSymptom, type Severity } from "./symptoms";
 import {
   tagsForIngredient,
@@ -22,7 +22,8 @@ const SEV_SCORE: Record<Severity, number> = { mild: 1, moderate: 2, severe: 3 };
 
 // Symptoms can appear immediately up to ~24h later; the literature notes lags of
 // hours (and sometimes longer). We attribute a symptom to meals in this window.
-const LAG_WINDOW_MS = 24 * 60 * 60 * 1000;
+// The window itself lives in mealOutcome.ts, which both analyses share so they cannot
+// drift apart on what "after a meal" means.
 export const LAG_WINDOW_HOURS = 24;
 
 // Systemic symptoms that point more toward histamine than classic FODMAP gas.
@@ -44,6 +45,18 @@ export interface Association {
 
 export interface EvidenceSummary {
   mealCount: number;
+  /**
+   * Meals with a settled outcome — the basis of every rate below. Short of
+   * `mealCount` by the meals still inside their lag window plus those nobody was
+   * around to report on (mealOutcome.ts).
+   */
+  scoredMealCount: number;
+  /** Settled meals that went symptom-free. Evidence, and the majority for most users. */
+  clearMealCount: number;
+  /** Meals whose lag window has not closed. */
+  pendingMealCount: number;
+  /** Meals with no symptom logged and no sign the user was there to log one. */
+  unobservedMealCount: number;
   symptomCount: number;
   dayCount: number;
   lagWindowHours: number;
@@ -58,27 +71,21 @@ export interface EvidenceSummary {
 
 const isNegative = (id: string) => getSymptom(id)?.category !== "Positive";
 
-interface SymptomOccurrence {
-  time: number;
-  symptoms: LoggedSymptom[];
-}
+type SymptomOccurrence = ReturnType<typeof symptomMoments>[number];
 
-export function computeEvidence(events: LogEvent[]): EvidenceSummary {
-  const meals = events.filter((e): e is MealEvent => e.type === "meal");
+export function computeEvidence(events: LogEvent[], now: number = Date.now()): EvidenceSummary {
+  const allMeals = events.filter((e): e is MealEvent => e.type === "meal");
+  const verdicts = classifyMeals(events, now);
+  // Rates are computed over settled meals only, for the reasons in mealOutcome.ts.
+  const settled = verdicts.filter((v) => v.counted);
 
-  // All symptom-bearing moments (symptom events + bowel events with symptoms).
-  const symptomMoments: SymptomOccurrence[] = [];
-  for (const e of events) {
-    if (e.type === "symptom") symptomMoments.push({ time: e.createdAt, symptoms: e.symptoms });
-    else if (e.type === "bowel" && e.symptoms?.length)
-      symptomMoments.push({ time: e.createdAt, symptoms: e.symptoms });
-  }
+  const symptomMomentList = symptomMoments(events);
 
   const days = new Set(events.map((e) => new Date(e.createdAt).toDateString()));
 
   // --- top symptoms across all symptom moments ---
   const symMap = new Map<string, { count: number; sevSum: number }>();
-  for (const m of symptomMoments) {
+  for (const m of symptomMomentList) {
     for (const s of m.symptoms) {
       if (!isNegative(s.id)) continue;
       const label = getSymptom(s.id)?.label ?? s.id;
@@ -100,21 +107,15 @@ export function computeEvidence(events: LogEvent[]): EvidenceSummary {
   let lateMeals = 0;
   let lateMealsWithSymptom = 0;
 
-  for (const meal of meals) {
+  for (const verdict of settled) {
+    const meal = verdict.meal;
     const groups = new Set<TriggerGroup>();
     confidentIngredients(meal).forEach((ing) =>
       tagsForIngredient(ing).forEach((g) => groups.add(g))
     );
 
-    // symptom labels occurring within (mealTime, mealTime + LAG_WINDOW]
-    const labels = new Set<string>();
-    for (const m of symptomMoments) {
-      const dt = m.time - meal.createdAt;
-      if (dt > 0 && dt <= LAG_WINDOW_MS) {
-        for (const s of m.symptoms) if (isNegative(s.id)) labels.add(getSymptom(s.id)?.label ?? s.id);
-      }
-    }
-    const followed = labels.size > 0;
+    const labels = verdict.labels;
+    const followed = verdict.outcome === "symptom";
 
     for (const g of groups) {
       mealsWithGroup.set(g, (mealsWithGroup.get(g) ?? 0) + 1);
@@ -163,7 +164,7 @@ export function computeEvidence(events: LogEvent[]): EvidenceSummary {
   );
   let highStressFollowed = 0;
   for (const c of highStress) {
-    const followed = symptomMoments.some((m) => {
+    const followed = symptomMomentList.some((m) => {
       const dt = m.time - c.createdAt;
       return dt > 0 && dt <= LAG_WINDOW_MS && m.symptoms.some((s) => isNegative(s.id));
     });
@@ -174,8 +175,10 @@ export function computeEvidence(events: LogEvent[]): EvidenceSummary {
     : null;
 
   const focus = route({
-    meals,
-    symptomMoments,
+    // Routing reads settled meals: a narrative should not be picked on the strength of
+    // meals whose outcome is still open.
+    meals: settled.map((v) => v.meal),
+    symptomMoments: symptomMomentList,
     topTriggerGroups,
     associations,
     lateNightSymptomRate,
@@ -183,8 +186,12 @@ export function computeEvidence(events: LogEvent[]): EvidenceSummary {
   });
 
   return {
-    mealCount: meals.length,
-    symptomCount: symptomMoments.length,
+    mealCount: allMeals.length,
+    scoredMealCount: settled.length,
+    clearMealCount: verdicts.filter((v) => v.outcome === "clear").length,
+    pendingMealCount: verdicts.filter((v) => v.outcome === "pending").length,
+    unobservedMealCount: verdicts.filter((v) => v.outcome === "unobserved").length,
+    symptomCount: symptomMomentList.length,
     dayCount: days.size,
     lagWindowHours: LAG_WINDOW_HOURS,
     topSymptoms,

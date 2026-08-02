@@ -87,6 +87,8 @@ export interface EventRecord {
   note?: string;
   dish?: string;
   ingredients?: Ingredient[];
+  /** "This meal sat fine", stated by the user. See MealEvent.outcome. */
+  outcome?: "fine";
   symptoms?: LoggedSymptom[];
   bristol?: number;
   stress?: StressLevel;
@@ -118,6 +120,7 @@ const KNOWN_WIRE_KEYS: ReadonlySet<string> = new Set([
   "note",
   "dish",
   "ingredients",
+  "outcome",
   "symptoms",
   "bristol",
   "stress",
@@ -283,6 +286,9 @@ function buildEventRecord(r: StoredRecord, dropUnknown: boolean): EventRecord {
     case "meal":
       out.dish = r.dish;
       out.ingredients = r.ingredients.map(copyIngredient);
+      // Omitted when unset, so "not stated" stays distinguishable from "fine" on the
+      // wire as well as locally.
+      if (r.outcome !== undefined) out.outcome = r.outcome;
       break;
     case "symptom":
       out.symptoms = r.symptoms.map(copySymptom);
@@ -396,7 +402,7 @@ function parseSymptoms(value: unknown): LoggedSymptom[] | null {
  * bowel Tombstone carries no content; the event path requires it below.
  */
 type WireContent =
-  | { type: "meal"; dish: string; ingredients: Ingredient[] }
+  | { type: "meal"; dish: string; ingredients: Ingredient[]; outcome?: "fine" }
   | { type: "symptom"; symptoms: LoggedSymptom[] }
   | { type: "bowel"; bristol?: number; symptoms?: LoggedSymptom[] }
   | { type: "checkin"; stress?: StressLevel; sleep?: SleepQuality };
@@ -420,7 +426,18 @@ function parseContent(
         if (parsed === null) return null;
         ingredients = parsed;
       }
-      return { type, dish: src.dish === undefined ? "" : (src.dish as string), ingredients };
+      const content: WireContent = {
+        type,
+        dish: src.dish === undefined ? "" : (src.dish as string),
+        ingredients,
+      };
+      // "fine" is the only value; anything else is outside the domain and skips the
+      // record (Req 20.4) rather than being coerced into a claim the user never made.
+      if (src.outcome !== undefined) {
+        if (src.outcome !== "fine") return null;
+        content.outcome = "fine";
+      }
+      return content;
     }
     case "symptom": {
       let symptoms: LoggedSymptom[] = [];
@@ -521,6 +538,7 @@ export function fromEventRecord(raw: unknown): StoredRecord | null {
         type: "meal",
         dish: content.dish,
         ingredients: content.ingredients,
+        ...(content.outcome !== undefined ? { outcome: content.outcome } : {}),
       };
       return meal;
     }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { recognizeMeal, UpgradeRequiredError, AuthError } from "./api";
 import WhenPicker from "./WhenPicker";
+import OutcomeToggle from "./OutcomeToggle";
 import { putEvent, type Ingredient, type MealEvent } from "./db";
 import type { Entitlement } from "./session";
 import { NoteIcon, AddIcon, InsightsIcon } from "./icons";
@@ -90,6 +91,13 @@ export default function MealDetails({
    * time. Seeded from the existing timestamp when editing.
    */
   const [when, setWhen] = useState<number>(editing?.createdAt ?? Date.now());
+  /**
+   * Whether the user has said this meal sat fine. Editable from here for the life of
+   * the meal, in either direction — the analysis treats "not stated" and "fine" as
+   * different things, so being able to get back to "not stated" matters as much as
+   * being able to set it.
+   */
+  const [outcome, setOutcome] = useState<"fine" | undefined>(editing?.outcome);
 
   // Create the object URL inside an effect so it survives StrictMode's
   // mount/unmount/mount and each instance revokes its own URL.
@@ -156,6 +164,11 @@ export default function MealDetails({
       dish: dish || "Meal",
       ingredients,
       note: note.trim() || undefined,
+      // Spread rather than assigned, so clearing the answer removes the key instead of
+      // leaving it present with an `undefined` value. IndexedDB preserves such a key,
+      // and "not stated" should be indistinguishable from a meal logged before this
+      // field existed.
+      ...(outcome ? { outcome } : {}),
       // `putEvent` replaces the whole record, so a `photo` that is absent here is
       // a `photo` deleted from the store. When editing, fall back to the stored
       // Blob rather than to nothing: this screen can be reached with `photo`
@@ -287,6 +300,20 @@ export default function MealDetails({
               time is the anchor for every association measured from it, so being
               able to correct one already logged is the point of the control. */}
           <WhenPicker onChange={setWhen} initial={when} />
+
+          {/* Only worth asking about a meal already eaten. On a meal being logged now
+              the answer cannot be known yet, and offering it would invite a guess. */}
+          {editing && (
+            <div>
+              <p className="section-title">How it sat</p>
+              <OutcomeToggle value={outcome} onChange={setOutcome} />
+              <p className="hint">
+                A meal that passed without symptoms counts in its ingredients' favour.
+                Saying so is stronger evidence than us assuming it from a quiet day —
+                and you can change or clear this any time.
+              </p>
+            </div>
+          )}
 
           {maybe.length > 0 && (
             <div>

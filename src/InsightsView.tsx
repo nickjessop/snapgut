@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { getEvents } from "./db";
+import { getEvents, type LogEvent } from "./db";
+import ConfirmOutcomes from "./ConfirmOutcomes";
 import { computeEvidence, type EvidenceSummary } from "./insights";
 import { getInsights, AuthError, UpgradeRequiredError } from "./api";
 import { isStale, listInsights, recordInsight, type PastInsight } from "./insightHistory";
@@ -108,6 +109,10 @@ function PatternsTab({
   onSignedOut?: () => void;
 }) {
   const [summary, setSummary] = useState<EvidenceSummary | null>(null);
+  /** Kept so the confirmation prompt can work from the same read as the summary. */
+  const [events, setEvents] = useState<LogEvent[]>([]);
+  /** Bumped after an outcome is answered, to recompute without a full remount. */
+  const [outcomeKey, setOutcomeKey] = useState(0);
   const [ai, setAi] = useState<AiInsight | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -173,6 +178,7 @@ function PatternsTab({
       const ev = computeEvidence(events);
       if (cancelled) return;
       setSummary(ev);
+      setEvents(events);
       setHistory(stored);
 
       // Pro used to regenerate on *every* visit to this tab, which spent an AI call
@@ -188,7 +194,7 @@ function PatternsTab({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reloadKey, pro]);
+  }, [reloadKey, pro, outcomeKey]);
 
   return (
     <>
@@ -239,6 +245,19 @@ function PatternsTab({
             <div className="l">most common</div>
           </div>
         </div>
+      )}
+
+      {/* Gated on `summary` because both are set from the same read: mounting before
+          the events arrive would freeze an empty queue (see ConfirmOutcomes).
+          Deliberately *not* keyed on `outcomeKey` — an answer recomputes the numbers
+          above but must leave the list standing, or the row would disappear from under
+          the tap that just set it and take the undo with it. */}
+      {summary && (
+        <ConfirmOutcomes
+          key={reloadKey}
+          events={events}
+          onChanged={() => setOutcomeKey((k) => k + 1)}
+        />
       )}
 
       {latest?.redFlag && <div className="redflag">⚠️ {latest.redFlag}</div>}

@@ -99,6 +99,8 @@ export default function FoodsTab({ reloadKey = 0 }: { reloadKey?: number }) {
 function FoodRow({ food, color }: { food: FoodScore; color: string }) {
   const showRate = food.rank !== "insufficient";
   const elevated = food.rank === "avoid" || food.rank === "reduce";
+  /** Exposures with no verdict: window still open, or nobody around to report. */
+  const unsettled = food.pending + food.unobserved;
   const liftLabel =
     food.lift === Infinity ? "only follows this" : `${food.lift.toFixed(1)}× your usual`;
 
@@ -117,6 +119,25 @@ function FoodRow({ food, color }: { food: FoodScore; color: string }) {
           {showRate && ` · symptoms ${Math.round(food.foodRate * 100)}% of the time`}
           {elevated && ` · ${liftLabel}`}
         </div>
+        {/* The evidence in the food's favour, stated rather than left implicit. A
+            symptom rate on its own reads as an accusation with no defence: "17%" and
+            "17%, from 5 clear meals out of 6" are the same number and different
+            claims. `unsettled` is the honest remainder — exposures we are not
+            entitled to count either way (see mealOutcome.ts). */}
+        {(food.clear > 0 || unsettled > 0) && (
+          <div className="food-evidence">
+            {food.clear > 0 && (
+              <span className="food-clear">
+                {food.clear} symptom-free
+              </span>
+            )}
+            {unsettled > 0 && (
+              <span className="food-unsettled">
+                {unsettled} not yet counted
+              </span>
+            )}
+          </div>
+        )}
         {food.topSymptoms.length > 0 && (
           <div className="food-symptoms">{food.topSymptoms.map((s) => s.label).join(", ")}</div>
         )}

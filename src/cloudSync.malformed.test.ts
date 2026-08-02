@@ -46,7 +46,17 @@ const SLEEP_VALUES = ["poor", "ok", "good"];
 /** Keys a parsed record of each kind may carry — nothing else may be smuggled. */
 const ALLOWED_KEYS: Record<string, readonly string[]> = {
   tombstone: ["id", "type", "createdAt", "updatedAt", "deleted", "unknownFields"],
-  meal: ["id", "type", "createdAt", "updatedAt", "note", "unknownFields", "dish", "ingredients"],
+  meal: [
+    "id",
+    "type",
+    "createdAt",
+    "updatedAt",
+    "note",
+    "unknownFields",
+    "dish",
+    "ingredients",
+    "outcome",
+  ],
   symptom: ["id", "type", "createdAt", "updatedAt", "note", "unknownFields", "symptoms"],
   bowel: ["id", "type", "createdAt", "updatedAt", "note", "unknownFields", "bristol", "symptoms"],
   checkin: ["id", "type", "createdAt", "updatedAt", "note", "unknownFields", "stress", "sleep"],
@@ -158,6 +168,9 @@ function domainViolations(record: StoredRecord): string[] {
           }
         }
       }
+      // "fine" or absent. Absent must stay absent: it means "not stated", and a
+      // coerced value would be a claim the user never made.
+      if ("outcome" in src && src.outcome !== "fine") out.push("outcome is out of domain");
       break;
     case "symptom":
       out.push(...violationsInSymptoms(src.symptoms, "symptoms"));

@@ -65,6 +65,20 @@ export interface MealEvent extends BaseEvent {
   dish: string;
   ingredients: Ingredient[];
   photo?: Blob; // on-device only
+  /**
+   * "This one sat fine", said deliberately rather than inferred from silence.
+   *
+   * A symptom-free meal is evidence in a food's favour, but only if we know the user
+   * was around to report a symptom and didn't. Absent this, that has to be inferred
+   * from whether they used the app after the meal's lag window closed — see
+   * mealOutcome.ts. This field is the user saying it outright, which is stronger and
+   * cannot be confounded by them simply not opening the app.
+   *
+   * Optional and only ever "fine": there is no "felt bad" value because that is what a
+   * symptom event is for. Absence means "not stated", never "not fine", so every meal
+   * logged before this existed keeps its meaning.
+   */
+  outcome?: "fine";
 }
 
 export interface SymptomEvent extends BaseEvent {

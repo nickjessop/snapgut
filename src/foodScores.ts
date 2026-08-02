@@ -6,19 +6,11 @@
 // *without* that food are followed by symptoms — and only flag a food when it
 // meaningfully exceeds baseline AND there's enough evidence.
 
-import {
-  confidentIngredients,
-  foodKey,
-  type LogEvent,
-  type MealEvent,
-  type LoggedSymptom,
-} from "./db";
-import { getSymptom } from "./symptoms";
-
-const LAG_WINDOW_MS = 24 * 60 * 60 * 1000;
+import { confidentIngredients, foodKey, type LogEvent } from "./db";
+import { classifyMeals } from "./mealOutcome";
 
 // Evidence gates — deliberately conservative before we ever say "Avoid".
-const MIN_EATEN = 4; // need at least this many exposures to rank at all
+const MIN_EATEN = 4; // need at least this many *settled* exposures to rank at all
 const MIN_SYMPTOM_FOLLOWS = 3; // need this many symptom-follows before "Avoid"
 const MIN_OTHER_MEALS = 3; // need this many meals WITHOUT the food for a baseline
 const AVOID_LIFT = 1.6; // must be ≥1.6× your baseline
@@ -30,7 +22,20 @@ export interface FoodScore {
   name: string;
   /** Canonical dictionary id, when recognition resolved one (see db.ts). */
   canonical?: string;
+  /** Every time the food was eaten — what the user recognises as "eaten N×". */
   eaten: number;
+  /**
+   * Exposures with a settled outcome, and the denominator of `foodRate`. Lower than
+   * `eaten` when some of those meals are still inside their lag window or went
+   * unobserved — see mealOutcome.ts for why those cannot be counted as symptom-free.
+   */
+  scored: number;
+  /** Settled exposures that went symptom-free. The evidence in the food's favour. */
+  clear: number;
+  /** Exposures whose window has not closed yet. */
+  pending: number;
+  /** Exposures with no symptom and no sign the user was there to report one. */
+  unobserved: number;
   withSymptom: number;
   foodRate: number; // symptom-follow rate for this food (0..1)
   baselineRate: number; // symptom-follow rate for meals WITHOUT this food
@@ -40,53 +45,33 @@ export interface FoodScore {
   topSymptoms: { label: string; count: number }[];
 }
 
-const isNegative = (id: string) => getSymptom(id)?.category !== "Positive";
+export function computeFoodScores(events: LogEvent[], now: number = Date.now()): FoodScore[] {
+  const mealInfo = classifyMeals(events, now);
 
-interface SymptomMoment {
-  time: number;
-  symptoms: LoggedSymptom[];
-}
-
-export function computeFoodScores(events: LogEvent[]): FoodScore[] {
-  const meals = events.filter((e): e is MealEvent => e.type === "meal");
-
-  const moments: SymptomMoment[] = [];
-  for (const e of events) {
-    if (e.type === "symptom") moments.push({ time: e.createdAt, symptoms: e.symptoms });
-    else if (e.type === "bowel" && e.symptoms?.length)
-      moments.push({ time: e.createdAt, symptoms: e.symptoms });
-  }
-
-  // Precompute, per meal: did a symptom follow within the window, and which labels.
-  const mealInfo = meals.map((meal) => {
-    const labels = new Set<string>();
-    for (const m of moments) {
-      const dt = m.time - meal.createdAt;
-      if (dt > 0 && dt <= LAG_WINDOW_MS) {
-        for (const s of m.symptoms) if (isNegative(s.id)) labels.add(getSymptom(s.id)?.label ?? s.id);
-      }
-    }
-    const foods = new Set(
-      confidentIngredients(meal).map(foodKey).filter(Boolean)
-    );
-    return { followed: labels.size > 0, labels, foods, display: meal };
-  });
-
-  const totalMeals = mealInfo.length;
-  const totalFollowed = mealInfo.filter((m) => m.followed).length;
+  // Only settled meals reach a rate. A meal still inside its lag window, or one the
+  // user was never around to report on, is not evidence of a symptom-free exposure —
+  // counting it as one used to flatter every food, and flatter the most recent ones
+  // hardest. See mealOutcome.ts.
+  const settled = mealInfo.filter((m) => m.counted);
+  const totalMeals = settled.length;
+  const totalFollowed = settled.filter((m) => m.outcome === "symptom").length;
 
   // Accumulate per-food.
   interface Acc {
     display: string;
     canonical?: string;
     eaten: number;
+    scored: number;
+    clear: number;
+    pending: number;
+    unobserved: number;
     withSymptom: number;
     symptomCounts: Map<string, number>;
   }
   const byFood = new Map<string, Acc>();
   for (const info of mealInfo) {
     const seen = new Set<string>();
-    for (const ing of confidentIngredients(info.display)) {
+    for (const ing of confidentIngredients(info.meal)) {
       const key = foodKey(ing);
       if (!key || seen.has(key)) continue;
       seen.add(key);
@@ -96,24 +81,41 @@ export function computeFoodScores(events: LogEvent[]): FoodScore[] {
           display: ing.name.trim(),
           canonical: ing.canonical,
           eaten: 0,
+          scored: 0,
+          clear: 0,
+          pending: 0,
+          unobserved: 0,
           withSymptom: 0,
           symptomCounts: new Map(),
         };
+      // Every exposure, settled or not — this is the count the user sees.
       acc.eaten += 1;
-      if (info.followed) {
-        acc.withSymptom += 1;
-        for (const label of info.labels)
-          acc.symptomCounts.set(label, (acc.symptomCounts.get(label) ?? 0) + 1);
+      if (info.counted) acc.scored += 1;
+      switch (info.outcome) {
+        case "symptom":
+          acc.withSymptom += 1;
+          for (const label of info.labels)
+            acc.symptomCounts.set(label, (acc.symptomCounts.get(label) ?? 0) + 1);
+          break;
+        case "clear":
+          acc.clear += 1;
+          break;
+        case "pending":
+          acc.pending += 1;
+          break;
+        case "unobserved":
+          acc.unobserved += 1;
+          break;
       }
       byFood.set(key, acc);
     }
   }
 
   const scores: FoodScore[] = [...byFood.values()].map((a) => {
-    const foodRate = a.eaten ? a.withSymptom / a.eaten : 0;
+    const foodRate = a.scored ? a.withSymptom / a.scored : 0;
 
-    // baseline = symptom-follow rate for meals that did NOT contain this food
-    const otherMeals = totalMeals - a.eaten;
+    // baseline = symptom-follow rate for settled meals that did NOT contain this food
+    const otherMeals = totalMeals - a.scored;
     const otherFollowed = totalFollowed - a.withSymptom;
     const baselineRate = otherMeals > 0 ? otherFollowed / otherMeals : 0;
     const baselineReliable = otherMeals >= MIN_OTHER_MEALS;
@@ -126,8 +128,10 @@ export function computeFoodScores(events: LogEvent[]): FoodScore[] {
         ? Infinity // symptoms only ever follow this food
         : 0;
 
+    // Confidence follows settled exposures, not total ones: ten meals of which nine
+    // are unresolved is not high confidence in anything.
     const confidence: FoodScore["confidence"] =
-      a.eaten >= 8 ? "high" : a.eaten >= 5 ? "medium" : "low";
+      a.scored >= 8 ? "high" : a.scored >= 5 ? "medium" : "low";
 
     const topSymptoms = [...a.symptomCounts.entries()]
       .map(([label, count]) => ({ label, count }))
@@ -138,11 +142,15 @@ export function computeFoodScores(events: LogEvent[]): FoodScore[] {
       name: a.display,
       canonical: a.canonical,
       eaten: a.eaten,
+      scored: a.scored,
+      clear: a.clear,
+      pending: a.pending,
+      unobserved: a.unobserved,
       withSymptom: a.withSymptom,
       foodRate: +foodRate.toFixed(2),
       baselineRate: +baselineRate.toFixed(2),
       lift: lift === Infinity ? Infinity : +lift.toFixed(2),
-      rank: rankFor(a.eaten, a.withSymptom, foodRate, lift, baselineReliable),
+      rank: rankFor(a.scored, a.withSymptom, foodRate, lift, baselineReliable),
       confidence,
       topSymptoms,
     };
@@ -154,16 +162,18 @@ export function computeFoodScores(events: LogEvent[]): FoodScore[] {
   );
 }
 
+/** Renamed from `eaten` at the call site: the gate is settled exposures. */
+
 const liftNum = (l: number) => (l === Infinity ? 999 : l);
 
 function rankFor(
-  eaten: number,
+  scored: number,
   withSymptom: number,
   foodRate: number,
   lift: number,
   baselineReliable: boolean
 ): FoodRank {
-  if (eaten < MIN_EATEN) return "insufficient";
+  if (scored < MIN_EATEN) return "insufficient";
 
   // Avoid/Reduce require a trustworthy baseline (enough meals without this food);
   // a food present in nearly every meal can't be isolated.
@@ -187,7 +197,7 @@ export const RANK_META: Record<FoodRank, { label: string; blurb: string; color: 
   reduce: { label: "Reduce", blurb: "Somewhat above your baseline", color: "#ed9c1b" },
   neutral: { label: "Neutral", blurb: "About the same as your average meal", color: "#8a8a8e" },
   agrees: { label: "Agrees with you", blurb: "Rarely followed by symptoms", color: "#2e7d32" },
-  insufficient: { label: "Need more data", blurb: "Eat & log a few more times to rank", color: "#5a5a5e" },
+  insufficient: { label: "Need more data", blurb: "A few more settled meals to rank", color: "#5a5a5e" },
 };
 
 export const RANK_ORDER: FoodRank[] = ["avoid", "reduce", "neutral", "agrees", "insufficient"];
