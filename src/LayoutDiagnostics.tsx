@@ -24,6 +24,13 @@ import { useEffect, useState } from "react";
 export default function LayoutDiagnostics() {
   const [rows, setRows] = useState<[string, string][]>([]);
 
+  // Paint the markers described in styles.css while this panel is open. Opt-in, so
+  // nobody else ever sees them, and removed on unmount.
+  useEffect(() => {
+    document.documentElement.classList.add("layout-debug");
+    return () => document.documentElement.classList.remove("layout-debug");
+  }, []);
+
   useEffect(() => {
     function read() {
       const probe = document.createElement("div");
@@ -59,6 +66,11 @@ export default function LayoutDiagnostics() {
         // matches both, the frame is the full web view and any remaining band is
         // outside the document entirely.
         ["measured --app-height", measured],
+        // The decisive comparison. `clientHeight` is the CSS layout viewport, the one
+        // `inset: 0`, `100vh`, and `100dvh` all resolve against. If it is short of
+        // `innerHeight`, the web view is taller than the box model believes and that
+        // difference is the band.
+        ["css viewport", `${document.documentElement.clientHeight}px`],
         ["screen", `${window.screen.height}px · dpr ${window.devicePixelRatio}`],
         ["safe top / bottom", `${insets.top} / ${insets.bottom}`],
         ["app height", app ? `${Math.round(app.height)}px` : "—"],
@@ -89,8 +101,25 @@ export default function LayoutDiagnostics() {
         </div>
       ))}
       <p className="diag-note">
-        A gap at the bottom means “tab bar bottom” is less than “viewport”. Send these
-        numbers along with a screenshot.
+        Three markers are now painted at the bottom of the screen. Screenshot the
+        bottom edge and the answer is in the colours:
+      </p>
+      <ul className="diag-legend">
+        <li>
+          <b style={{ color: "#ffe100" }}>yellow</b> — where the app frame ends
+        </li>
+        <li>
+          <b style={{ color: "#00b8d4" }}>cyan</b> — where the CSS viewport ends
+        </li>
+        <li>
+          <b style={{ color: "#e0e" }}>magenta</b> — anything the app does not cover
+        </li>
+      </ul>
+      <p className="diag-note">
+        Magenta showing means the frame is short. Yellow and cyan landing at different
+        heights means the web view and the box model disagree. Both at the physical
+        bottom edge with no magenta means the layout is right and the space is padding
+        inside the app.
       </p>
     </div>
   );

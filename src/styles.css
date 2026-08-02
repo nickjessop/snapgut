@@ -337,6 +337,46 @@ body {
     var(--bg);
 }
 
+/* Measurement markers for the band below the tab bar on an installed iOS app, opt-in
+ * via the diagnostics panel (tap the build id in Settings) and never otherwise
+ * painted.
+ *
+ * Four fixes for this shipped without confirming the cause, because it cannot be
+ * reproduced anywhere it can be inspected: Chromium reports every safe-area inset as
+ * zero, so a desktop browser never runs one of these rules. These three colours turn
+ * the remaining question into something a single screenshot answers.
+ *
+ * The pairing is what matters. `body::after` is absolute, so it lands where the *frame*
+ * ends; `body::before` is fixed, so it lands where the *CSS viewport* ends. Those two
+ * heights are identical everywhere the layout works. If iOS splits them, the split is
+ * the bug. The magenta behind everything catches the third case, a frame that simply
+ * does not reach. */
+.layout-debug {
+  background: #e0e !important;
+}
+.layout-debug body::after,
+.layout-debug body::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  z-index: 9999;
+  pointer-events: none;
+}
+.layout-debug body::after {
+  background: #ffe100;
+}
+.layout-debug body::before {
+  /* Fixed, so ancestor sizing cannot move it — it reports the viewport itself. Inset
+     from the sides so it cannot hide the absolute marker underneath it. */
+  position: fixed;
+  left: 30%;
+  right: 30%;
+  background: #00b8d4;
+}
+
 .app {
   /* `100%` of the fixed body, which is the measured web view height. No `min-height`
      floor in `dvh`: it was tried, and because the frame clips its overflow a floor
@@ -2871,6 +2911,13 @@ body {
   margin: 9px 0 0;
   font-size: 11.5px;
   line-height: 1.45;
+  color: var(--muted);
+}
+.diag-legend {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 11.5px;
+  line-height: 1.6;
   color: var(--muted);
 }
 .confirm-copy {

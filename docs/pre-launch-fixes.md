@@ -196,10 +196,37 @@ ship together, and feature work that carries a design decision.
   Verified in a browser by forcing `--app-height` 34px past the CSS viewport: the
   frame, the tab bar, and the sheet all followed to the new bottom and
   `documentElement.scrollHeight` stayed at the viewport, so nothing gained a scrollbar
-  or a bounce. `src/appHeight.test.ts` covers the measurement contract. **The iOS
-  condition itself still cannot be reproduced off-device** — an emulator reports a zero
-  inset — so the diagnostics panel (tap the build id in Settings) now also prints the
-  measured `--app-height` next to `innerHeight` and the frame's real bottom.
+  or a bounce. `src/appHeight.test.ts` covers the measurement contract.
+
+  **This did not fix it either — four attempts, none confirmed.** Two facts worth
+  recording before the fifth:
+
+  1. `viewport-fit=cover` has been in `app/index.html` since the initial commit
+     (`git log -S`), so no install predates it and re-adding the app cannot be what
+     any of these fixes were waiting on.
+  2. **Every browser check run against this bug was worthless, and it took four tries
+     to notice.** Chromium reports `env(safe-area-inset-*)` as `0`, so not one
+     safe-area rule in this stylesheet ever executed during testing. Forcing
+     `--safe-top: 59px; --safe-bottom: 34px` in a real browser is the correct
+     simulation, and under it the layout measures right: `.app` is 0→852, `.tabbar`
+     reaches 852, and the 34px below the tab icons is the bar's own dark green, not
+     background.
+
+  Which leaves two live hypotheses that no amount of reading settles, and they call for
+  opposite fixes — one wants the frame taller, the other wants padding reduced:
+
+  - the frame really is short on iOS, in a way Chromium will not reproduce; or
+  - the frame is correct and what reads as a gap is `--safe-bottom` padding, which
+    every surface the user named happens to carry: `.tabbar` (34px below the icons),
+    `.settings-scroll` (`40px + safe` = 74px), `.sheet` (`20px + safe` = 54px).
+
+  So the next change is a measurement, not a fix. The diagnostics panel now prints
+  `clientHeight` (the CSS viewport) beside `innerHeight`, and paints three markers:
+  yellow at the bottom of the frame (absolute), cyan at the bottom of the CSS viewport
+  (fixed), and magenta on `html` for anything the document does not cover. Magenta
+  visible means a short frame; yellow and cyan at different heights means the web view
+  and the box model disagree; both at the physical edge with no magenta means the
+  layout is right and the space is padding. One screenshot picks one.
 - ☑ **A5. Respect the top safe area.** `.sheet`, `.log-header`, and
   `.settings-header` were the three that never got `--safe-top` while already having
   `--safe-bottom`, which is exactly why the back control sat under the notch on every
