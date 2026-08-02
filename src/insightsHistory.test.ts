@@ -18,9 +18,14 @@ vi.mock("./db", () => ({
   },
 }));
 
-const { listInsights, recordInsight, clearInsights, MAX_HISTORY } = await import(
-  "./insightHistory"
-);
+const {
+  listInsights,
+  recordInsight,
+  clearInsights,
+  isStale,
+  MAX_HISTORY,
+  REFRESH_AFTER_MS,
+} = await import("./insightHistory");
 
 beforeEach(() => {
   store.value = undefined;
@@ -149,6 +154,33 @@ describe("reading a malformed history row", () => {
     // is still generated and shown, it simply is not remembered.
     await expect(mod.listInsights()).resolves.toEqual([]);
     vi.doUnmock("./db");
+  });
+});
+
+describe("when the headline insight goes stale", () => {
+  const insight = (at: number) => ({ at, headline: "h", body: "b" });
+
+  it("treats having none as stale", () => {
+    // Nothing to show is the strongest case for generating something.
+    expect(isStale(null)).toBe(true);
+  });
+
+  it("keeps a fresh one", () => {
+    const now = Date.now();
+    expect(isStale(insight(now), now)).toBe(false);
+    expect(isStale(insight(now - REFRESH_AFTER_MS + 1000), now)).toBe(false);
+  });
+
+  it("expires one a week old", () => {
+    const now = Date.now();
+    expect(isStale(insight(now - REFRESH_AFTER_MS), now)).toBe(true);
+    expect(isStale(insight(now - 30 * 86_400_000), now)).toBe(true);
+  });
+
+  it("uses a week, long enough for the answer to have changed", () => {
+    // Regenerating daily would spend AI calls narrating noise; a week is also how
+    // people think about a diet change.
+    expect(REFRESH_AFTER_MS).toBe(7 * 24 * 60 * 60 * 1000);
   });
 });
 

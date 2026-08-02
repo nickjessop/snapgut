@@ -27,6 +27,7 @@ import {
   Info,
   Question,
   Images,
+  ArrowClockwise,
   ForkKnife as ForkKnifeOutline,
   type IconProps as PhosphorIconProps,
 } from "@phosphor-icons/react";
@@ -73,6 +74,9 @@ export const AutoThemeIcon = (p: IconProps) => <CircleHalf {...base} {...p} />;
 export const StreakIcon = (p: IconProps) => <Flame {...base} {...p} />;
 export const InfoIcon = (p: IconProps) => <Info {...base} {...p} />;
 export const HelpIcon = (p: IconProps) => <Question {...base} {...p} />;
+
+/** Regenerate the current AI insight. */
+export const RefreshIcon = (p: IconProps) => <ArrowClockwise weight="bold" {...p} />;
 
 // The two camera-screen alternatives to taking a photo right now.
 export const LibraryIcon = (p: IconProps) => <Images {...base} {...p} />;

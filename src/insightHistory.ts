@@ -29,6 +29,22 @@ export interface PastInsight {
 /** How many to keep. Past this the oldest are dropped. */
 export const MAX_HISTORY = 30;
 
+/**
+ * How long the headline insight stays current before it is regenerated.
+ *
+ * A week, for two reasons. It is long enough that a few days of logging can actually
+ * change the answer — regenerating daily would spend AI calls narrating noise — and
+ * it matches how people think about a diet change. A manual refresh is always
+ * available for anyone who does not want to wait.
+ */
+export const REFRESH_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Whether the newest stored insight is old enough to replace. */
+export function isStale(latest: PastInsight | null, now = Date.now()): boolean {
+  if (!latest) return true;
+  return now - latest.at >= REFRESH_AFTER_MS;
+}
+
 /** Two insights generated within this window are treated as the same one. */
 const DEDUPE_MS = 60_000;
 

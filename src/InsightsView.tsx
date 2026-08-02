@@ -2,14 +2,23 @@ import { useEffect, useState } from "react";
 import { getEvents } from "./db";
 import { computeEvidence, type EvidenceSummary } from "./insights";
 import { getInsights, AuthError, UpgradeRequiredError } from "./api";
-import { listInsights, recordInsight, type PastInsight } from "./insightHistory";
+import { isStale, listInsights, recordInsight, type PastInsight } from "./insightHistory";
 import TriggerInfoSheet from "./TriggerInfoSheet";
 import { groupForLabel } from "./triggerInfo";
 import type { Entitlement } from "./session";
 import FoodsTab from "./FoodsTab";
 import HeaderStats from "./HeaderStats";
 import InfoNote from "./InfoNote";
-import { InsightsIcon } from "./icons";
+import { InsightsIcon, RefreshIcon } from "./icons";
+
+/** "3 days ago" for a recent insight, a date once that stops being useful. */
+function formatWhen(at: number, now = Date.now()): string {
+  const days = Math.floor((now - at) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 14) return `${days} days ago`;
+  return new Date(at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
 type InsightTab = "patterns" | "foods";
 
@@ -113,6 +122,22 @@ function PatternsTab({
     ? Math.max(0, entitlement.freeAiLimit - entitlement.freeAiUsed)
     : 0;
 
+  /**
+   * The insight on display, always the newest stored one.
+   *
+   * Read from history rather than from the `ai` response, because `generate` records
+   * before it returns and hands back the updated list — so the newest entry *is* the
+   * one just generated. Deriving it from `ai` instead meant fabricating a timestamp
+   * that could not match the stored copy, which then showed up twice: once pinned and
+   * once in the history list below.
+   */
+  const latest: PastInsight | null = history[0] ?? null;
+  const stale = isStale(latest);
+  /** Generated this session, or recent enough that a date would be noise. */
+  const latestIsFresh = ai !== null || (latest !== null && !stale);
+  /** Everything except the one pinned above, so nothing is listed twice. */
+  const older = history.slice(1);
+
   async function generate(ev: EvidenceSummary) {
     setLoading(true);
     setError(null);
@@ -149,7 +174,15 @@ function PatternsTab({
       if (cancelled) return;
       setSummary(ev);
       setHistory(stored);
-      if (pro) generate(ev); // Pro: auto-narrate; free: user taps to reveal
+
+      // Pro used to regenerate on *every* visit to this tab, which spent an AI call
+      // to re-narrate data that had not changed. Now it regenerates only when the
+      // stored one has gone stale, and otherwise shows what is already there.
+      //
+      // A free user is never auto-generated for: their AI is a small fixed
+      // allowance, and spending one without being asked is not ours to do. They see
+      // the last one with its date and refresh when they choose.
+      if (pro && isStale(stored[0] ?? null)) generate(ev);
     })();
     return () => {
       cancelled = true;
@@ -208,25 +241,57 @@ function PatternsTab({
         </div>
       )}
 
-      {ai?.redFlag && <div className="redflag">⚠️ {ai.redFlag}</div>}
+      {latest?.redFlag && <div className="redflag">⚠️ {latest.redFlag}</div>}
 
       {loading && <p className="status">Analyzing your patterns…</p>}
       {error && <div className="error-banner">Couldn't generate insights right now.</div>}
 
-      {ai && (
+      {/* The current read, pinned at the top and kept between visits. Before this it
+          was generated and discarded, so the screen had nothing to show until an AI
+          call completed — and a free user who had already spent their allowance saw
+          nothing at all. */}
+      {latest && !loading && (
         <div className="insight-block">
-          <strong>{ai.headline}</strong>
+          <div className="insight-head">
+            <span className="insight-when">
+              {latestIsFresh ? "Latest insight" : `From ${formatWhen(latest.at)}`}
+              {stale && <span className="insight-stale"> · worth refreshing</span>}
+            </span>
+            <button
+              className="insight-refresh"
+              onClick={() => summary && generate(summary)}
+              disabled={!summary || loading || (!pro && freeLeft === 0)}
+              aria-label={
+                pro
+                  ? "Refresh this insight"
+                  : `Refresh this insight — uses 1 of your ${freeLeft} free AI uses`
+              }
+              title={
+                pro
+                  ? "Refresh"
+                  : freeLeft > 0
+                    ? `Uses 1 of your ${freeLeft} free AI uses`
+                    : "No free AI uses left"
+              }
+            >
+              <RefreshIcon size={15} />
+            </button>
+          </div>
+          <strong>{latest.headline}</strong>
           {"\n\n"}
-          {ai.body}
+          {latest.body}
         </div>
       )}
 
-      {/* Free users: reveal the AI narrative on demand (or upgrade when used up).
+      {/* The offer to generate a first one. Suppressed once there is an insight on
+          screen, because refreshing it is the refresh control's job — two ways to ask
+          for the same thing, one of which spends an AI use, is how a free allowance
+          gets spent by accident.
           Everything above this point — the stat cards, the associations, the Foods
           ranking — is computed on the device and needs no account, so an anonymous
           visitor sees their real patterns and is asked for an email only for the
           narrative. */}
-      {!ai && !loading && !pro && summary && (
+      {!latest && !loading && !pro && summary && (
         <div className="ai-lock">
           <div className="ai-lock-title">
             <InsightsIcon size={16} />
@@ -346,7 +411,7 @@ function PatternsTab({
 
       {/* Past insights. Collapsed by default: the current read is the point of the
           screen, and history is for when someone goes looking. */}
-      {history.length > 0 && (
+      {older.length > 0 && (
         <div className="past-insights">
           <button
             className="past-toggle"
@@ -355,14 +420,14 @@ function PatternsTab({
           >
             <span>Past insights</span>
             <span className="past-count">
-              {history.length}
+              {older.length}
               <span className={`past-caret${historyOpen ? " open" : ""}`} aria-hidden="true" />
             </span>
           </button>
 
           {historyOpen && (
             <div className="past-list">
-              {history.map((p) => (
+              {older.map((p) => (
                 <div className="past-item" key={p.at}>
                   <div className="past-date">
                     {new Date(p.at).toLocaleDateString(undefined, {
