@@ -28,6 +28,7 @@ import {
   Question,
   Images,
   ArrowClockwise,
+  Check,
   ForkKnife as ForkKnifeOutline,
   type IconProps as PhosphorIconProps,
 } from "@phosphor-icons/react";
@@ -60,7 +61,15 @@ export const DeleteIcon = (p: IconProps) => <Trash {...base} {...p} />;
 export const NoteIcon = (p: IconProps) => <NoteBlank {...base} {...p} />;
 export const WarningIcon = (p: IconProps) => <Warning {...base} {...p} />;
 export const CloseIcon = (p: IconProps) => <X {...base} {...p} />;
-export const BackIcon = (p: IconProps) => <CaretLeft {...base} {...p} />;
+/**
+ * Back, as a caret stroke rather than a solid wedge.
+ *
+ * The glyph was already `CaretLeft`, but it inherited `weight: "fill"` from `base`
+ * with everything else, which renders it as a filled triangle — heavier than a back
+ * control should be, and not what a caret looks like. `bold` keeps it legible at
+ * small sizes without becoming a shape.
+ */
+export const BackIcon = (p: IconProps) => <CaretLeft weight="bold" {...p} />;
 export const ChevronIcon = (p: IconProps) => <CaretRight {...base} {...p} />;
 export const SettingsIcon = (p: IconProps) => <GearSix {...base} {...p} />;
 export const BillingIcon = (p: IconProps) => <CreditCard {...base} {...p} />;
@@ -77,6 +86,9 @@ export const HelpIcon = (p: IconProps) => <Question {...base} {...p} />;
 
 /** Regenerate the current AI insight. */
 export const RefreshIcon = (p: IconProps) => <ArrowClockwise weight="bold" {...p} />;
+
+/** Acknowledge and dismiss — the "Got it" that closes an explainer tray. */
+export const CheckIcon = (p: IconProps) => <Check weight="bold" {...p} />;
 
 // The two camera-screen alternatives to taking a photo right now.
 export const LibraryIcon = (p: IconProps) => <Images {...base} {...p} />;

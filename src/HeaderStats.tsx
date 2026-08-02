@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Entitlement } from "./session";
-import { InsightsIcon, StreakIcon } from "./icons";
+import { CheckIcon, InsightsIcon, StreakIcon } from "./icons";
 
 interface Props {
   entitlement: Entitlement | null;
@@ -85,6 +85,7 @@ export default function HeaderStats({ entitlement, streak = 0, onUpgrade }: Prop
                   so your insights get sharper over time.
                 </p>
                 <button className="action-cancel" onClick={() => setModal(null)}>
+                  <CheckIcon size={17} />
                   Got it
                 </button>
               </>

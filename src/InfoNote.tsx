@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { HelpIcon, InfoIcon } from "./icons";
+import { CheckIcon, HelpIcon, InfoIcon } from "./icons";
 
 interface InfoNoteProps {
   /** The one-line disclaimer. Kept short — the long form belongs in the modal. */
@@ -102,6 +102,7 @@ function InfoSheet({
         </div>
         <div className="info-copy">{children}</div>
         <button className="action-cancel" ref={closeRef} onClick={onClose}>
+          <CheckIcon size={17} />
           Got it
         </button>
       </div>

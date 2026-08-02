@@ -1471,6 +1471,12 @@ body {
   font-weight: 600;
   padding: 14px;
   cursor: pointer;
+  /* Inline-flex so a leading icon sits on the text's baseline row and the pair stays
+     centred together, rather than the glyph pushing the label off-centre. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
 }
 
 /* The one back affordance (src/BackButton.tsx). Sized as a proper touch target and
