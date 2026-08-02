@@ -64,6 +64,7 @@ import type { ComponentType } from "react";
 import { APP_BUILD } from "./build";
 import BackButton from "./BackButton";
 import { clearInsights, listInsights } from "./insightHistory";
+import LayoutDiagnostics from "./LayoutDiagnostics";
 
 // Was a hand-typed literal that never changed, and so said nothing about what was
 // actually running. Now derived from the build (see src/build.ts).
@@ -275,6 +276,8 @@ export default function SettingsView({
   /** Whether any past insight is stored, so the clear control appears only when it
    *  would do something. */
   const [insightsStored, setInsightsStored] = useState(false);
+  /** Layout numbers, revealed by tapping the build id. See the note at its render. */
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   /**
    * The shared entitlement snapshot both destination blocks gate on (Req 1.2,
    * 15.1). It comes from `syncSettings`, not from the `entitlement` prop, so a
@@ -1065,8 +1068,20 @@ export default function SettingsView({
         </section>
 
         {/* The full build id, not just the semver: it is what a bug report needs to
-            be actionable, and what `/api/admin/metrics` groups a cohort by. */}
-        <div className="settings-about">SnapGut {APP_BUILD}</div>
+            be actionable, and what `/api/admin/metrics` groups a cohort by.
+ 
+            Tapping it reveals the layout numbers. Not a hidden feature for its own
+            sake — the app is installed on devices we cannot inspect, and "there is a
+            gap at the bottom" is unfixable without knowing whether the viewport, the
+            safe-area insets, or the app box is the one reporting a surprising value. */}
+        <button
+          className="settings-about settings-about-btn"
+          onClick={() => setShowDiagnostics((v) => !v)}
+          aria-expanded={showDiagnostics}
+        >
+          SnapGut {APP_BUILD}
+        </button>
+        {showDiagnostics && <LayoutDiagnostics />}
       </div>
 
       <input
