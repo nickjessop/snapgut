@@ -1009,6 +1009,35 @@ app.get("/api/admin/metrics", async (c) => {
   return c.json({ since: dayAgo(days), totals, accounts, events });
 });
 
+/**
+ * Ops: grant or revoke complimentary Pro. Requires ADMIN_TOKEN.
+ *
+ * `POST /api/admin/comp { email, comp }` — `comp` defaults to true, pass `false` to
+ * revoke. The account must already exist: creating one here would mint an account
+ * from an address nobody has verified.
+ *
+ * A separate field rather than a synthetic `setPro` with a far-future date, so the
+ * record still says *why* an account has Pro and revoking a comp cannot revoke a
+ * purchase. Answers the resulting entitlement so the effect is visible in the
+ * response rather than needing a second call to confirm.
+ */
+app.post("/api/admin/comp", async (c) => {
+  const expected = process.env.ADMIN_TOKEN;
+  if (!expected) return c.json({ error: "not_configured" }, 404);
+  if (c.req.header("x-admin-token") !== expected) {
+    return c.json({ error: "unauthorized" }, 401);
+  }
+  const body = await c.req.json().catch(() => null);
+  const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
+  if (!email || !EMAIL_RE.test(email)) return c.json({ error: "invalid_email" }, 400);
+  const comp = body?.comp !== false; // absent or true grants; only an explicit false revokes
+
+  const store = await getStore();
+  const user = await store.setComp?.(email, comp);
+  if (!user) return c.json({ error: "unknown_account" }, 404);
+  return c.json({ email: user.email, comp: user.comp === true, ...entitlement(user) });
+});
+
 // ---- Route_Table resolution (must come after every /api/* route above) ----
 // Marketing pages, the App_Shell at /login and /app/*, real files in dist/, the
 // trailing-slash 301, and a terminal 404 carrying the not-found document. The

@@ -69,6 +69,12 @@ function newUser(email) {
     proUntil: null,
     freeAiUsed: 0,
     stripeCustomerId: null,
+    /**
+     * Complimentary Pro, granted by an operator rather than bought. Optional and
+     * absent by default — a plain `false` on every record would imply the field
+     * means something for accounts that have never been near it.
+     */
+    comp: false,
     createdAt: Date.now(),
     // Last time this account was seen by `/api/me`, rounded to the day. Retention
     // for accounts is measurable from this and `createdAt` without any new
@@ -78,8 +84,21 @@ function newUser(email) {
   };
 }
 
-/** True if the user currently has Pro (lifetime = null proUntil; else not expired). */
+/**
+ * True if the user currently has Pro.
+ *
+ * Three ways to hold it: a complimentary grant, a lifetime purchase (`proUntil` of
+ * `null`), or a subscription that has not expired.
+ *
+ * `comp` is checked first and ignores `proUntil` entirely, so a comped account never
+ * needs a fake expiry date maintained alongside it. It is deliberately a separate
+ * field rather than `setPro` with a far-future date: that would be indistinguishable
+ * from a real purchase in the record, and "why does this account have Pro" is a
+ * question worth being able to answer. It also means revoking a comp cannot
+ * accidentally revoke a purchase.
+ */
 export function isPro(user) {
+  if (user?.comp === true) return true;
   if (!user?.pro) return false;
   return user.proUntil == null || user.proUntil > Date.now();
 }
@@ -173,6 +192,13 @@ function memoryStore() {
       u.pro = true;
       u.proUntil = proUntil ?? null;
       if (customerId) u.stripeCustomerId = customerId;
+      return u;
+    },
+    /** Grant or revoke complimentary Pro. Touches no purchase field. */
+    async setComp(email, comp) {
+      const u = users.get(norm(email));
+      if (!u) return null;
+      u.comp = comp === true;
       return u;
     },
     async incFreeAi(email) {
@@ -343,6 +369,18 @@ async function firestoreStore() {
       const patch = { pro: true, proUntil: proUntil ?? null };
       if (customerId) patch.stripeCustomerId = customerId;
       await ref.set(patch, { merge: true });
+      return (await ref.get()).data();
+    },
+    /**
+     * Grant or revoke complimentary Pro. A merge write on one field, so it cannot
+     * disturb `pro`, `proUntil`, or the Stripe customer id — revoking a comp must
+     * never revoke a purchase.
+     */
+    async setComp(email, comp) {
+      const ref = usersCol.doc(norm(email));
+      const snap = await ref.get();
+      if (!snap.exists) return null;
+      await ref.set({ comp: comp === true }, { merge: true });
       return (await ref.get()).data();
     },
     async incFreeAi(email) {
