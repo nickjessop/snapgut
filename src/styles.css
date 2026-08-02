@@ -290,13 +290,28 @@ html {
   height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
+  /* Whatever ends up uncovered should be the app's colour rather than the canvas
+     default, which renders black. On an installed iOS app that black strip below the
+     tab bar was the visible symptom of the sizing bug below — worth making
+     impossible to see even if a future platform quirk reopens it. */
+  background: var(--bg);
 }
 
 body {
   position: fixed;
+  /* `inset: 0` alone sizes this box, and that is deliberate: it declares the four
+     edges rather than a height, so there is no percentage for the browser to resolve
+     against a containing block.
+   
+     It previously also carried `height: 100%` and `width: 100%`, which over-constrained
+     the box — when both `bottom` and `height` are given, height wins. On an installed
+     iOS app that height resolved against a block excluding the safe areas, so the app
+     came out roughly the status bar plus the home indicator short, leaving a black
+     band under the tab bar and pushing content down (because the safe-area padding
+     inside then double-counted an inset already excluded). With only the insets
+     declared and `viewport-fit=cover` in the meta viewport, the box is the full
+     visual viewport on every platform. */
   inset: 0;
-  width: 100%;
-  height: 100%;
   margin: 0;
   overflow: hidden;
   overscroll-behavior: none;
@@ -1018,6 +1033,56 @@ body {
   white-space: pre-wrap;
   font-size: 15px;
 }
+
+/* Header of the pinned insight: how current it is, and the control to redo it.
+   `white-space: normal` because the block itself is `pre-wrap` for the narrative. */
+.insight-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  white-space: normal;
+}
+.insight-when {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.insight-stale {
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.insight-refresh {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--muted);
+  cursor: pointer;
+  transition: transform 0.12s ease, color 0.12s ease;
+}
+.insight-refresh:active {
+  transform: rotate(-45deg);
+}
+.insight-refresh:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.insight-refresh:focus-visible {
+  outline: 2px solid var(--accent, currentColor);
+  outline-offset: 2px;
+}
+
 .assoc {
   display: flex;
   justify-content: space-between;
