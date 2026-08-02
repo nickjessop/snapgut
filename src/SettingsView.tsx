@@ -51,6 +51,7 @@ import {
   InsightsIcon,
   BillingIcon,
   BackupIcon,
+  CameraIcon,
   RestoreIcon,
   CsvIcon,
   SignOutIcon,
@@ -66,6 +67,8 @@ import BackButton from "./BackButton";
 import { clearInsights, listInsights } from "./insightHistory";
 import LayoutDiagnostics from "./LayoutDiagnostics";
 import InstallSteps from "./InstallSteps";
+import CameraPermissionSheet from "./CameraPermissionSheet";
+import { cameraHintApplies } from "./cameraPermission";
 import { canInstall, isIOS, promptInstall, subscribeInstall } from "./installPrompt";
 
 // Was a hand-typed literal that never changed, and so said nothing about what was
@@ -287,6 +290,8 @@ export default function SettingsView({
   const [installOffer, setInstallOffer] = useState(() => canInstall());
   /** The manual steps sheet, for iOS and for browsers that give us no prompt. */
   const [installSteps, setInstallSteps] = useState(false);
+  /** The camera permission instructions. */
+  const [cameraSheet, setCameraSheet] = useState(false);
 
   useEffect(() => subscribeInstall(() => setInstallOffer(canInstall())), []);
 
@@ -763,6 +768,23 @@ export default function SettingsView({
           </section>
         )}
 
+        {/* Camera — iOS only, because an installed Chromium PWA keeps the grant across
+            launches and has nothing to work around. Not gated on the camera-screen
+            tip's heuristic or its dismissal: someone who waved that away is exactly who
+            comes looking here later. */}
+        {cameraHintApplies() && (
+          <section className="settings-section">
+            <div className="settings-label">Camera</div>
+            <SettingsItem
+              icon={CameraIcon}
+              title="iOS asking for the camera every launch?"
+              sub="Set it to Allow once in Safari and it sticks"
+              chevron
+              onClick={() => setCameraSheet(true)}
+            />
+          </section>
+        )}
+
         {/* Appearance */}
         <section className="settings-section">
           <div className="settings-label">Appearance</div>
@@ -1138,6 +1160,8 @@ export default function SettingsView({
           onDone={() => setInstallSteps(false)}
         />
       )}
+
+      {cameraSheet && <CameraPermissionSheet onClose={() => setCameraSheet(false)} />}
 
       {/* Req 18.6, 18.9 — the disclosure, shown on open and before the first enable */}
       {disclosure && (

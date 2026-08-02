@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { CameraIcon, LibraryIcon, NoPhotoIcon } from "./icons";
+import { CameraIcon, LibraryIcon, NoPhotoIcon, CloseIcon } from "./icons";
 import { acquireCamera, releaseCamera } from "./cameraStream";
+import { dismissCameraHint, shouldOfferCameraHint } from "./cameraPermission";
+import CameraPermissionSheet from "./CameraPermissionSheet";
 
 interface Props {
   onCapture: (photo: Blob) => void;
@@ -20,6 +22,12 @@ export default function CameraView({ onCapture, onSkipPhoto }: Props) {
    */
   const libraryRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * The permission tip. Read after the stream settles rather than at mount, because
+   * this launch's own acquisition is part of the evidence for showing it.
+   */
+  const [permTip, setPermTip] = useState(false);
+  const [permSheet, setPermSheet] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,6 +55,9 @@ export default function CameraView({ onCapture, onSkipPhoto }: Props) {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
+        // Asked now, not at mount: `acquireCamera` has just filed this launch's timing,
+        // so this is the first moment the answer includes it.
+        setPermTip(shouldOfferCameraHint());
       } catch {
         // Fallback: no live camera access (e.g. permission denied, an insecure
         // origin, or no camera at all).
@@ -125,6 +136,28 @@ export default function CameraView({ onCapture, onSkipPhoto }: Props) {
           <video ref={videoRef} autoPlay playsInline muted />
           <div className="camera-scrim" />
           <div className="camera-hint">Point at your plate</div>
+
+          {/* Offered only once iOS has plainly asked more than once — see
+              cameraPermission.ts, which infers that from how long the grant took
+              because the state itself cannot be read. */}
+          {permTip && (
+            <div className="camera-perm" role="status">
+              <span>iOS asking for the camera every time?</span>
+              <button className="camera-perm-fix" onClick={() => setPermSheet(true)}>
+                Fix it
+              </button>
+              <button
+                className="camera-perm-x"
+                aria-label="Dismiss"
+                onClick={() => {
+                  dismissCameraHint();
+                  setPermTip(false);
+                }}
+              >
+                <CloseIcon size={15} />
+              </button>
+            </div>
+          )}
           <div className="camera-controls">
             {/* Either side of the shutter: the two ways to log a meal you are not
                 photographing right now. Both are secondary to the shutter, which
@@ -166,6 +199,18 @@ export default function CameraView({ onCapture, onSkipPhoto }: Props) {
         style={{ display: "none" }}
         onChange={onFilePicked}
       />
+
+      {permSheet && (
+        <CameraPermissionSheet
+          onClose={() => {
+            // Reading the steps is engaging with the tip, so it has served its purpose
+            // either way and should not come back.
+            dismissCameraHint();
+            setPermSheet(false);
+            setPermTip(false);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -3133,3 +3133,58 @@ body {
 .install-toast-x:active {
   opacity: 1;
 }
+
+/* ---------- Camera permission tip ---------- */
+
+/* Sits above the shutter row rather than below the viewfinder hint, so it never
+   competes with the control the screen exists for. */
+.camera-perm {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 140px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 8px 9px 13px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--toast-border);
+  background: var(--toast-bg);
+  color: var(--toast-text);
+  font-size: 12.5px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.camera-perm > span {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.3;
+}
+.camera-perm-fix {
+  flex: 0 0 auto;
+  border: none;
+  border-radius: var(--r-pill);
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.16);
+  color: inherit;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.camera-perm-x {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+}

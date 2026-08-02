@@ -19,6 +19,8 @@
  * worth making silently.
  */
 
+import { recordCameraAcquisition } from "./cameraPermission";
+
 /** How long the stream is kept after the last consumer lets go. */
 const GRACE_MS = 60_000;
 
@@ -65,6 +67,7 @@ export function stopCamera(): void {
 export async function acquireCamera(): Promise<MediaStream> {
   cancelRelease();
   consumers += 1;
+  const startedAt = Date.now();
 
   try {
     if (isLive(stream)) return stream;
@@ -83,6 +86,10 @@ export async function acquireCamera(): Promise<MediaStream> {
         (s) => {
           stream = s;
           pending = null;
+          // How long this took is the only evidence available that a permission dialog
+          // appeared — see cameraPermission.ts. Recorded only on a real acquisition,
+          // never on the shared-stream fast path above, which is always quick.
+          recordCameraAcquisition(Date.now() - startedAt);
           return s;
         },
         (err) => {
