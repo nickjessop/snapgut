@@ -1,28 +1,22 @@
 <!doctype html>
 <!--
-  The plain-language privacy page called for as work item 4 in
-  `docs/positioning.md`, which Requirement 9.7 makes concrete: what is on the
-  device, what is on the server, what is transmitted for recognition, and how to
-  export and delete.
+  The plain-language privacy page for the self-hosted deployment.
 
-  Every statement here is checked against the behaviour of the app rather than
-  the marketing instinct, because Requirement 9.1 forbids a claim the code does
-  not support.
+  Every statement here describes the actual behaviour of the software: all diary
+  data stays in the browser's local storage and in the SQLite file on the
+  operator's own machine. AI requests go to whatever provider is configured
+  (local by default). No cloud analytics, no third-party tracking, no
+  advertising.
 
   Two lines to hold on to when editing:
 
-    - Requirement 9.5: photos ARE transmitted for recognition, so the absolute
-      "your data never leaves the device" framing the Forbidden_Claim list rules
-      out is avoided everywhere. The approved wording is the one used throughout:
-      your log stays on your device, photos are sent only to identify a meal, and
-      we do not keep them.
+    - Photos ARE transmitted for recognition when an AI provider is configured,
+      so "your data never leaves the device" is avoided. The correct framing:
+      your log stays on your device, photos are sent only to identify a meal to
+      a model server you configure, and nothing else leaves.
 
-    - Describe behaviour, not internals. This page deliberately does not name our
-      field names, our infrastructure components, or the specific vendor behind
-      each function: those change without the user-facing promise changing, and a
-      page that enumerates them is a page that goes stale and doubles as a map of
-      the stack. Categories of provider, and what each category receives, is the
-      level of detail that is both true and useful.
+    - Describe behaviour, not internals. This page deliberately does not name
+      field names, schema details, or specific model servers.
 -->
 <html lang="en">
   <head>
@@ -36,23 +30,21 @@
         <div class="wrap prose">
           <h1>Privacy</h1>
           <p class="lede">
-            Your log stays on your device. Photos are sent only to identify a meal,
-            and we do not keep them. This page spells out exactly what that means,
-            in the order you probably want to know it.
+            SnapGut is self-hosted software. Your diary lives on hardware you
+            control — your computer, your server, your rules. This page spells
+            out exactly what that means.
           </p>
 
           <h2>The short version</h2>
           <ul class="checklist">
             <li>Your meals, symptoms, and photos live in your browser's own storage on your device.</li>
-            <li>All we hold about you is your email address and whether Pro is active.</li>
-            <li>A meal photo is sent to identify the dish, and is not stored on our servers.</li>
-            <li>We ask for no name, age, gender, weight, or onboarding quiz.</li>
-            <li>Nothing syncs anywhere unless you switch a destination on yourself.</li>
-            <li>You can export everything, free, and delete everything, without asking us.</li>
-            <li>No advertising, no third-party analytics, no tracking cookies.</li>
+            <li>The server stores accounts and sync data in a SQLite file on your machine.</li>
+            <li>AI recognition requests go to a model server you configure — local by default, so nothing leaves your network.</li>
+            <li>No cloud analytics, no third-party tracking, no advertising, no cookies beyond a session token.</li>
+            <li>You can export everything and delete everything at any time.</li>
           </ul>
 
-          <h2>What stays on your device</h2>
+          <h2>What stays in your browser</h2>
           <p>
             The app keeps your timeline in your browser's own on-device database.
             That is the source of truth: everything you see in the app is read from
@@ -62,94 +54,85 @@
             <li>Meals — the dish name, the ingredients and how confident the recognition was, and any note you write.</li>
             <li>Meal photos, as image files. Photos are only ever stored on your device.</li>
             <li>Symptoms and their severities, Bristol stool scores, and stress and sleep check-ins.</li>
-            <li>Your sign-in session and your settings.</li>
+            <li>Your session token and your settings.</li>
           </ul>
           <p>
             Deleting the app's data in your browser, or removing the app from your
-            device, removes all of it. That cuts both ways: browser storage can also
-            be evicted when a device runs short of space, so your data is yours —
-            keep a copy wherever you like. The export below is how.
+            device, removes all of it. Browser storage can be evicted when a device
+            runs short of space, so keep a backup wherever you like — the export
+            below is how.
           </p>
 
-          <h2>What we keep on our servers</h2>
+          <h2>What the server stores</h2>
           <p>
-            One short record per account. There is no profile, and no field for your
-            log, your photos, or your symptoms:
+            Your server — the one you run on your own hardware — stores data in a
+            single SQLite file. That file contains:
           </p>
           <ul>
             <li>
-              <strong>Your email address</strong> — the only personal detail we ask
-              for. It is what you sign in with and where a sign-in code goes.
+              <strong>Your account record</strong> — an email address and a creation
+              timestamp.
             </li>
             <li>
-              <strong>Whether Pro is active</strong>, and enough to bill it
-              correctly: when it renews, and how much of the free AI trial you have
-              used.
+              <strong>Sync data</strong> — if you use cloud sync between devices,
+              your meal entries and symptom entries are stored so other devices can
+              pull them. Photos are not included and stay on-device.
+            </li>
+            <li>
+              <strong>Rate-limit counters</strong> — short-lived entries that prevent
+              brute-force attacks. They expire automatically.
             </li>
           </ul>
           <p>
-            Alongside that, the server holds short-lived operational data: a
-            one-time sign-in code, kept as a hash rather than the code itself and
-            deleted the moment you use it, and counters that stop the sign-in
-            endpoint being hammered, which expire on their own. Neither is part of
-            your log.
-          </p>
-          <p>
-            If you buy Pro, the payment happens on Stripe's own checkout page. We
-            never see or hold your card details.
+            The session token is held in your browser's storage until it expires.
+            No data leaves the SQLite file unless you configure sync to another
+            device.
           </p>
 
           <h2>What is transmitted to recognise a meal</h2>
           <p>
-            This is the one place your data leaves the device, so it is worth being
+            This is the one place data may leave your machine, so it is worth being
             precise about.
           </p>
           <p>
-            When you snap a meal, the photo is sent to our server, which passes it to
-            an AI vision provider to identify the dish and its ingredients. The names
-            come back, the app writes them into your on-device log, and the photo is
-            not written to any database, storage bucket, or log file on our side. We
-            keep the picture nowhere; the copy in your timeline is on your device.
+            When you snap a meal, the photo is sent from your browser to your
+            server, which passes it to the configured AI provider to identify the
+            dish and its ingredients. By default that provider is a local model
+            server running on the same machine or local network — so the photo
+            stays within hardware you control.
+          </p>
+          <p>
+            If you configure a remote AI provider (such as OpenAI or Gemini), the
+            photo is sent to that provider's API. In every case, the photo is not
+            stored on the server and is not written to any log file.
           </p>
           <p>
             The AI insight feature works from a summary your device calculates
-            first — counts and associations, not your entries. Your raw log, your
-            notes, and your photos are not sent to generate an insight.
+            first — counts and associations, not your raw entries. Your notes and
+            photos are not sent to generate an insight.
           </p>
           <p>
             Everything else the app does, including all of the pattern analysis and
-            the food ranking, runs on your device and needs no network at all.
+            the food ranking, runs in your browser and needs no network at all.
           </p>
 
-          <h2>Where your log syncs, if you want it to</h2>
+          <h2>Cloud sync between your devices</h2>
           <p>
             The default is local-only: no sync, no copies, nothing to opt out of.
-            There are two destinations you can switch on, independently, in
-            Settings. Both are part of Pro, and neither is ever on by default.
+            You can turn on sync in Settings to keep two devices in step.
           </p>
-          <h3>SnapGut Cloud</h3>
           <p>
-            Our own sync, for keeping two devices in step and restoring after a
-            reinstall. When you turn it on, this device uploads your entries — meals
-            and ingredients, symptoms and severities, Bristol scores, stress and
-            sleep values, and any note text — so they can reach your other devices,
-            including the fact that you deleted something. Meal photos are not part
-            of it and stay on your device. The app shows you this before the first
-            upload and will not start without your acknowledgement.
-          </p>
-          <h3>A Google Sheet you own</h3>
-          <p>
-            A readable mirror of your timeline in your own Google Drive. The app
-            creates one spreadsheet and can only touch that spreadsheet. The rows
-            carry the same columns as the CSV export, so no photo data goes into it.
-            The sheet is yours: disconnecting leaves it in your Drive, and deleting
-            it is between you and Google.
+            When sync is on, your entries — meals and ingredients, symptoms and
+            severities, Bristol scores, stress and sleep values, and any note text
+            — travel through your own server so they can reach your other devices.
+            Meal photos are not synced and stay on-device. The app shows you this
+            before the first upload and will not start syncing without your
+            acknowledgement.
           </p>
 
           <h2>Exporting everything</h2>
           <p>
-            Export is free on every account, is never behind Pro, and needs no
-            network. From Settings:
+            Export needs no network and is always available. From Settings:
           </p>
           <ul>
             <li>
@@ -166,55 +149,34 @@
 
           <h2>Deleting everything</h2>
           <p>
-            Three separate things can be deleted, and you control each of them
-            without contacting us:
+            Three things can be deleted, and you control each of them directly:
           </p>
           <ul>
             <li>
-              <strong>The copy in SnapGut Cloud.</strong> Settings has a
-              <em>Delete cloud copy</em> control that erases everything we hold from
-              your log. Your on-device log is untouched, and it works even if Pro has
-              lapsed, so a former subscriber can always remove their cloud copy.
+              <strong>The server-side sync copy.</strong> Settings has a
+              <em>Delete cloud copy</em> control that erases everything the server
+              holds from your sync data. Your on-device log is untouched.
             </li>
             <li>
-              <strong>Your account.</strong> Deleting the account removes your cloud
-              copy first and then the account record itself. If any part of that
-              fails, we report it as incomplete and change nothing else, so you can
-              simply repeat it rather than being left with data we can no longer
-              reach.
+              <strong>Your account.</strong> Deleting the account removes your sync
+              data first and then the account record itself.
             </li>
             <li>
               <strong>The data on your device.</strong> Delete individual entries in
               the app, or clear the site's data in your browser to remove the whole
-              local store, photos and all. That is entirely local and does not
-              involve us.
+              local store, photos and all.
             </li>
           </ul>
-          <p>
-            If you have connected a Google Sheet, that spreadsheet lives in your
-            Drive and is deleted from there.
-          </p>
-
-          <h2>Email we send you</h2>
-          <p>
-            Sign-in codes, sent through an email delivery provider. That is the only
-            email the app sends: no marketing list, no notifications, nothing else.
-          </p>
 
           <h2>Who else is involved</h2>
           <p>
-            We use a small number of providers to run the service, and each one
-            receives only what its job needs:
+            With the default configuration — a local AI model server — nobody else
+            is involved. Your data stays on your hardware.
           </p>
-          <ul>
-            <li>A cloud platform that hosts the app and stores the account record and any cloud sync data.</li>
-            <li>An AI provider that identifies a meal from a photo, and generates insight text from an on-device summary.</li>
-            <li>Stripe, for payments and subscription management.</li>
-            <li>An email provider, for sign-in codes.</li>
-          </ul>
           <p>
-            None of them receives your log for any purpose of their own, and we do
-            not sell or share your data with anyone.
+            If you configure a remote AI provider, that provider receives meal
+            photos for recognition and summary text for insights. No other data is
+            sent to any third party.
           </p>
           <p>
             These pages load no third-party scripts, embed nothing from another
@@ -225,8 +187,7 @@
           <h2>Changes to this page</h2>
           <p>
             When what the app does changes, this page changes with it — it describes
-            the software as it actually behaves, and we would rather correct it than
-            keep a comfortable sentence that is no longer true.
+            the software as it actually behaves.
           </p>
 
           <p class="btn-row"><a class="btn btn-primary" href="/login">Open the app</a></p>

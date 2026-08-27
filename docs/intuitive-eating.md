@@ -2,7 +2,7 @@
 
 Can SnapGut be both a GI investigation tool *and* a teacher of intuitive eating?
 Yes — if intuitive eating is the governing philosophy rather than a bolted-on course.
-Companion to `docs/research-and-insights.md` and `docs/fodmap-program.md`.
+Companion to `docs/fodmap-program.md`.
 
 > ⚠️ Non-therapeutic by design. Intuitive eating here is an *educational framing and a
 > set of product constraints*, never a treatment for disordered eating. We screen and
@@ -166,8 +166,8 @@ already the hybrid — in one place they hold that strict diets can reduce sympt
 carry side effects like any medication, that a known trigger food can still be worth
 eating sometimes, and that finding a better-tolerated version beats dropping a food.
 
-So we'd be modelling what a good practitioner actually does — which is what
-`positioning.md` already claims ("walks you through finding your actual triggers"). The
+So we'd be modelling what a good practitioner actually does — one that walks you through
+finding your actual triggers. The
 unstated second half of that promise is that a good practitioner is visibly eager to give
 you your diet back.
 
@@ -216,7 +216,7 @@ prescriptive, identity-level and permanent. Once a food is labelled Avoid the us
 eating it, `eaten` stops incrementing, and the counter-evidence that could exonerate it
 never arrives. The rank freezes.
 
-`docs/research-and-insights.md` already concedes the co-occurrence problem — two foods
+The co-occurrence problem — two foods
 that always appear together can't be separated until one is eaten alone — but the UI
 actively discourages the exposure needed to resolve it. **The label degrades our data
 quality and the user's diet at the same time**, and per §4b may also be reinforcing the
@@ -361,8 +361,8 @@ re-expansion list is an IE move, a Monash-faithful move and a marketing move at 
 ## 8. The conflict we should name out loud
 
 `fodmap-program.md` argues the program is good for retention because a multi-week protocol
-"gives a reason to open the app daily for weeks," and proposes Pro-gating it. That means
-**the business model earns more when users stay in elimination longer** — and elimination
+"gives a reason to open the app daily for weeks." That means
+**users stay in elimination longer** — and elimination
 is the phase carrying the nutrient and microbiome risk, and the phase whose adherence
 correlates with ED behaviour.
 
@@ -469,8 +469,8 @@ Fixes, cheapest first:
   frame it as *adequacy* ("are you getting enough, given what you've cut"), which is both
   the gentle-nutrition principle and the real clinical risk of low-FODMAP shortfall.
 - ❌ **An IE curriculum, lesson deck or coach persona.** Different product.
-- ❌ **An onboarding IE questionnaire.** `positioning.md` promises no profile and no quiz,
-  and a 23-item IES-2 is exactly the friction we sell against. Derive what we can from
+- ❌ **An onboarding IE questionnaire.** The app promises no profile and no quiz,
+  and a 23-item IES-2 is exactly the friction we design against. Derive what we can from
   *behaviour* — variety trend, avoid-set size and age, restriction duration — and only ask
   questions at the program gate. Behavioural inference is also more honest than self-report.
 - ❌ **Any claim that IE relieves GI symptoms.** Not supported.

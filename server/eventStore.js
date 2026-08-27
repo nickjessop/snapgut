@@ -1,5 +1,5 @@
 // Per-user event store for Cloud sync (the Sync_Service's storage layer).
-// Backends (USERS_BACKEND): "memory" (dev, default) | "firestore" (prod).
+// Backends (DATASTORE_BACKEND): "sqlite" (default) | "memory" (dev/tests).
 //
 // This module owns everything that touches stored Event_Records: the merge rule,
 // Server_Sequence allocation, the cursor codec, the purge generation, and
@@ -17,7 +17,7 @@
 
 import { norm } from "./store.js";
 
-const BACKEND = process.env.USERS_BACKEND === "firestore" ? "firestore" : "memory";
+const BACKEND = process.env.DATASTORE_BACKEND || "sqlite";
 
 /** A pulled page holds at most this many Event_Records (Req 7.2). */
 export const MAX_PULL_LIMIT = 500;
@@ -32,8 +32,8 @@ export const MAX_CLOCK_SKEW_MS = 86_400_000;
 export const TOMBSTONE_RETENTION_MS = 180 * 24 * 60 * 60 * 1000;
 
 /** Sequence and epoch a user starts from before anything is stored. */
-const INITIAL_SEQ = 0;
-const INITIAL_EPOCH = 1;
+export const INITIAL_SEQ = 0;
+export const INITIAL_EPOCH = 1;
 
 // ---------------------------------------------------------------------------
 // Stored shape
@@ -136,9 +136,7 @@ export function normalizeForStore(record, now = Date.now()) {
 // memory backend cannot build an id production would refuse.
 //
 // `server/sync.js` applies this at the edge, where an unstorable `id` earns a
-// per-id `invalid_record` rejection; `assertPathSegment` re-applies it in the
-// Firestore backend as a throw, so a malformed segment can never silently become
-// a *different* path.
+// per-id `invalid_record` rejection.
 // ---------------------------------------------------------------------------
 
 /** Firestore's document id byte ceiling — the tightest limit of any backend. */
@@ -315,7 +313,7 @@ export function parseCursor(token) {
 }
 
 /** Clamp a caller-supplied page size into 1…500 (Req 7.2). */
-function pageLimit(limit) {
+export function pageLimit(limit) {
   if (!Number.isFinite(limit)) return MAX_PULL_LIMIT;
   const truncated = Math.trunc(limit);
   if (truncated < 1) return 1;
@@ -378,7 +376,7 @@ function republishedClamp(entry, incoming, candidate) {
   return sameExceptUpdatedAt(candidate, entry.record);
 }
 
-function planPush(records, lookup, now) {
+export function planPush(records, lookup, now) {
   const outcomes = [];
   /** Ids already acknowledged, so a payload repeating an id reports it once. */
   const acknowledged = new Set();
@@ -590,299 +588,33 @@ export function createMemoryEventStore() {
 }
 
 // ---------------------------------------------------------------------------
-// Firestore backend (prod)
-//
-// Same interface as the memory backend, and the same behavior: both plan a push
-// with the shared `planPush` above, so the merge rule, tombstone stripping,
-// sequence allocation, and epoch handling are one implementation with two commit
-// paths.
-//
-//   users/{email}                   ← the existing user record (store.js)
-//   users/{email}/sync/meta         ← { seq, epoch, lastTombstoneSweepAt }
-//   users/{email}/events/{eventId}  ← stored Event_Record + { seq, clampedFrom }
-//
-// Per-user scoping is structural (Req 18.1): every ref below is built from
-// `userDoc()`, which is the one place an email becomes a path, so no read or
-// write this module issues can address another user's subtree. A pull for an id
-// owned by someone else does not match inside this subtree, which is what
-// Requirement 18.2 asks for without an ownership comparison.
-//
-// KNOWN DIVERGENCE from the memory backend, still open: expired Tombstones
-// (Req 9.7) are not swept here. The memory backend can walk every stored record on
-// each pull; the equivalent query needs a second filter on the events collection,
-// which the pull query deliberately avoids (it would force a composite index), so
-// Firestore tombstone expiry needs a scheduled sweep that nothing in the plan
-// currently owns. Until one exists, a Tombstone older than the retention window
-// stays readable on this backend and `lastTombstoneSweepAt` stays null here.
+// Firestore backend removed (Decision D1).
+// The SQLite backend lives in `server/sqlite/eventStore.js`.
 // ---------------------------------------------------------------------------
-
-/** Deletes per batched write in `deleteAll`, under Firestore's 500-write limit. */
-const DELETE_BATCH_SIZE = 400;
-
-/**
- * A value Firestore can hold as one path segment, or a throw.
- *
- * A malformed segment must never become a *different* path, which is the whole
- * point of the structural scoping of Requirement 18.1: an id containing `/`
- * would silently address some other document. The rule is `storableId` above, the
- * same one `server/sync.js` applies at the edge — so an `id` that reaches here is
- * already known to pass, and this is the backstop for the identity segment and for
- * a caller that bypassed the HTTP shell.
- *
- * It throws rather than rejecting the id, because the store has no per-id
- * rejection channel — the caller's error boundary answers 500 and, since the throw
- * happens before any write is committed, nothing is stored (Req 6.10).
- */
-function assertPathSegment(value, what) {
-  if (!storableId(value)) throw new Error(`event store: unusable ${what}`);
-  return value;
-}
-
-/**
- * Read a `sync/meta` document, or the state a user starts from before anything
- * has been stored. Every field is validated, so a hand-edited or partially
- * written document cannot hand a non-integer counter to the sequence allocation.
- */
-function metaFrom(data) {
-  return {
-    seq: Number.isInteger(data?.seq) && data.seq > 0 ? data.seq : INITIAL_SEQ,
-    epoch: Number.isInteger(data?.epoch) && data.epoch > 0 ? data.epoch : INITIAL_EPOCH,
-    lastTombstoneSweepAt: Number.isInteger(data?.lastTombstoneSweepAt)
-      ? data.lastTombstoneSweepAt
-      : null,
-  };
-}
-
-/**
- * An event document as the shared planner and the pull response want it: the
- * wire Event_Record on its own, with the bookkeeping held beside it exactly as
- * the memory backend holds it.
- */
-function entryFrom(snapshot) {
-  const data = snapshot.data();
-  if (!data) return null;
-  const record = {};
-  for (const [key, value] of Object.entries(data)) {
-    if (value === undefined) continue;
-    if (STORE_ONLY_KEYS.has(key)) continue;
-    record[key] = value;
-  }
-  return {
-    record,
-    seq: Number.isInteger(data.seq) ? data.seq : INITIAL_SEQ,
-    clampedFrom: Number.isInteger(data.clampedFrom) ? data.clampedFrom : null,
-  };
-}
-
-/**
- * The Firestore backend over an existing client, so a caller with an emulator
- * handle can exercise it directly. `firestoreEventStore()` is the production
- * path and builds its own client the way `store.js` does.
- */
-export function createFirestoreEventStore(db) {
-  /** The one place an email becomes a path — see the Req 18.1 note above. */
-  const userDoc = (email) => db.collection("users").doc(assertPathSegment(norm(email), "user"));
-  const eventsCol = (email) => userDoc(email).collection("events");
-  const metaRef = (email) => userDoc(email).collection("sync").doc("meta");
-
-  const readMeta = async (email) => metaFrom((await metaRef(email).get()).data());
-
-  return {
-    /**
-     * Store the records of one validated push request for one user, all in a
-     * single transaction (Req 6.3, 6.4, 6.5, 9.2, 9.5, 9.8).
-     *
-     * Block allocation runs *inside* that transaction: read `meta.seq`, write
-     * every changed record with `seq + 1 … seq + N`, write back `seq + N`. It all
-     * commits together, so `meta.seq` is never ahead of a record that is not yet
-     * readable and a reader's cursor can never skip one (Req 6.3, 8.9). The same
-     * atomicity gives Requirement 6.10 for free: the transaction commits whole or
-     * not at all.
-     *
-     * At most 200 records reach here (Req 19.2), so the transaction holds at most
-     * 201 writes — the records plus the counter — inside Firestore's 500-write
-     * limit. The two numbers are coupled and move together.
-     */
-    async push(email, records, now = Date.now()) {
-      const list = Array.isArray(records) ? records : [];
-      const col = eventsCol(email);
-      const meta = metaRef(email);
-
-      // Distinct ids in first-sent order, validated as path segments before any
-      // ref is built from them.
-      const ids = [];
-      const seen = new Set();
-      for (const record of list) {
-        const id = assertPathSegment(record?.id, "event id");
-        if (seen.has(id)) continue;
-        seen.add(id);
-        ids.push(id);
-      }
-
-      // Nothing to merge against and nothing to write, so no read either.
-      if (ids.length === 0) return { outcomes: [], stored: 0, highestSequence: null };
-
-      return db.runTransaction(async (tx) => {
-        // Every read first, as a Firestore transaction requires: the counter and
-        // the current state of each id in the payload, in one round trip.
-        const snapshots = await tx.getAll(meta, ...ids.map((id) => col.doc(id)));
-        const current = metaFrom(snapshots[0].data());
-        const entries = new Map();
-        snapshots.slice(1).forEach((snapshot, index) => {
-          const entry = entryFrom(snapshot);
-          if (entry !== null) entries.set(ids[index], entry);
-        });
-
-        const { outcomes, writes } = planPush(list, (id) => entries.get(id) ?? null, now);
-
-        let seq = current.seq;
-        for (const [id, written] of writes) {
-          // A full document write, not a merge: a field the new revision dropped
-          // must disappear rather than survive underneath it.
-          tx.set(col.doc(id), {
-            ...written.record,
-            seq: ++seq,
-            clampedFrom: written.clampedFrom,
-          });
-        }
-        // A push that changed nothing writes nothing at all, counter included,
-        // which is the store half of push idempotence (Req 6.5).
-        if (writes.size > 0) tx.set(meta, { seq }, { merge: true });
-
-        return {
-          outcomes,
-          stored: writes.size,
-          highestSequence: writes.size > 0 ? seq : null,
-        };
-      });
-    },
-
-    /**
-     * Serve the next page after `cursor`: at most `limit` (≤500) records for this
-     * user only, ordered by ascending Server_Sequence, with the cursor to present
-     * next and whether more remain (Req 7.2).
-     *
-     * The query filters and orders on the same single field inside one
-     * subcollection, which Firestore's automatic single-field index already
-     * serves — no composite index. Adding a second filter (a `deleted == false`,
-     * say) would introduce one, which is why Tombstones are filtered on the
-     * client instead.
-     *
-     * One document beyond the page is read to answer `hasMore` without a second
-     * round trip; the page itself never exceeds `limit`.
-     *
-     * The epoch check and the page come from one read-only transaction, so a
-     * purge committing mid-pull cannot produce a page from one generation
-     * carrying a cursor from another.
-     */
-    async pull(email, cursor = null, limit = MAX_PULL_LIMIT, _now = Date.now()) {
-      const col = eventsCol(email);
-      const meta = metaRef(email);
-      const size = pageLimit(limit);
-
-      return db.runTransaction(
-        async (tx) => {
-          const current = metaFrom((await tx.get(meta)).data());
-
-          let sinceSeq = 0;
-          if (cursor !== null && cursor !== undefined && cursor !== "") {
-            const parsed = parseCursor(cursor);
-            // A cursor from a superseded purge generation — or one that is not a
-            // cursor at all — is the client's reset signal (Req 13.13, 17.5).
-            if (parsed === null || parsed.epoch !== current.epoch) {
-              return { cursorInvalid: true, records: [], cursor: null, hasMore: false };
-            }
-            sinceSeq = parsed.sequence;
-          }
-
-          const snapshot = await tx.get(
-            col.where("seq", ">", sinceSeq).orderBy("seq").limit(size + 1)
-          );
-          const docs = snapshot.docs;
-          const page = docs.slice(0, size).map(entryFrom);
-          const lastSeq = page.length > 0 ? page[page.length - 1].seq : sinceSeq;
-
-          return {
-            cursorInvalid: false,
-            // The stored record alone: `seq` and `clampedFrom` are bookkeeping the
-            // wire never carries (Req 8.3, 8.9).
-            records: page.map((entry) => entry.record),
-            cursor: formatCursor(current.epoch, lastSeq),
-            hasMore: docs.length > page.length,
-          };
-        },
-        { readOnly: true }
-      );
-    },
-
-    /**
-     * Delete every stored Event_Record and Tombstone for the user and bump the
-     * purge generation, so every cursor already issued reports invalid on the
-     * next pull (Req 17.1, 17.4, 17.5). The user record and its entitlement live
-     * in `store.js` and are untouched here.
-     *
-     * Deletes run in batches of 400 — a subcollection can hold far more documents
-     * than one transaction may write — and the epoch is bumped last, after the
-     * records are gone. An interrupted purge therefore leaves the epoch alone and
-     * a repeat finishes the job: `deleteAll` on an already-empty user reports
-     * `deleted: 0` and succeeds, which is the idempotence Requirement 17.2 asks
-     * for.
-     */
-    async deleteAll(email) {
-      const col = eventsCol(email);
-      const meta = metaRef(email);
-
-      let deleted = 0;
-      for (;;) {
-        // `select()` with no field: document refs only, so a purge never reads
-        // Log_Event content it is about to delete.
-        const snapshot = await col.select().limit(DELETE_BATCH_SIZE).get();
-        if (snapshot.empty) break;
-        const batch = db.batch();
-        for (const doc of snapshot.docs) batch.delete(doc.ref);
-        await batch.commit();
-        deleted += snapshot.size;
-        if (snapshot.size < DELETE_BATCH_SIZE) break;
-      }
-
-      const epoch = await db.runTransaction(async (tx) => {
-        const current = metaFrom((await tx.get(meta)).data());
-        const next = current.epoch + 1;
-        tx.set(meta, { seq: INITIAL_SEQ, epoch: next }, { merge: true });
-        return next;
-      });
-
-      return { deleted, epoch };
-    },
-
-    /** Stored record count, for the per-user cap (Req 19.7). */
-    async countFor(email, _now = Date.now()) {
-      const snapshot = await eventsCol(email).count().get();
-      return Number(snapshot.data()?.count ?? 0);
-    },
-
-    /** Sync metadata: `{ seq, epoch, lastTombstoneSweepAt }`. */
-    async getMeta(email) {
-      return readMeta(email);
-    },
-  };
-}
-
-/** Production Firestore backend, built the way `store.js` builds its client. */
-async function firestoreEventStore() {
-  const { Firestore } = await import("@google-cloud/firestore");
-  return createFirestoreEventStore(new Firestore());
-}
 
 let eventStorePromise = null;
 
 /** Memoized event store for the configured backend, mirroring `getStore()`. */
 export function getEventStore() {
   if (!eventStorePromise) {
-    eventStorePromise =
-      BACKEND === "firestore"
-        ? firestoreEventStore()
-        : Promise.resolve(createMemoryEventStore());
+    if (BACKEND === "memory") {
+      eventStorePromise = Promise.resolve(createMemoryEventStore());
+    } else if (BACKEND === "sqlite") {
+      eventStorePromise = (async () => {
+        const { DatabaseSync } = await import("node:sqlite");
+        const { migrate } = await import("./sqlite/schema.js");
+        const { createSqliteEventStore } = await import("./sqlite/eventStore.js");
+        const { openDatabase } = await import("./sqlite/open.js");
+        const { db } = openDatabase(DatabaseSync);
+        migrate(db);
+        return createSqliteEventStore(db);
+      })();
+    } else {
+      console.error(
+        `Fatal: unrecognised DATASTORE_BACKEND="${BACKEND}". Accepted values: "sqlite", "memory".`
+      );
+      process.exit(1);
+    }
   }
   return eventStorePromise;
 }

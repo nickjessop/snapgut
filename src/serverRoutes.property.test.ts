@@ -119,7 +119,6 @@ const DIST_FILES = [
   "/robots.txt",
   "/sitemap.xml",
   "/index.html",
-  "/pricing.html",
   "/404.html",
   "/app/index.html",
   "/foods/apple.webp",

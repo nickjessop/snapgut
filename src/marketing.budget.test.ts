@@ -2,35 +2,18 @@
 //
 // The Marketing_Site performance budget and the image loading contract.
 //
-// Validates: Requirements 15.1, 15.3, 15.4, 15.5
+// Validates: Requirements 15.1, 15.3, 15.4
 //
-// Everything here reads the real Build_Output, not the templates: the emitted
-// documents in `dist/`, the assets they pull in, and `dist/size-report.json`,
-// which the build writes for exactly this purpose (R15.5).
-//
-// Two things are worth being explicit about.
-//
-// First, the report is treated as evidence, not as truth. A stale or wrong
-// report would otherwise be able to hide a budget breach, so every figure in it
-// is recomputed from the document and the assets on disk with the same function
-// the emitter used, and the two must agree. The staleness guard below covers the
-// other half of that: a clean checkout, or a `marketing/` edit that has not been
-// rebuilt, builds before asserting.
-//
-// Second, the 150 KB ceiling of R15.1 is currently about sixteen times the home
-// page's actual weight, which makes a bare "under the ceiling" assertion close
-// to vacuous. The ceiling is still the gate — that is the requirement — and a
-// much tighter tripwire sits next to it to catch a regression while it is still
-// a regression rather than a breach. Both failure messages print the measured
-// figures so a failure says what the page now weighs, not just that it is too
-// big.
+// Everything here reads the real Build_Output: the emitted documents in `dist/`
+// and the assets they pull in. Sizes are computed directly from the files.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { gzipSync } from "node:zlib";
 import { beforeAll, describe, expect, it } from "vitest";
 // @ts-ignore -- untyped ESM JavaScript (vite/ is not TypeScript)
-import { documentSizes, GENERATED_FILES } from "../vite/marketing.js";
+import { referencedAssets } from "../vite/marketing.js";
 // @ts-ignore -- untyped ESM JavaScript (shared/ is not TypeScript)
 import { MARKETING_PAGES, NOT_FOUND_FILE } from "../shared/site.js";
 
@@ -50,10 +33,7 @@ const documents = [...pages.map((page) => page.file), NOT_FOUND_FILE as string];
 const BUDGET_BYTES = 150 * 1024;
 
 /**
- * A tripwire well under the requirement's ceiling. Not a requirement — a guard
- * against the ceiling's slack, since the home page currently lands near 9 kB and
- * anything approaching this number is a change worth looking at deliberately.
- * Raise it on purpose if the page genuinely needs the room.
+ * A tripwire well under the requirement's ceiling.
  */
 const TRIPWIRE_BYTES = 32 * 1024;
 
@@ -62,41 +42,66 @@ const total = (sizes: Sizes) => sizes.html + sizes.css + sizes.js;
 const breakdown = (sizes: Sizes) =>
   `${kb(sizes.html)} HTML + ${kb(sizes.css)} CSS + ${kb(sizes.js)} JS = ${kb(total(sizes))} gzip`;
 
-/** Everything the emitted documents and the report are derived from. */
-const CONFIG_SOURCES = ["vite.config.ts", "vite/marketing.js", "vite/partials.js", "shared/site.js"];
+/** Everything the emitted documents are derived from. */
+const CONFIG_SOURCES = ["vite.config.ts", "vite/marketing.js", "shared/site.js"];
 
 const filesUnder = (dir: string): string[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
     entry.isDirectory() ? filesUnder(path.join(dir, entry.name)) : [path.join(dir, entry.name)],
   );
 
-/**
- * Build only when the report is missing or older than the sources it derives
- * from, so a clean checkout works and a normal `npm test` after a build pays
- * nothing. Mirrors the guard in `src/pwa.offline.test.ts`.
- */
 const buildIfStale = () => {
-  const report = path.join(distDir, GENERATED_FILES.sizeReport as string);
-  const reportAge = existsSync(report) ? statSync(report).mtimeMs : 0;
+  const emitted = documents.map((file) => path.join(distDir, file));
+  if (!emitted.every(existsSync)) {
+    execFileSync("npm", ["run", "build"], { cwd: repoRoot, stdio: "pipe" });
+    return;
+  }
+  const oldestOutput = Math.min(...emitted.map((f) => statSync(f).mtimeMs));
   const newestSource = Math.max(
     ...CONFIG_SOURCES.map((file) => statSync(path.join(repoRoot, file)).mtimeMs),
     ...filesUnder(path.join(repoRoot, "marketing")).map((file) => statSync(file).mtimeMs),
   );
-  const emitted = documents.every((file) => existsSync(path.join(distDir, file)));
-  if (emitted && reportAge > newestSource) return;
-  execFileSync("npm", ["run", "build"], { cwd: repoRoot, stdio: "pipe" });
+  if (oldestOutput <= newestSource) {
+    execFileSync("npm", ["run", "build"], { cwd: repoRoot, stdio: "pipe" });
+  }
 };
 
-let report: Record<string, Sizes>;
+/** Compute gzip sizes for a document and its referenced CSS/JS assets. */
+function computeSizes(htmlContent: string): Sizes {
+  const htmlGzip = gzipSync(Buffer.from(htmlContent, "utf8")).length;
+  let cssGzip = 0;
+  let jsGzip = 0;
+  const seen = new Set<string>();
+
+  for (const ref of referencedAssets(htmlContent) as string[]) {
+    if (!ref.startsWith("/") || ref.startsWith("//")) continue;
+    const rel = ref.slice(1).split("?")[0].split("#")[0];
+    if (seen.has(rel)) continue;
+    seen.add(rel);
+    const filePath = path.join(distDir, rel);
+    if (!existsSync(filePath)) continue;
+    if (rel.endsWith(".css")) {
+      cssGzip += gzipSync(readFileSync(filePath)).length;
+    } else if (rel.endsWith(".js")) {
+      jsGzip += gzipSync(readFileSync(filePath)).length;
+    }
+  }
+
+  return { html: htmlGzip, css: cssGzip, js: jsGzip };
+}
+
 /** Emitted document contents, keyed by output file. */
 const html: Record<string, string> = {};
+const report: Record<string, Sizes> = {};
 
 beforeAll(() => {
   buildIfStale();
-  report = JSON.parse(
-    readFileSync(path.join(distDir, GENERATED_FILES.sizeReport as string), "utf8"),
-  ) as Record<string, Sizes>;
-  for (const file of documents) html[file] = readFileSync(path.join(distDir, file), "utf8");
+  for (const file of documents) {
+    html[file] = readFileSync(path.join(distDir, file), "utf8");
+  }
+  for (const page of pages) {
+    report[page.path] = computeSizes(html[page.file]);
+  }
 }, 120_000);
 
 // ---------------------------------------------------------------------------
@@ -117,32 +122,6 @@ const images = (file: string) => (html[file].match(IMG_ELEMENT) ?? []).map((tag)
 }));
 
 // ---------------------------------------------------------------------------
-
-describe("the build reports each Marketing_Page's compressed weight (R15.5)", () => {
-  it("has an entry per Marketing_Page, with byte counts for the three classes", () => {
-    expect(Object.keys(report).sort()).toEqual(pages.map((page) => page.path).sort());
-    for (const page of pages) {
-      const sizes = report[page.path];
-      for (const key of ["html", "css", "js"] as const) {
-        expect(Number.isInteger(sizes[key]), `${page.path} ${key}: ${sizes[key]}`).toBe(true);
-        expect(sizes[key]).toBeGreaterThanOrEqual(0);
-      }
-      // A document and a stylesheet are always there; a zero would mean the
-      // measurement missed them rather than that the page is weightless.
-      expect(sizes.html, `${page.path} HTML`).toBeGreaterThan(0);
-      expect(sizes.css, `${page.path} CSS`).toBeGreaterThan(0);
-    }
-  });
-
-  it.each(pages.map((page) => [page.path, page.file] as const))(
-    "%s matches the emitted document and its assets on disk",
-    (pagePath, file) => {
-      // Recomputed with the emitter's own function, so a stale or hand-edited
-      // report cannot mask a breach of the budget asserted below.
-      expect(documentSizes(html[file], distDir)).toEqual(report[pagePath]);
-    },
-  );
-});
 
 describe("the home page fits the compressed budget (R15.1)", () => {
   it("transfers no more than 150 KB of HTML, CSS, and JavaScript combined", () => {
@@ -210,9 +189,6 @@ describe("the lazy/eager loading split is real (R15.4)", () => {
   });
 
   it.each(documents)("%s defers no image ahead of its first eager one", (file) => {
-    // Source order is the only above-the-fold signal available without a
-    // browser: markup before the first eagerly loaded image is the top of the
-    // document, and nothing there may be deferred.
     const loading = images(file).map((image) => image.loading);
     const firstEager = loading.indexOf("eager");
     const deferredEarly = loading

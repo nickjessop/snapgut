@@ -10,12 +10,11 @@
 // no port, and no mocking of the middleware chain, so what these tests exercise
 // is the real order of the real guards:
 //
-//   protocol 400 → declared `Content-Length` 413 → per-IP 429 → 401 →
-//   per-user 429 → 402 → handler
+//   declared `Content-Length` 413 → per-IP 429 → 401 →
+//   per-user 429 → handler
 //
-// There is no retention step: Decision D1 settled on retaining a lapsed user's
-// Event_Records indefinitely, so nothing between the Pro gate and the handler
-// evaluates a retention window.
+// The HTTPS transport check is now a global opt-in via REQUIRE_HTTPS in config,
+// enforced in buildApp rather than in the sync chain.
 //
 // The node environment is deliberate: the chain reads `c.req.raw.body` as a
 // stream, and the streaming size guard of Requirement 19.10 needs a real
@@ -38,7 +37,6 @@ import {
   syncApp,
   syncCall,
   syncFetch,
-  uniqueEmail,
   uniqueIp,
   USER_REQUESTS_PER_WINDOW,
   userStore,
@@ -49,15 +47,7 @@ const PUSH = "/api/sync/push";
 const PULL = "/api/sync/pull";
 const CLOUD_DELETE = "/api/sync/data";
 
-/** A user whose Pro ran out — the entitlement failure the 402 path describes. */
-async function lapsedUser(): Promise<{ email: string; token: string; proUntil: number }> {
-  const email = uniqueEmail("lapsed");
-  const proUntil = Date.now() - 60_000;
-  const store = await userStore();
-  await store.upsertUser(email);
-  await store.setPro(email, proUntil);
-  return { email, token: mintToken(email), proUntil };
-}
+
 
 /** The Server_Sequence a cursor token identifies — `"{epoch}:{seq}"`. */
 const cursorSeq = (cursor: string): number => Number(cursor.split(":")[1]);
@@ -78,19 +68,6 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("sync middleware chain", () => {
-  it("rejects a plaintext request before looking at anything else", async () => {
-    const app = syncApp();
-    const { status, body } = await syncCall(app, {
-      method: "POST",
-      path: PUSH,
-      headers: { "x-forwarded-proto": "http" },
-      body: pushBody([mealRecord("plaintext-1")]),
-    });
-
-    expect(status).toBe(400);
-    expect(body).toEqual({ error: "https_required" });
-  });
-
   it("answers 413 for a declared oversize body before verifying the session", async () => {
     const app = syncApp();
     // No token at all: reaching 413 rather than 401 is what places the declared
@@ -112,8 +89,8 @@ describe("sync middleware chain", () => {
     const store = await userStore();
     expect(await store.getUser(email)).not.toBeNull();
 
-    // A token for a real, non-Pro user, with its signature broken: this request
-    // would fail *both* checks, and Requirement 2.6 says authentication wins.
+    // A token for a real user, with its signature broken: this request
+    // should still fail authentication.
     const token = `${mintToken(email)}tampered`;
     const { status, body } = await syncCall(app, {
       method: "POST",
@@ -124,51 +101,17 @@ describe("sync middleware chain", () => {
 
     expect(status).toBe(401);
     expect(body).toEqual({ error: "unauthorized" });
-    expect(body.entitlement).toBeUndefined();
   });
 
-  it("answers 402 with the evaluated entitlement once the session verifies", async () => {
+  it("lets a user delete their cloud copy", async () => {
     const app = syncApp();
-    const { token, proUntil } = await lapsedUser();
-
-    for (const call of [
-      { method: "POST", path: PUSH, body: pushBody([mealRecord("gated-1")]) },
-      { method: "GET", path: PULL },
-    ]) {
-      const { status, body } = await syncCall(app, { ...call, token });
-      expect(status).toBe(402);
-      expect(body.error).toBe("upgrade_required");
-      // The Pro_Entitlement the service evaluated, and the expiry it evaluated
-      // against (Req 2.2).
-      expect(body.entitlement.pro).toBe(false);
-      expect(body.entitlement.proUntil).toBe(proUntil);
-      expect(body.records).toBeUndefined();
-    }
-  });
-
-  it("lets a lapsed user delete their cloud copy while keeping push and pull gated", async () => {
-    const app = syncApp();
-    const { email, token } = await lapsedUser();
+    const { email, token } = await proUser();
     const store = await eventStore();
-    await store.push(email, [mealRecord("lapsed-keep-1"), mealRecord("lapsed-keep-2")]);
+    await store.push(email, [mealRecord("keep-1"), mealRecord("keep-2")]);
 
-    // DELETE /api/sync/data is deliberately exempt from the step-6 Pro gate:
-    // Requirement 17.4 gives the user the right to remove the cloud copy, and the
-    // user most likely to want it is exactly the one whose Pro has lapsed.
     const deleted = await syncCall(app, { method: "DELETE", path: CLOUD_DELETE, token });
     expect(deleted.status).toBe(200);
     expect(deleted.body).toMatchObject({ ok: true, deleted: 2 });
-    expect(deleted.body.entitlement.pro).toBe(false);
-    expect(await store.countFor(email)).toBe(0);
-
-    // The exemption is the delete path only — the paid feature stays paid.
-    const pushed = await syncCall(app, {
-      method: "POST",
-      path: PUSH,
-      token,
-      body: pushBody([mealRecord("lapsed-push-1")]),
-    });
-    expect(pushed.status).toBe(402);
     expect(await store.countFor(email)).toBe(0);
   });
 
@@ -180,7 +123,7 @@ describe("sync middleware chain", () => {
     expect(body).toEqual({ error: "unauthorized" });
   });
 
-  it("touches no stored Event_Record on the way to a 401 or a 402", async () => {
+  it("touches no stored Event_Record on the way to a 401", async () => {
     const app = syncApp();
     const owner = await proUser();
     const store = await eventStore();
@@ -202,15 +145,12 @@ describe("sync middleware chain", () => {
         init: { method: "GET", path: PULL, headers: { authorization: owner.token } },
         status: 401,
       },
-      // 402 — a verified session with no entitlement (Req 2.2).
-      { init: { method: "POST", path: PUSH, token: (await lapsedUser()).token }, status: 402 },
-      { init: { method: "GET", path: PULL, token: (await freeUser()).token }, status: 402 },
     ];
 
     for (const { init, status } of rejected) {
       const res = await syncCall(app, init as any);
       expect(res.status).toBe(status);
-      // Zero Event_Records in the body of either rejection (Req 2.3).
+      // Zero Event_Records in the body of the rejection (Req 2.3).
       expect(res.body.records).toBeUndefined();
     }
 
@@ -295,7 +235,6 @@ describe("push", () => {
       { id: "three", outcome: "stored" },
     ]);
     expect(body.highestSequence).toBe(3);
-    expect(body.entitlement.pro).toBe(true);
     expect(await (await eventStore()).countFor(email)).toBe(3);
   });
 

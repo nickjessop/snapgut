@@ -36,10 +36,6 @@ vi.mock("./session", async (importOriginal) => {
     ...actual,
     fetchMe: async () => ({
       email: "a@b.c",
-      pro: true,
-      proUntil: null,
-      freeAiUsed: 0,
-      freeAiLimit: 5,
     }),
     deleteAccount: (): Promise<{ ok: boolean }> => {
       server.deleteCalls += 1;
@@ -62,13 +58,10 @@ vi.mock("./cloudSync", async (importOriginal) => {
 });
 
 import SettingsView from "./SettingsView";
-import type { Entitlement } from "./session";
 import { getToken, setToken, clearToken } from "./session";
 import { resetCloudSyncForTests } from "./cloudSync";
-import { getSpreadsheetId, setSpreadsheetId } from "./googleSheets";
 import {
   ackDisclosure,
-  applyEntitlement,
   clearPersistedSyncSettingsForTests,
   isDestinationEnabled,
   resetSyncSettingsForTests,
@@ -78,22 +71,13 @@ import {
 
 const EMAIL = "a@b.c";
 
-const entitlement: Entitlement = {
-  pro: true,
-  proUntil: null,
-  freeAiUsed: 0,
-  freeAiLimit: 5,
-};
-
 let signedOut = 0;
 let deleted: string[] = [];
 
 function renderSettings() {
   return render(
     <SettingsView
-      entitlement={entitlement}
       onClose={() => {}}
-      onUpgrade={() => {}}
       onSignedOut={() => {
         signedOut += 1;
       }}
@@ -124,8 +108,6 @@ function localState() {
   return {
     dbDeleted: deleted,
     backupKey: localStorage.getItem("food-snap-last-backup"),
-    spreadsheetId: getSpreadsheetId(),
-    sheetsEnabled: isDestinationEnabled("sheets"),
     token: getToken(),
   };
 }
@@ -141,13 +123,11 @@ beforeEach(async () => {
   clearPersistedSyncSettingsForTests();
   await restore();
 
-  // A device mid-life: signed in, Pro, syncing to a spreadsheet, with a backup
+  // A device mid-life: signed in, syncing, with a backup
   // reminder recorded under the `food-snap` prefix.
   setToken("t");
-  applyEntitlement({ pro: true, proUntil: null });
   ackDisclosure(EMAIL);
-  setDestinationEnabled("sheets", true);
-  setSpreadsheetId("sheet-1");
+  setDestinationEnabled("cloud", true);
   localStorage.setItem("food-snap-last-backup", "123");
 
   // jsdom has no IndexedDB, so the wipe target is observed through a stub.
@@ -189,18 +169,6 @@ describe("SettingsView — a successful account deletion wipes this device (Req 
     expect(getToken()).toBeNull();
     expect(signedOut).toBe(1);
   });
-
-  it("disables the Sheets destination and drops the stored spreadsheet id (Req 17.9)", async () => {
-    renderSettings();
-    await settled();
-
-    await confirmAccountDelete();
-
-    expect(isDestinationEnabled("sheets")).toBe(false);
-    // The id is gone locally; nothing was written to Google, so the spreadsheet
-    // in the user's own Drive is untouched.
-    expect(getSpreadsheetId()).toBeNull();
-  });
 });
 
 describe("SettingsView — a failed account deletion changes nothing locally (Req 17.7)", () => {
@@ -216,8 +184,6 @@ describe("SettingsView — a failed account deletion changes nothing locally (Re
     expect(localState()).toEqual({
       dbDeleted: [],
       backupKey: "123",
-      spreadsheetId: "sheet-1",
-      sheetsEnabled: true,
       token: "t",
     });
     expect(signedOut).toBe(0);
@@ -251,8 +217,6 @@ describe("SettingsView — a failed account deletion changes nothing locally (Re
     expect(localState()).toEqual({
       dbDeleted: [],
       backupKey: "123",
-      spreadsheetId: "sheet-1",
-      sheetsEnabled: true,
       token: "t",
     });
     expect(signedOut).toBe(0);
@@ -268,8 +232,6 @@ describe("SettingsView — a failed account deletion changes nothing locally (Re
     expect(localState()).toEqual({
       dbDeleted: [],
       backupKey: "123",
-      spreadsheetId: "sheet-1",
-      sheetsEnabled: true,
       token: "t",
     });
     expect(signedOut).toBe(0);

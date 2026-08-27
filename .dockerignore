@@ -5,7 +5,7 @@ dist
 *.log
 .DS_Store
 
-# Generated food illustration pack (served from GCS, never baked into the image)
+# Food illustration pack — mounted at runtime from the host volume, not baked into the image
 food-pack/
 
 # Icon sources — only used by `npm run icons`; the emitted icons live in public/

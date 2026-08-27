@@ -63,14 +63,11 @@ export interface EventStore {
 
 export interface UserRecord {
   email: string;
-  pro: boolean;
-  proUntil: number | null;
 }
 
 export interface UserStore {
   getUser(email: string): Promise<UserRecord | null>;
   upsertUser(email: string): Promise<UserRecord>;
-  setPro(email: string, proUntil: number | null, customerId?: string): Promise<UserRecord | null>;
   deleteUser(email: string): Promise<void>;
   rateLimit(key: string, max: number, windowMs: number): Promise<boolean>;
 }
@@ -95,7 +92,8 @@ export const purgeEventData = (
   syncModule.purgeEventData(email, deadlineMs);
 
 /** The Session_Token verifier's own signer — a real token, not a stub. */
-export const mintToken = (email: string): string => signToken(email) as string;
+export const mintToken = (email: string): string =>
+  signToken(email, process.env.SESSION_SECRET || "test-secret-for-vitest-only-do-not-use-in-production") as string;
 
 // ---------------------------------------------------------------------------
 // Fresh app, fresh identities
@@ -121,12 +119,11 @@ export function uniqueIp(): string {
   return `198.51.100.${nextId()}`;
 }
 
-/** A user record with Pro held indefinitely, plus a valid Session_Token for it. */
+/** A user record plus a valid Session_Token for it. All features are ungated. */
 export async function proUser(label = "pro"): Promise<{ email: string; token: string }> {
   const email = uniqueEmail(label);
   const store = await userStore();
   await store.upsertUser(email);
-  await store.setPro(email, null);
   return { email, token: mintToken(email) };
 }
 

@@ -50,10 +50,8 @@ import { fetchWithTimeout } from "./httpTimeout";
 import { clearToken, getToken } from "./session";
 import { createSingleFlight } from "./singleFlight";
 import {
-  applyEntitlement,
   getSnapshot as getSyncSettingsSnapshot,
   isDestinationEnabled,
-  isProEntitled,
   recordSyncOutcome,
   setDestinationEnabled,
   subscribe as subscribeToSyncSettings,
@@ -991,11 +989,8 @@ export function reconcileOutbox(
 // state diagram's transitions are consequences of the inputs changing rather
 // than events this module has to fire.
 //
-// Two orderings in the table do real work:
+// One ordering in the table does real work:
 //
-// - `blocked_no_pro` sits at step 2, above `syncing` and `error`, so a Pro lapse
-//   during an in-flight or failed Sync_Cycle reads as paused rather than broken
-//   (Req 12.6, 13.11).
 // - `synced` at step 7 requires an empty Outbox, which is what makes the
 //   `synced → idle` move on the first new local write fall out of derivation
 //   instead of needing its own event (Req 12.9).
@@ -1013,8 +1008,7 @@ export type SyncState =
   | { state: "idle"; lastSyncAt: number | null; pending: number }
   | { state: "syncing"; lastSyncAt: number | null; restore: { merged: number } | null }
   | { state: "synced"; lastSyncAt: number; skipped: number }
-  | { state: "error"; lastSyncAt: number | null; kind: "offline" | "service"; message: string }
-  | { state: "blocked_no_pro"; lastSyncAt: number | null; daysUntilPurge: number | null };
+  | { state: "error"; lastSyncAt: number | null; kind: "offline" | "service"; message: string };
 
 /**
  * The snapshot `deriveSyncState` reads. Every field is a condition Requirement
@@ -1035,14 +1029,9 @@ export type SyncState =
  * - `skipped` — records the last successful cycle skipped as malformed (Req 20.5).
  * - `restoreMerged` — records merged so far by an in-progress initial pull, or
  *   `null` when this cycle is not a restore (Req 10.2).
- * - `daysUntilPurge` — whole days until the Sync_Service purges the cloud copy
- *   after a Pro_Lapse, or `null` when there is no such deadline. Decision D1 is
- *   resolved as **retain indefinitely**, so the shell always passes `null`; the
- *   field stays in the record because the derivation must remain total over it.
  */
 export interface SyncStateInput {
   hasSession: boolean;
-  pro: boolean;
   enabled: boolean;
   cycleInProgress: boolean;
   lastCycleFailed: boolean;
@@ -1052,7 +1041,6 @@ export interface SyncStateInput {
   lastSyncAt: number | null;
   skipped: number;
   restoreMerged: number | null;
-  daysUntilPurge: number | null;
 }
 
 /**
@@ -1092,16 +1080,7 @@ export function deriveSyncState(input: SyncStateInput): SyncState {
   // 1. no Session_Token → off (Req 1.6)
   if (!input.hasSession) return { state: "off" };
 
-  // 2. Pro false ∧ enabled → blocked_no_pro (Req 1.3, 12.6) — above syncing and
-  //    error, so a lapse mid-cycle or after a failure reads as paused (13.11).
-  if (!input.pro && input.enabled) {
-    return { state: "blocked_no_pro", lastSyncAt, daysUntilPurge: input.daysUntilPurge };
-  }
-
-  // 3. Pro false ∧ not enabled → off (Req 1.4)
-  // 4. not enabled → off (Req 12.1)
-  //    Steps 3 and 4 differ only in the entitlement they were reached with, and
-  //    both yield the same payload-free state, so one test covers them.
+  // 2. not enabled → off (Req 12.1)
   if (!input.enabled) return { state: "off" };
 
   // 5. a Sync_Cycle is in progress → syncing (Req 12.3)
@@ -1381,8 +1360,6 @@ const MAX_RATE_LIMIT_WAIT_SECONDS = 3_600;
  * - `unauthorized` — 401. The existing sign-out has **already been applied** by
  *   the time this is returned, so Sync_State reads `off` from the absent
  *   Session_Token (Req 2.8, 1.6).
- * - `upgrade_required` — 402. The entitlement snapshot in the body has **already
- *   been applied**, so Sync_State reads `blocked_no_pro` (Req 2.7).
  * - `rate_limited` — 429, or a request refused locally because an earlier 429's
  *   wait has not elapsed. `waitMs` is what Requirement 19.8 bars requests for.
  * - `rejected` — 400, 409, or 413: the Sync_Service answered about the *payload*,
@@ -1393,7 +1370,6 @@ export type SyncFailure =
   | { kind: "offline"; message: string }
   | { kind: "service"; status: number | null; message: string }
   | { kind: "unauthorized" }
-  | { kind: "upgrade_required" }
   | { kind: "rate_limited"; waitMs: number }
   | { kind: "rejected"; status: number; error: string; body: Record<string, unknown> };
 
@@ -1429,31 +1405,6 @@ async function readJsonObject(res: Response): Promise<Record<string, unknown> | 
   }
   if (typeof data !== "object" || data === null || Array.isArray(data)) return null;
   return data as Record<string, unknown>;
-}
-
-/**
- * Funnel a response's entitlement snapshot into `syncSettings` (Req 1.7, 2.7).
- *
- * Applied for **every** response that carries one — push, pull, the cloud delete,
- * a 402 rejection — because ordinary sync traffic is what keeps the client's Pro
- * gate fresh. `applyEntitlement` persists the value and notifies synchronously,
- * so the "within 1 second" bound of Requirements 1.7 and 2.7 holds by
- * construction, and this module's own subscribers see the new gate through the
- * `syncSettings` bridge below.
- *
- * A snapshot that is not `{ pro: boolean, proUntil: number | null }` is ignored
- * rather than partially applied: a malformed entitlement is no evidence about the
- * user's entitlement, and Requirement 1.9 already fails closed without one.
- */
-function applyResponseEntitlement(body: Record<string, unknown> | null): void {
-  const raw = body?.entitlement;
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return;
-  const { pro, proUntil } = raw as Record<string, unknown>;
-  if (typeof pro !== "boolean") return;
-  if (proUntil !== null && proUntil !== undefined) {
-    if (typeof proUntil !== "number" || !Number.isFinite(proUntil)) return;
-  }
-  applyEntitlement({ pro, proUntil: typeof proUntil === "number" ? proUntil : null });
 }
 
 /** A reported wait in whole seconds, or `null` when there is nothing usable. */
@@ -1504,8 +1455,7 @@ function transportFailure(err: unknown): SyncFailure {
  *   the budget elapses, so a hung connection cannot hold a Sync_Cycle open
  *   (Req 6.8, 7.5).
  * - **Entitlement stays fresh.** Every response body's `entitlement` is applied
- *   before the status is interpreted (Req 1.7), so a 402 refreshes the snapshot
- *   on its way to reporting `upgrade_required` (Req 2.7).
+ *   before the status is interpreted (Req 1.7).
  * - **A 401 signs out.** `clearToken()` — the same sign-out the other
  *   authenticated endpoints apply — runs before the failure is returned, so
  *   Sync_State reads `off` from the absent token (Req 2.8, 1.6).
@@ -1560,8 +1510,6 @@ export async function syncRequest<T>(
   }
 
   const parsed = await readJsonObject(res);
-  // Before the status is interpreted, so a 402's own snapshot lands (Req 1.7, 2.7).
-  applyResponseEntitlement(parsed);
 
   if (res.status === 401) {
     // The existing sign-out used by the other authenticated endpoints (Req 2.8).
@@ -1569,8 +1517,6 @@ export async function syncRequest<T>(
     notifySyncState();
     return { ok: false, failure: { kind: "unauthorized" } };
   }
-
-  if (res.status === 402) return { ok: false, failure: { kind: "upgrade_required" } };
 
   if (res.status === 429) {
     const waitMs = rateLimitWaitFrom(parsed, res.headers);
@@ -1628,10 +1574,6 @@ export async function syncRequest<T>(
 /**
  * In-memory half of the `SyncStateInput`, plus the two waits `retryGate` reads.
  *
- * There is no purge-countdown field. Decision D1 is resolved as **retain
- * indefinitely**: a lapsed user's stored Event_Records are never purged, so
- * `SyncStateInput.daysUntilPurge` is permanently `null` and nothing needs to
- * track a deadline that does not exist.
  */
 interface ShellRuntime {
   cycleInProgress: boolean;
@@ -1726,7 +1668,6 @@ function normalizeTimestamp(value: unknown): number | null {
 function syncStateInput(): SyncStateInput {
   return {
     hasSession: getSyncSettingsSnapshot().hasSession,
-    pro: isProEntitled(),
     enabled: isDestinationEnabled("cloud"),
     cycleInProgress: runtime.cycleInProgress,
     lastCycleFailed: runtime.lastCycleFailed,
@@ -1736,9 +1677,6 @@ function syncStateInput(): SyncStateInput {
     lastSyncAt: persisted.lastSyncAt,
     skipped: persisted.lastSkipped,
     restoreMerged: runtime.restoreMerged,
-    // Decision D1: cloud records are retained indefinitely after a Pro_Lapse, so
-    // there is no purge to count down to and `blocked_no_pro` carries no deadline.
-    daysUntilPurge: null,
   };
 }
 
@@ -1899,7 +1837,7 @@ export function markCycleFailed(at: number, kind: "offline" | "service"): void {
  *
  * Deliberately not a failure: the last-cycle-failed flag is untouched, so the
  * derived state comes from the condition that caused the abandonment
- * (`blocked_no_pro` or `off`) rather than reading as broken. The Outbox, the
+ * (`off`) rather than reading as broken. The Outbox, the
  * Sync_Cursor, and the Local_Store are the caller's to leave alone, and this
  * touches none of them.
  */
@@ -1930,9 +1868,6 @@ export function markCycleAbandoned(): void {
 //   - **401** — `syncRequest` has already applied the existing sign-out, so
 //     Sync_State reads `off` from the absent Session_Token. The cycle is
 //     abandoned rather than failed, and the Outbox is untouched (Req 2.8).
-//   - **402** — `syncRequest` has already applied the entitlement snapshot from
-//     the body, so Sync_State reads `blocked_no_pro`. Again abandoned, again with
-//     every id retained (Req 2.7).
 //   - an **empty Outbox** — zero push requests, the phase is complete, and the
 //     pull phase runs (Req 6.12).
 //
@@ -2127,9 +2062,9 @@ async function applyPushResponse(
  *
  * `failure === null` is the completing case and touches no cycle state — the
  * cycle is still running, and the pull phase is what ends it. A 401 or a 402
- * *abandons* the cycle (Req 2.7, 2.8): the sign-out and the entitlement refresh
- * have already been applied by the transport, so `markCycleAbandoned` leaves
- * derivation to report `off` or `blocked_no_pro` rather than `error`. Everything
+ * *abandons* the cycle (Req 2.8): the sign-out has
+ * already been applied by the transport, so `markCycleAbandoned` leaves
+ * derivation to report `off` rather than `error`. Everything
  * else is a failed push request, which sets `error` (Req 6.8, 19.8, 19.11).
  *
  * `abandoned` is the third ending: the destination was disabled, the session
@@ -2152,7 +2087,7 @@ async function endPush(
     status = "abandoned";
     markCycleAbandoned();
   } else if (failure !== null) {
-    if (failure.kind === "unauthorized" || failure.kind === "upgrade_required") {
+    if (failure.kind === "unauthorized") {
       status = "abandoned";
       markCycleAbandoned();
     } else {
@@ -2435,7 +2370,7 @@ async function endPull(
     status = "abandoned";
     markCycleAbandoned();
   } else if (failure !== null) {
-    if (failure.kind === "unauthorized" || failure.kind === "upgrade_required") {
+    if (failure.kind === "unauthorized") {
       status = "abandoned";
       markCycleAbandoned();
     } else {
@@ -2628,7 +2563,7 @@ let cycleScheduler: (() => Promise<void>) | null = null;
  * is what lets the mid-cycle guard react within the 1 second of Requirement 13.1.
  */
 function destinationUsable(): boolean {
-  return isDestinationEnabled("cloud") && isProEntitled() && getSyncSettingsSnapshot().hasSession;
+  return isDestinationEnabled("cloud") && getSyncSettingsSnapshot().hasSession;
 }
 
 /**
@@ -2863,9 +2798,9 @@ function armAutoRetry(waitMs: number): void {
  *
  * The gate, in order:
  *
- * 1. **Not usable** — the destination is disabled, Pro is false, or no
+ * 1. **Not usable** — the destination is disabled or no
  *    Session_Token is held. A no-op: zero queued cycles and zero requests
- *    (Req 11.6). Sync_State already reads `off` or `blocked_no_pro` from those
+ *    (Req 11.6). Sync_State already reads `off` from those
  *    same conditions, so nothing is recorded.
  * 2. **Offline** — zero requests, the trigger is discarded without queuing, the
  *    Outbox is untouched, and Sync_State is set to `error` with the offline

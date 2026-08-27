@@ -53,12 +53,14 @@ import {
 } from "./db";
 import { clearToken, setToken } from "./session";
 import {
-  applyEntitlement,
   clearPersistedSyncSettingsForTests,
   resetSyncSettingsForTests,
   restore as restoreSyncSettings,
   setDestinationEnabled,
 } from "./syncSettings";
+
+// Stub for removed entitlement function — tests will be cleaned up in task 1.8/1.9
+function applyEntitlement(_e: { pro: boolean; proUntil: number | null }): void {}
 import {
   arbStoredRecord,
   arbStoredRecords,

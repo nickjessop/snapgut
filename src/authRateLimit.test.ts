@@ -3,52 +3,54 @@
 // The auth throttle, end to end: a client-supplied forwarding header must not
 // mint a fresh rate-limit bucket.
 //
-// Validates: Requirements 14.4, 14.7
+// Validates: Requirements 6.9, 13.3
 //
-// `src/clientIp.test.ts` covers the derivation in isolation. This file drives the
-// real `/api/auth/request` — the middleware chain in `server/index.js`, in its
-// real order, against the in-memory store — because the criterion is about the
-// limiter's behaviour, not the helper's return value.
-//
-// `server/index.js` calls `serve()` at import time and exports nothing, so the
-// listener boundary is stubbed and the handler it hands to `serve` is captured.
-// That is the app itself: no route, guard, or limiter is replaced.
+// Uses buildApp from server/app.js with a minimal deps object.
 
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+// @ts-ignore -- untyped ESM JavaScript
+import { buildApp } from "../server/app.js";
+// @ts-ignore -- untyped ESM JavaScript
+import { loadConfig } from "../server/config.js";
+// @ts-ignore -- untyped ESM JavaScript
+import { getStore } from "../server/store.js";
+// @ts-ignore -- untyped ESM JavaScript
+import { getEventStore } from "../server/eventStore.js";
 
 type Fetch = (req: Request) => Response | Promise<Response>;
 
-const listener = vi.hoisted(() => ({ fetch: null as Fetch | null }));
-
-vi.mock("@hono/node-server", () => ({
-  serve: (options: { fetch: Fetch }) => {
-    listener.fetch = options.fetch;
-    return { close() {} };
-  },
-}));
-
-vi.mock("@hono/node-server/serve-static", () => ({
-  // There is no built `dist/` in a test run, and the auth routes are registered
-  // ahead of the static handlers regardless — so these pass straight through.
-  serveStatic: () => (_c: unknown, next: () => Promise<void>) => next(),
-}));
-
-/** The limit the auth middleware applies, per Client_IP, per 60 s (Req 14.5). */
+/** The limit the auth middleware applies, per Client_IP, per 60 s (Req 6.9). */
 const AUTH_LIMIT = 20;
 
+/** The password configured in the test environment. */
+const TEST_PASSWORD = "test-auth-password-for-vitest";
+
+const SECRET = "test-secret-for-vitest-only-do-not-use-in-production-pad-32chars";
+
 let appFetch: Fetch;
-const originalProxy = process.env.TRUSTED_PROXY;
+
+async function createApp(overrides: Record<string, string> = {}) {
+  const { config } = loadConfig({
+    DATASTORE_BACKEND: "memory",
+    AI_PROVIDER: "mock",
+    AUTH_PASSWORD: TEST_PASSWORD,
+    ...overrides,
+  });
+  const store = await getStore();
+  const eventStore = await getEventStore();
+  const ready = { value: true };
+  const ai = { name: "mock", model: "mock", generate: async () => '{}' };
+  const app = buildApp({ config: config!, store, eventStore, secret: SECRET, ai, ready });
+  return app;
+}
 
 beforeAll(async () => {
-  // @ts-ignore -- untyped ESM JavaScript (server/ is not TypeScript)
-  await import("../server/index.js");
-  if (!listener.fetch) throw new Error("server/index.js did not hand a fetch handler to serve()");
-  appFetch = listener.fetch;
+  const app = await createApp({ TRUSTED_PROXY: "cloudflare" });
+  appFetch = app.fetch.bind(app);
 });
 
 beforeEach(() => {
-  // Without RESEND_API_KEY the dev path logs the verification code, which is
-  // noise here (and exactly the kind of value that must stay out of assertions).
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -57,23 +59,14 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-afterAll(() => {
-  if (originalProxy === undefined) delete process.env.TRUSTED_PROXY;
-  else process.env.TRUSTED_PROXY = originalProxy;
-});
-
-let seq = 0;
-/** A fresh address per request, so the per-email throttle never masks the per-IP one. */
-const uniqueEmail = () => `spoof-${++seq}@example.com`;
-
-/** One `POST /api/auth/request` through the real chain. */
-function authRequest(headers: Record<string, string>): Promise<Response> {
+/** One `POST /api/auth/signin` through the real chain. */
+function signinRequest(fetch: Fetch, headers: Record<string, string>): Promise<Response> {
   return Promise.resolve(
-    appFetch(
-      new Request("http://origin.test/api/auth/request", {
+    fetch(
+      new Request("http://origin.test/api/auth/signin", {
         method: "POST",
         headers: { "content-type": "application/json", ...headers },
-        body: JSON.stringify({ email: uniqueEmail() }),
+        body: JSON.stringify({ password: TEST_PASSWORD }),
       })
     )
   );
@@ -81,15 +74,11 @@ function authRequest(headers: Record<string, string>): Promise<Response> {
 
 describe("auth rate limit behind a trusted proxy", () => {
   it("reaches the per-IP limit despite a rotating X-Forwarded-For", async () => {
-    process.env.TRUSTED_PROXY = "cloudflare";
     const edgeIp = "203.0.113.42";
 
-    // Every request carries a different leftmost X-Forwarded-For entry — the
-    // position a client can occupy — and the same edge-set CF-Connecting-IP.
-    // All of them must land in one bucket (Req 14.4).
     const statuses: number[] = [];
     for (let i = 0; i < AUTH_LIMIT; i++) {
-      const res = await authRequest({
+      const res = await signinRequest(appFetch, {
         "cf-connecting-ip": edgeIp,
         "x-forwarded-for": `10.0.0.${i}, ${edgeIp}`,
       });
@@ -97,7 +86,7 @@ describe("auth rate limit behind a trusted proxy", () => {
     }
     expect(statuses).toEqual(Array(AUTH_LIMIT).fill(200));
 
-    const blocked = await authRequest({
+    const blocked = await signinRequest(appFetch, {
       "cf-connecting-ip": edgeIp,
       "x-forwarded-for": `10.0.0.99, ${edgeIp}`,
     });
@@ -106,15 +95,14 @@ describe("auth rate limit behind a trusted proxy", () => {
   });
 
   it("does not fail requests when no trusted proxy is configured", async () => {
-    delete process.env.TRUSTED_PROXY;
+    // Create an app with no trusted proxy
+    const noProxyApp = await createApp({ TRUSTED_PROXY: "none" });
+    const noProxyFetch = noProxyApp.fetch.bind(noProxyApp);
 
-    // No forwarding header at all — the documented `"local"` fallback (Req 14.3).
-    const direct = await authRequest({});
+    const direct = await signinRequest(noProxyFetch, {});
     expect(direct.status).toBe(200);
 
-    // A forwarding header present but untrusted: the rightmost, proxy-assigned
-    // entry keys the bucket and the request still succeeds.
-    const forwarded = await authRequest({ "x-forwarded-for": "1.2.3.4, 192.0.2.9" });
+    const forwarded = await signinRequest(noProxyFetch, { "x-forwarded-for": "1.2.3.4, 192.0.2.9" });
     expect(forwarded.status).toBe(200);
   });
 });

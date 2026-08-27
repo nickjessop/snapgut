@@ -1,26 +1,4 @@
 <!doctype html>
-<!--
-  Task 5.4 — the terms page. Plain language, and held to the same standard as the
-  rest of the site: no claim the code does not support (Requirement 9.1), nothing
-  diagnostic or causal (Requirement 9.6), and no promise about data that the
-  privacy page contradicts (Requirement 9.7).
-
-  What each section is checked against:
-    - free vs Pro, and the shared free-AI trial — `docs/auth-and-credits.md`,
-      `FREE_AI_LIMIT` and `entitlement()` in `server/store.js`
-    - sign-in by six-digit code, ten-minute expiry, five attempts —
-      /api/auth/request and /api/auth/verify in `server/index.js`
-    - billing and cancellation — /api/billing/checkout and /api/billing/portal;
-      `isPro` treats a null `proUntil` as lifetime
-    - rate limits and the request-size guard — `server/index.js` middleware
-    - deletion — POST /api/account/delete, and DELETE /api/sync/data for the
-      cloud copy alone
-
-  Deliberately absent: a jurisdiction, a legal entity name, and a postal
-  address, none of which exist in the repository to state truthfully. Prices are
-  not repeated here either — the pricing page renders them from the plan
-  catalogue the server bills against, and a second copy would drift.
--->
 <html lang="en">
   <head>
     <!--#include head-->
@@ -34,7 +12,7 @@
           <h1>Terms</h1>
           <p class="lede">
             The deal, in plain language: what SnapGut does, what it does not
-            claim, how paying works, and what we each agree to.
+            claim, your responsibilities as operator, and what we each agree to.
           </p>
 
           <h2>What SnapGut is</h2>
@@ -57,123 +35,79 @@
             than a verdict.
           </p>
 
-          <h2>Your account</h2>
+          <h2>Self-hosted operation</h2>
           <p>
-            You sign in with an email address. We send a six-digit code, valid for
-            ten minutes, and accept a handful of wrong guesses before you need a new
-            one. There is no password, which means access to your inbox is access to
-            your account — keep it secure.
+            You run SnapGut on your own hardware or cloud infrastructure. You are
+            the operator. You are responsible for keeping the software updated,
+            maintaining backups of the data directory, and controlling who can reach
+            the instance over the network.
           </p>
           <p>
-            One account per email address. Use an address you control, and do not
-            share your account with someone else.
-          </p>
-
-          <h2>Free and Pro</h2>
-          <p>
-            Logging is free, and stays free: manual logging, the on-device
-            statistics, the food ranking, CSV export, and JSON backup are never
-            behind a paywall. Pro buys AI, not access to your own history.
-          </p>
-          <p>
-            Pro unlocks unlimited AI meal recognition and AI insights, plus the
-            cross-device sync destinations. Free accounts get a small trial of AI
-            actions, shared across recognition and insights, so you can see what it
-            does before paying for it.
-          </p>
-          <p>
-            Current prices and plans are on the <a href="/pricing">pricing page</a>.
+            We provide the software as-is under its license. We do not operate your
+            instance, we have no access to your data, and we accept no liability for
+            data loss, downtime, or misconfiguration on your infrastructure.
           </p>
 
-          <h2>Paying, renewing, and cancelling</h2>
-          <ul>
-            <li>
-              Payments run through Stripe's own checkout. We never see your card
-              details.
-            </li>
-            <li>
-              A monthly or yearly plan renews until you cancel. A lifetime purchase
-              is a single payment with no renewal.
-            </li>
-            <li>
-              You can cancel from the billing screen in the app, which opens
-              Stripe's customer portal. Cancelling stops future renewals; Pro stays
-              active for the period you have already paid for.
-            </li>
-            <li>
-              If Pro lapses, nothing on your device is taken away. Every entry is
-              intact, and export and backup keep working. AI features and sync stop
-              until Pro is active again.
-            </li>
-            <li>
-              Prices can change. A change never applies to a period you have already
-              paid for.
-            </li>
-          </ul>
-
-          <h2>Your log is yours</h2>
+          <h2>Your data</h2>
           <p>
-            You own what you log. We claim no rights over your entries, your notes,
-            or your photos, and we do not use them to train anything. Your log lives
-            on your device, and only goes anywhere else if you switch on a sync
-            destination yourself. The
-            <a href="/privacy">privacy page</a> sets out exactly what is stored
-            where.
+            Everything you log stays on the machine you run SnapGut on. No
+            telemetry is collected, no data leaves your instance except where you
+            configure an external AI provider, and no third-party service is
+            contacted without your explicit configuration.
           </p>
           <p>
-            You can export everything at any time, free, and you can delete your
-            cloud copy or your whole account whenever you like — both are controls
-            in the app, not a request you have to send us.
+            You own what you log. The software claims no rights over your entries,
+            your notes, or your photos. You can export everything at any time and
+            delete your data whenever you choose — both are controls in the app.
           </p>
 
-          <h2>Fair use of the service</h2>
+          <h2>AI features</h2>
           <p>
-            Use the app as a person using an app. Please do not try to work around
-            the rate limits or the request-size limits, drive the AI endpoints
-            automatically, attempt to reach another user's data, or probe the
-            service for weaknesses. We may limit or close an account that does.
+            Meal recognition and insight text are generated by the AI provider you
+            configure. When you use these features, the data you submit (a photo
+            or a prompt) is sent to that provider under their terms. We do not
+            operate the AI service and have no control over how it processes your
+            data.
+          </p>
+          <p>
+            Models get things wrong. Check the ingredients listed before you rely
+            on them, especially if you avoid a food for medical reasons, and edit
+            them when they are off — your corrections are what make the pattern
+            analysis worth reading.
           </p>
 
-          <h2>What the AI produces</h2>
+          <h2>Fair use</h2>
           <p>
-            Meal recognition and insight text are generated by a model, and models
-            get things wrong. Check the ingredients it lists before you rely on
-            them, especially if you avoid a food for medical reasons, and edit them
-            when they are off — your corrections are what make the pattern analysis
-            worth reading.
+            Use the app as a person using an app. The rate limits exist to protect
+            your instance from accidental abuse, not to gatekeep. Do not remove them
+            unless you understand the consequences for the AI provider you are
+            calling.
           </p>
 
-          <h2>Availability</h2>
+          <h2>Availability and liability</h2>
           <p>
-            SnapGut is provided as it is, without a guarantee that it will be
+            SnapGut is provided as-is, without a guarantee that it will be
             available at any particular moment or that it will suit a particular
-            purpose. We may change, add, or remove features as the product
-            develops.
+            purpose. We may change, add, or remove features as the project
+            develops. As an operator you accept the risk that an upgrade may require
+            manual intervention.
           </p>
           <p>
             Logging works offline because it is stored on your device. AI
             recognition, AI insights, and sync need a network connection and depend
-            on services we do not run, so they can be unavailable even when the app
+            on services you configure, so they can be unavailable even when the app
             is not.
           </p>
           <p>
-            Keep your own copies of anything you would hate to lose. Browser storage
-            can be evicted when a device runs short of space, which is why export
-            and backup are free and always available.
-          </p>
-
-          <h2>Ending it</h2>
-          <p>
-            You can stop using SnapGut at any time. Delete your account in the app
-            to remove what we hold, and clear the site's data in your browser to
-            remove the local copy. We may close an account that abuses the service
-            or that we are required to close.
+            Keep your own backups of the data directory. Browser storage can be
+            evicted when a device runs short of space, which is why export and
+            backup are always available.
           </p>
 
           <h2>Changes to these terms</h2>
           <p>
-            When the product changes, this page changes with it. Continuing to use
-            the app after a change means the updated terms apply.
+            When the project changes, this page changes with it. Check the
+            repository for updates when you upgrade your instance.
           </p>
 
           <p class="btn-row"><a class="btn btn-primary" href="/login">Open the app</a></p>

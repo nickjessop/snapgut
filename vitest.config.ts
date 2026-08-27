@@ -26,5 +26,8 @@ export default defineConfig({
     environment: "jsdom",
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
     passWithNoTests: true,
+    env: {
+      DATASTORE_BACKEND: "memory",
+    },
   },
 });

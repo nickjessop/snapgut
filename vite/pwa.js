@@ -14,7 +14,6 @@
  */
 
 import { MARKETING_PAGES, NOT_FOUND_FILE, marketingPaths } from "../shared/site.js";
-import { GENERATED_FILES } from "./marketing.js";
 
 /** The App_Shell document inside the Build_Output. */
 export const APP_SHELL_DOCUMENT = "app/index.html";
@@ -51,17 +50,11 @@ export const marketingDocumentGlobs = () => [
  *     visit. The Origin_Server serves them as ordinary static files.
  *   - the Marketing_Site documents — so the worker never answers `/` from cache
  *     and a copy edit is visible on the next load (Requirements 5.3, 5.4).
- *   - `csp-hashes.json` and `size-report.json` — build metadata for the server
- *     and the budget test, never fetched by a client. The default
- *     `globPatterns` do not match `.json` today, so naming them keeps them out
- *     if those patterns ever widen.
  */
 export const precacheIgnores = () => [
   "**/foods/**",
   "**/img/**",
   ...marketingDocumentGlobs(),
-  GENERATED_FILES.cspHashes,
-  GENERATED_FILES.sizeReport,
 ];
 
 /** Escape a Route_Table path for literal use inside a regular expression. */

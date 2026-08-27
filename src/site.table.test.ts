@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   APP_PREFIX,
   APP_VIEWS,
-  CANONICAL_ORIGIN,
   DEFAULT_APP_PATH,
   LOGIN_PATH,
   MARKETING_PAGES,
@@ -16,7 +15,7 @@ import {
 
 describe("Route_Table", () => {
   it("names the v1 page set with a unique path, file, title, and description", () => {
-    expect(marketingPaths()).toEqual(["/", "/pricing", "/privacy", "/terms"]);
+    expect(marketingPaths()).toEqual(["/", "/privacy", "/terms"]);
 
     const unique = (xs: string[]) => new Set(xs).size === xs.length;
     expect(unique(MARKETING_PAGES.map((p) => p.file))).toBe(true);
@@ -61,9 +60,8 @@ describe("Route_Table", () => {
     expect(APP_VIEWS.find((v) => v.path === DEFAULT_APP_PATH)?.tab).toBe("camera");
   });
 
-  it("indexes exactly the marketing paths on an absolute canonical origin", () => {
+  it("indexes exactly the marketing paths", () => {
     expect(indexablePaths()).toEqual(marketingPaths());
-    expect(CANONICAL_ORIGIN).toMatch(/^https:\/\/[^/]+$/);
     expect(NOT_FOUND_FILE).toBe("404.html");
   });
 });

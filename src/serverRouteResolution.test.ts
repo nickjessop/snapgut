@@ -50,7 +50,7 @@ describe("server route resolution", () => {
   });
 
   it("301s a trailing slash on a Marketing_Page path or the Login_Route", () => {
-    for (const path of ["/pricing", "/privacy", "/terms", LOGIN_PATH]) {
+    for (const path of ["/privacy", "/terms", LOGIN_PATH]) {
       const outcome = resolve(`${path}/`);
       expect(outcome.kind).toBe(OUTCOME.REDIRECT);
       expect(outcome.status).toBe(301);

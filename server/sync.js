@@ -1,5 +1,5 @@
 // HTTP shell for Cloud sync (the Sync_Service). Owns transport concerns only:
-// protocol, payload size, rate limits, session verification, and entitlement.
+// protocol, payload size, rate limits, and session verification.
 // Everything that touches stored Event_Records lives in `server/eventStore.js`.
 //
 // The routes live here rather than in `server/index.js` because that module calls
@@ -8,10 +8,13 @@
 // fresh `new Hono()` and drive it with `app.fetch(new Request(...))` — no
 // listener, no port.
 
-import { getStore, isPro, entitlement, norm } from "./store.js";
+import { getStore, norm } from "./store.js";
 import { verifyToken } from "./auth.js";
 import { getEventStore, MAX_PULL_LIMIT, storableId } from "./eventStore.js";
 import { clientIp } from "./clientIp.js";
+
+// Module-scope secret used by verifyToken when no deps are injected (legacy tests).
+const SECRET = process.env.SESSION_SECRET || "test-secret-for-vitest-only-do-not-use-in-production";
 
 /** A sync request body may declare at most this many bytes (Req 19.1, 19.10). */
 export const MAX_SYNC_BODY_BYTES = 1_048_576;
@@ -41,10 +44,9 @@ export const DELETION_DEADLINE_MS = 30_000;
 
 /** Context keys the middleware chain hands to the route handlers. */
 const CTX_EMAIL = "syncEmail";
-const CTX_USER = "syncUser";
 const CTX_LOG = "syncLogMeta";
 
-/** The one sync path that is not behind the Pro gate — see `proExempt`. */
+/** The sync path for cloud data deletion. */
 const CLOUD_DELETE_PATH = "/api/sync/data";
 
 /**
@@ -84,11 +86,6 @@ function rateLimited(c) {
 /** The authenticated user identity — the only identity any handler may use. */
 export function syncEmail(c) {
   return c.get(CTX_EMAIL);
-}
-
-/** The user record the entitlement check already read, so handlers needn't re-read it. */
-export function syncUser(c) {
-  return c.get(CTX_USER);
 }
 
 // ---------------------------------------------------------------------------
@@ -554,11 +551,11 @@ const DEADLINE_EXCEEDED = Symbol("deadline_exceeded");
  * leaves the retry with less to do. Nothing here reads or logs Log_Event content,
  * not even from a caught error (Req 18.5).
  */
-export async function purgeEventData(email, deadlineMs = DELETION_DEADLINE_MS) {
+export async function purgeEventData(email, deadlineMs = DELETION_DEADLINE_MS, injectedEventStore = null) {
   let timer;
   try {
     const purge = (async () => {
-      const store = await getEventStore();
+      const store = injectedEventStore || await getEventStore();
       return store.deleteAll(email);
     })();
     const result = await Promise.race([
@@ -574,28 +571,6 @@ export async function purgeEventData(email, deadlineMs = DELETION_DEADLINE_MS) {
   } finally {
     clearTimeout(timer);
   }
-}
-
-/**
- * Whether this request is exempt from the step-6 Pro gate.
- *
- * DECISION — `DELETE /api/sync/data` sits behind authentication but *not* behind
- * entitlement. Requirement 17.4 gives the user the right to remove their cloud
- * copy while keeping the account, and the user most likely to exercise it is
- * exactly the one whose Pro has lapsed: their Event_Records are retained
- * indefinitely (Decision D1), so this request is the *only* way they will ever be
- * removed, and a 402 here would leave them unable to delete data they can no
- * longer sync.
- *
- * Nothing is weakened by the exemption. Step 4 still requires a valid
- * Session_Token, and the store is keyed by the identity that token yields, so the
- * only records reachable are the caller's own (Req 18.1). Every other sync path —
- * push and pull, the ones that would grant a non-Pro user the paid feature — stays
- * gated. Deleting is the one operation where refusing a non-Pro user protects
- * nothing and costs them their data.
- */
-function proExempt(c) {
-  return c.req.method === "DELETE" && c.req.path === CLOUD_DELETE_PATH;
 }
 
 // ---------------------------------------------------------------------------
@@ -621,13 +596,17 @@ function proExempt(c) {
  * Mount the sync endpoints and their middleware chain on a Hono app.
  *
  * The chain order below is part of the design, not an implementation detail:
- * Requirement 2.6 makes 401 take precedence over 402, and Requirement 2.10
- * requires both checks to complete before any stored Event_Record is read or
- * written. Registering the guards as middleware — and reading the body only
- * inside the handlers — makes both true by construction: no handler runs until
- * every guard has passed.
+ * Requirement 2.10 requires auth to complete before any stored Event_Record is
+ * read or written. Registering the guards as middleware — and reading the body
+ * only inside the handlers — makes that true by construction: no handler runs
+ * until every guard has passed.
  */
-export function registerSyncRoutes(app) {
+export function registerSyncRoutes(app, injectedDeps = null) {
+  // When deps are injected, use them directly; otherwise fall back to the module-scope
+  // singletons (getStore/getEventStore) for backward compatibility with existing tests.
+  const resolveStore = injectedDeps ? () => Promise.resolve(injectedDeps.store) : getStore;
+  const resolveEventStore = injectedDeps ? () => Promise.resolve(injectedDeps.eventStore) : getEventStore;
+  const resolveSecret = injectedDeps ? injectedDeps.secret : SECRET;
   // 0a. The error boundary for an unexpected throw (Req 18.5).
   //
   //     Registered as the app's error handler rather than as a `try` around
@@ -682,18 +661,7 @@ export function registerSyncRoutes(app) {
     emitSyncLog(c, { method, path, status: c.res.status });
   });
 
-  // 1. HTTPS only (Req 18.3). Cloud Run terminates TLS and reports the original
-  //    scheme, so a plaintext request is one that arrived with an explicit
-  //    `x-forwarded-proto` other than https. A request with no such header did
-  //    not come through the proxy (local dev, in-process tests) and is allowed.
-  app.use("/api/sync/*", async (c, next) => {
-    const proto = c.req.header("x-forwarded-proto");
-    if (proto && proto.split(",")[0].trim().toLowerCase() !== "https") {
-      noteReason(c, "https_required");
-      return c.json({ error: "https_required" }, 400);
-    }
-    return next();
-  });
+  // 1. (removed — HTTPS enforcement is now a global opt-in via REQUIRE_HTTPS in config)
 
   // 2. Declared body size (Req 19.1). The global `/api/*` guard in `index.js`
   //    only rejects above 8 MiB, so `/api/sync/*` needs its own tighter check.
@@ -711,7 +679,7 @@ export function registerSyncRoutes(app) {
   // 3. Per-IP rate limit (Req 19.5). Before auth, because it needs no identity
   //    and shields the HMAC verification itself from a flood.
   app.use("/api/sync/*", async (c, next) => {
-    const store = await getStore();
+    const store = await resolveStore();
     const ok = await store.rateLimit(
       `sync-ip:${clientIp(c)}`,
       IP_REQUESTS_PER_WINDOW,
@@ -721,12 +689,12 @@ export function registerSyncRoutes(app) {
     return next();
   });
 
-  // 4. Session verification (Req 2.1). Before entitlement (Req 2.6) and before
-  //    any event access (Req 2.10). The identity it yields is the *only* identity
+  // 4. Session verification (Req 2.1). Before any event access (Req 2.10).
+  //    The identity it yields is the *only* identity
   //    used downstream: a user or email carried by the body or query string is
   //    never read (Req 2.4, 2.5).
   app.use("/api/sync/*", async (c, next) => {
-    const email = verifyToken(bearer(c));
+    const email = verifyToken(bearer(c), resolveSecret);
     if (!email) {
       noteReason(c, "unauthorized");
       return c.json({ error: "unauthorized" }, 401);
@@ -737,7 +705,7 @@ export function registerSyncRoutes(app) {
 
   // 5. Per-user rate limit (Req 19.4, 19.6), keyed by the verified identity.
   app.use("/api/sync/*", async (c, next) => {
-    const store = await getStore();
+    const store = await resolveStore();
     const ok = await store.rateLimit(
       `sync-user:${syncEmail(c)}`,
       USER_REQUESTS_PER_WINDOW,
@@ -747,25 +715,7 @@ export function registerSyncRoutes(app) {
     return next();
   });
 
-  // 6. Pro entitlement (Req 2.2, 2.11). Evaluated from the server-side values
-  //    held for the authenticated identity against the server clock; any
-  //    entitlement the client supplied is ignored. Reading the *user* record is
-  //    fine here — no *event* record has been touched (Req 2.10, 2.3).
-  //
-  //    The user record is stashed either way, so an exempt handler can still
-  //    report the entitlement snapshot every sync response carries (Req 1.7).
-  app.use("/api/sync/*", async (c, next) => {
-    const store = await getStore();
-    const user = await store.getUser(syncEmail(c));
-    c.set(CTX_USER, user);
-    if (!isPro(user) && !proExempt(c)) {
-      noteReason(c, "upgrade_required");
-      return c.json({ error: "upgrade_required", entitlement: entitlement(user) }, 402);
-    }
-    return next();
-  });
-
-  // 7. Body read and validation happen inside the handlers, which by definition
+  // 6. Body read and validation happen inside the handlers, which by definition
   //    run only after every guard above has passed. `readJsonLimited` does the
   //    byte-counted read; record count, per-record size, photo fields, and the
   //    stored-record cap are checked before the store transaction so a rejected
@@ -775,16 +725,14 @@ export function registerSyncRoutes(app) {
    * Store up to 200 Event_Records for the authenticated user, all-or-nothing.
    *
    * Every response — stored or rejected — carries one outcome per `id` the
-   * request sent (Req 6.11), `highestSequence` (`null` when nothing was stored),
-   * and the server-side `entitlement` snapshot, so ordinary sync traffic keeps
-   * the client's Pro state fresh (Req 1.7).
+   * request sent (Req 6.11), `highestSequence` (`null` when nothing was stored).
    *
    * A rejection names ids and nothing else: no Log_Event content, no note text,
    * no Session_Token (Req 19.12).
    */
   app.post("/api/sync/push", async (c) => {
+    const now = Date.now();
     const email = syncEmail(c);
-    const snapshot = entitlement(syncUser(c));
 
     const body = await readJsonLimited(c);
     if (!body.ok) {
@@ -796,7 +744,7 @@ export function registerSyncRoutes(app) {
       }
       noteReason(c, "invalid_request");
       return c.json(
-        { error: "invalid_request", outcomes: [], highestSequence: null, entitlement: snapshot },
+        { error: "invalid_request", outcomes: [], highestSequence: null },
         400
       );
     }
@@ -805,7 +753,7 @@ export function registerSyncRoutes(app) {
     if (!Array.isArray(records)) {
       noteReason(c, "invalid_request");
       return c.json(
-        { error: "invalid_request", outcomes: [], highestSequence: null, entitlement: snapshot },
+        { error: "invalid_request", outcomes: [], highestSequence: null },
         400
       );
     }
@@ -822,13 +770,12 @@ export function registerSyncRoutes(app) {
           error: verdict.error,
           outcomes: verdict.outcomes,
           highestSequence: null,
-          entitlement: snapshot,
         },
         verdict.status
       );
     }
 
-    const store = await getEventStore();
+    const store = await resolveEventStore();
 
     // Req 19.7 — the stored-record cap, the last check before the transaction.
     //
@@ -839,7 +786,7 @@ export function registerSyncRoutes(app) {
     // would touch stored Event_Records on the way to refusing them. The cap is an
     // abuse ceiling roughly 45 years of logging away (Decision D3), so the
     // conservative side is the right side.
-    const storedCount = await store.countFor(email);
+    const storedCount = await store.countFor(email, now);
     if (storedCount + verdict.ids.length > MAX_STORED_RECORDS) {
       noteReason(c, "record_cap");
       return c.json(
@@ -851,7 +798,6 @@ export function registerSyncRoutes(app) {
           // once the cap is freed (Req 19.11).
           outcomes: verdict.ids.map((id) => rejectedOutcome(id, "record_cap")),
           highestSequence: null,
-          entitlement: snapshot,
         },
         409
       );
@@ -861,8 +807,8 @@ export function registerSyncRoutes(app) {
     // merges each record, assigns Server_Sequence values above every value
     // previously assigned for this user, and reports one outcome per id sent
     // (Req 6.3, 6.4, 6.5, 6.11).
-    const { outcomes, highestSequence } = await store.push(email, records);
-    return c.json({ outcomes, highestSequence, entitlement: snapshot }, 200);
+    const { outcomes, highestSequence } = await store.push(email, records, now);
+    return c.json({ outcomes, highestSequence }, 200);
   });
 
   /**
@@ -879,21 +825,18 @@ export function registerSyncRoutes(app) {
    * comparison to get wrong (Req 18.2).
    *
    * A page carries the Server_Sequence of its last record as the `cursor` to
-   * present next and `hasMore` for whether records remain beyond it (Req 7.2),
-   * plus the `entitlement` snapshot so ordinary sync traffic keeps the client's
-   * Pro state fresh (Req 1.7).
+   * present next and `hasMore` for whether records remain beyond it (Req 7.2).
    */
   app.get("/api/sync/pull", async (c) => {
-    const snapshot = entitlement(syncUser(c));
-
+    const now = Date.now();
     const cursor = c.req.query("cursor") ?? null;
     // An absent, empty, or non-numeric `limit` means the full page. The store
     // clamps whatever it is given into 1…500, so this need not (Req 7.2).
     const requested = Number(c.req.query("limit"));
     const limit = Number.isFinite(requested) ? requested : MAX_PULL_LIMIT;
 
-    const store = await getEventStore();
-    const page = await store.pull(syncEmail(c), cursor, limit);
+    const store = await resolveEventStore();
+    const page = await store.pull(syncEmail(c), cursor, limit, now);
 
     // A cursor from a superseded purge generation — or one that is not a cursor at
     // all. Answered with the reset signal rather than data, which is what makes
@@ -909,7 +852,7 @@ export function registerSyncRoutes(app) {
     if (page.cursorInvalid) {
       noteReason(c, "cursor_invalid");
       noteRecords(c, 0);
-      return c.json({ error: "cursor_invalid", cursor: null, entitlement: snapshot }, 200);
+      return c.json({ error: "cursor_invalid", cursor: null }, 200);
     }
 
     // How many records this page served. The page itself goes to the client and
@@ -917,7 +860,7 @@ export function registerSyncRoutes(app) {
     noteRecords(c, page.records.length);
 
     return c.json(
-      { records: page.records, cursor: page.cursor, hasMore: page.hasMore, entitlement: snapshot },
+      { records: page.records, cursor: page.cursor, hasMore: page.hasMore },
       200
     );
   });
@@ -926,13 +869,9 @@ export function registerSyncRoutes(app) {
    * Delete the cloud copy while keeping the account (Req 17.4).
    *
    * Removes every stored Event_Record and Tombstone for the authenticated user and
-   * bumps the purge generation. The user record and the Pro_Entitlement live in
-   * `store.js` and are not touched, so the account stays usable and a later
-   * re-enable starts from an empty cloud with a cursor the client knows is stale.
-   *
-   * Reachable without Pro — see `proExempt` for why. The response still carries
-   * the entitlement snapshot, so a lapsed client learns its state from this call
-   * like any other (Req 1.7).
+   * bumps the purge generation. The user record lives in `store.js` and is not
+   * touched, so the account stays usable and a later re-enable starts from an
+   * empty cloud with a cursor the client knows is stale.
    *
    * Local data is the client's business: on success it disables the destination,
    * resets the cursor, clears the Outbox, and keeps every Log_Event and Photo on
@@ -940,8 +879,8 @@ export function registerSyncRoutes(app) {
    * path only has to be honest about not having deleted anything.
    */
   app.delete(CLOUD_DELETE_PATH, async (c) => {
-    const snapshot = entitlement(syncUser(c));
-    const purge = await purgeEventData(syncEmail(c));
+    const eStore = await resolveEventStore();
+    const purge = await purgeEventData(syncEmail(c), undefined, eStore);
 
     if (!purge.ok) {
       // Deletion did not complete, so this must not read as success: the client
@@ -950,14 +889,14 @@ export function registerSyncRoutes(app) {
       // `failed` — and never a store error's message (Req 18.5).
       noteReason(c, `delete_incomplete_${purge.reason}`);
       noteRecords(c, 0);
-      return c.json({ error: "delete_incomplete", entitlement: snapshot }, 500);
+      return c.json({ error: "delete_incomplete" }, 500);
     }
 
     // The number of records removed, which is what an operator needs to see and
     // all they may see (Req 18.4).
     noteRecords(c, purge.deleted);
 
-    return c.json({ ok: true, deleted: purge.deleted, entitlement: snapshot }, 200);
+    return c.json({ ok: true, deleted: purge.deleted }, 200);
   });
 
   return app;

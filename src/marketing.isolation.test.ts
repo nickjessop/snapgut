@@ -60,13 +60,10 @@ import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 // @ts-ignore -- untyped ESM JavaScript (shared/ is not TypeScript)
 import {
-  CANONICAL_ORIGIN,
   GENERATED_FILES,
   MARKETING_PAGES,
   NOT_FOUND_FILE,
 } from "../shared/site.js";
-// @ts-ignore -- untyped ESM JavaScript (vite/ is not TypeScript)
-import { jsonLdHashes } from "../vite/marketing.js";
 // @ts-ignore -- untyped ESM JavaScript (vite/ is not TypeScript)
 import { APP_SHELL_DOCUMENT } from "../vite/pwa.js";
 
@@ -129,7 +126,7 @@ const filesUnder = (dir: string): string[] =>
  * truthful run rather than a missing-file error.
  */
 const buildIfStale = () => {
-  const emitted = [...DOCUMENTS, appShellFile, GENERATED_FILES.cspHashes as string].map((file) =>
+  const emitted = [...DOCUMENTS, appShellFile].map((file) =>
     path.join(distDir, file),
   );
   if (emitted.every(existsSync)) {
@@ -151,7 +148,6 @@ const buildIfStale = () => {
 
 const source = new Map<string, string>();
 const parsed = new Map<string, Document>();
-let cspHashes: Record<string, string[]> = {};
 
 const html = (file: string): string => {
   const found = source.get(file);
@@ -176,9 +172,6 @@ beforeAll(() => {
     source.set(file, text);
     parsed.set(file, parser.parseFromString(text, "text/html"));
   }
-  cspHashes = JSON.parse(
-    readFileSync(path.join(distDir, GENERATED_FILES.cspHashes as string), "utf8"),
-  ) as Record<string, string[]>;
 }, 120_000);
 
 // ---------------------------------------------------------------------------
@@ -205,16 +198,13 @@ const fetchedUrls = (file: string) =>
     ),
   );
 
-/** True where a URL points at this origin: a path, a fragment, or the Canonical_Host. */
+/** True where a URL points at this origin: a path or a fragment. */
 const sameOrigin = (value: string) =>
   value.startsWith("#") ||
-  (value.startsWith("/") && !value.startsWith("//")) ||
-  value.startsWith(`${CANONICAL_ORIGIN}/`) ||
-  value === CANONICAL_ORIGIN;
+  (value.startsWith("/") && !value.startsWith("//"));
 
 /** Same-origin absolute paths only — what can be resolved to a file in `dist/`. */
-const localPath = (value: string) =>
-  value.startsWith(`${CANONICAL_ORIGIN}/`) ? value.slice(CANONICAL_ORIGIN.length) : value;
+const localPath = (value: string) => value;
 
 const stylesheetsOf = (file: string) =>
   [...doc(file).querySelectorAll('link[rel~="stylesheet"]')]
@@ -324,28 +314,6 @@ describe("Marketing_Pages carry no inline script beyond hashed JSON-LD (R11.3)",
       .filter(({ value }) => value.trim().toLowerCase().startsWith("javascript:"))
       .map(({ where }) => where);
     expect(offenders).toEqual([]);
-  });
-
-  it.each(pages.map((page) => [page.path, page.file] as const))(
-    "%s has every JSON-LD block covered by an emitted CSP hash (R11.4)",
-    (pagePath, file) => {
-      // Recomputed with the emitter's own function: an inline block the server
-      // will not have a hash for is a block the CSP blocks.
-      const emitted = cspHashes[pagePath];
-      expect(emitted, `${pagePath} is absent from ${GENERATED_FILES.cspHashes}`).toBeDefined();
-      expect(jsonLdHashes(html(file))).toEqual(emitted);
-    },
-  );
-
-  it("hashes exactly the pages that have a JSON-LD block, and no more", () => {
-    expect(Object.keys(cspHashes).sort()).toEqual(pages.map((page) => page.path).sort());
-    const withBlocks = pages.filter(
-      (page) => doc(page.file).querySelector('script[type="application/ld+json"]') !== null,
-    );
-    for (const page of pages) {
-      const expected = withBlocks.includes(page);
-      expect(cspHashes[page.path].length > 0, `${page.path}`).toBe(expected);
-    }
   });
 });
 

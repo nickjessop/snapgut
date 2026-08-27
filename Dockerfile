@@ -1,5 +1,5 @@
 # --- build stage: build the PWA ---
-FROM node:20-slim AS build
+FROM node:24-slim AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -7,14 +7,22 @@ COPY . .
 RUN npm run build
 
 # --- run stage: serve dist + api ---
-FROM node:20-slim
+FROM node:24-slim
 WORKDIR /app
 ENV NODE_ENV=production
+
+# Create a non-root user
+RUN addgroup --system snapgut && adduser --system --ingroup snapgut snapgut
+
+# Create and own the data directory
+RUN mkdir -p /data && chown snapgut:snapgut /data
+
 COPY package*.json ./
 RUN npm ci --omit=dev
 COPY server ./server
-# The server imports shared/ at runtime (the Plan_Catalog, the Route_Table).
 COPY shared ./shared
 COPY --from=build /app/dist ./dist
+
+USER snapgut
 EXPOSE 8080
-CMD ["node", "server/index.js"]
+CMD ["node", "server/main.js"]

@@ -25,7 +25,6 @@ export interface AppView {
   readonly flow: AddressableFlow | null;
 }
 
-export declare const CANONICAL_ORIGIN: string;
 export declare const MARKETING_PAGES: readonly MarketingPage[];
 export declare const NOT_FOUND_FILE: string;
 export declare const LOGIN_PATH: string;
@@ -38,8 +37,6 @@ export declare const DEFAULT_APP_PATH: string;
 export declare const GENERATED_FILES: {
   readonly robots: string;
   readonly sitemap: string;
-  readonly cspHashes: string;
-  readonly sizeReport: string;
 };
 
 export declare function marketingPaths(): string[];

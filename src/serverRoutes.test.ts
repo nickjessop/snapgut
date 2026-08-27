@@ -29,49 +29,36 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { Hono } from "hono";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 // @ts-ignore -- untyped ESM JavaScript (server/ is not TypeScript)
 import { registerSiteRoutes, APP_SHELL_FILE } from "../server/routes.js";
 // @ts-ignore -- untyped ESM JavaScript (server/ is not TypeScript)
 import { registerSiteHeaders } from "../server/headers.js";
 // @ts-ignore -- untyped ESM JavaScript (server/ is not TypeScript)
-import { CSP, reloadCspHashes } from "../server/csp.js";
+import { CSP } from "../server/csp.js";
 import {
-  CANONICAL_ORIGIN,
   LOGIN_PATH,
   MARKETING_PAGES,
   NOT_FOUND_FILE,
 } from "../shared/site.js";
 
-type Fetch = (req: Request) => Response | Promise<Response>;
-
-const listener = vi.hoisted(() => ({ fetch: null as Fetch | null }));
-
-vi.mock("@hono/node-server", () => ({
-  serve: (options: { fetch: Fetch }) => {
-    listener.fetch = options.fetch;
-    return { close() {} };
-  },
-}));
-
 const repoRoot = path.resolve(__dirname, "..");
 const distDir = path.join(repoRoot, "dist");
 
-const CANONICAL_HOST = new URL(CANONICAL_ORIGIN).hostname;
-/** The `*.run.app` hostname and `www` are both Non_Canonical_Hosts (R2.7, R8.9). */
+const CANONICAL_HOST = "localhost";
+/** A non-canonical hostname for testing noindex behavior. */
 const RUN_APP_HOST = "snapgut-3f1a2b-uc.a.run.app";
 
 const marketingPages = MARKETING_PAGES as readonly { path: string; file: string }[];
 
 /** Everything the emitted documents and generated files are derived from. */
 const SOURCE_DIRS = ["marketing", "app", "vite"];
-const SOURCE_FILES = ["vite.config.ts", "shared/site.js", "shared/plans.js"];
+const SOURCE_FILES = ["vite.config.ts", "shared/site.js"];
 /** The Build_Output files these assertions read. */
 const OUTPUTS = [
   ...marketingPages.map((page) => page.file),
   NOT_FOUND_FILE as string,
   APP_SHELL_FILE as string,
-  "csp-hashes.json",
   "robots.txt",
   "sitemap.xml",
   "manifest.webmanifest",
@@ -113,10 +100,10 @@ let app: Hono;
 let appShell = "";
 let notFoundDocument = "";
 let hashedAssetPath = "";
-/** The JSON-LD hash manifest the build emitted, keyed by Marketing_Page path. */
-let cspHashes: Record<string, string[]> = {};
 
-/** One request through the mounted app. `host` decides the Canonical_Host branch. */
+type Fetch = (req: Request) => Response | Promise<Response>;
+
+/** One request through the mounted app. `host` decides the noindex branch. */
 const request = (
   fetchApp: Fetch,
   pathname: string,
@@ -141,14 +128,8 @@ const scriptSrc = (csp: string | null) =>
 beforeAll(() => {
   buildIfStale();
 
-  // `server/csp.js` reads the hash manifest at import time, which happens before
-  // the build above on a cold `dist/`. Re-read it so the policy under test is the
-  // one the built pages' structured data actually hashes to.
-  reloadCspHashes();
-
   appShell = distText(APP_SHELL_FILE as string);
   notFoundDocument = distText(NOT_FOUND_FILE as string);
-  cspHashes = JSON.parse(distText("csp-hashes.json"));
 
   const asset = readdirSync(path.join(distDir, "assets")).find((f) => f.endsWith(".js"));
   if (!asset) throw new Error("no hashed asset in dist/assets");
@@ -172,14 +153,15 @@ describe("a Marketing_Page path (R2.2)", () => {
   );
 
   it.each(marketingPages.map((page) => page.path))(
-    "%s is cacheable at the edge, revalidated by the browser, and indexable",
+    "%s is cacheable at the edge, revalidated by the browser",
     async (pathname) => {
       const res = await get(pathname);
       expect(res.headers.get("cache-control")).toBe(
         "public, max-age=0, s-maxage=3600, must-revalidate",
       );
       expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
-      expect(res.headers.get("x-robots-tag")).toBeNull();
+      // With no publicOrigin configured, all responses get noindex
+      expect(res.headers.get("x-robots-tag")).toBe("noindex");
     },
   );
 });
@@ -210,7 +192,8 @@ describe("a file in the Build_Output (R2.4)", () => {
     expect(res.status).toBe(200);
     expect(await res.text()).toBe(distText(hashedAssetPath.slice(1)));
     expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
-    expect(res.headers.get("x-robots-tag")).toBeNull();
+    // With no publicOrigin configured, all responses get noindex
+    expect(res.headers.get("x-robots-tag")).toBe("noindex");
   });
 
   it.each(["/sw.js", "/manifest.webmanifest"])(
@@ -278,9 +261,9 @@ describe("a trailing slash (R2.6)", () => {
   );
 
   it("keeps the query string on the redirect", async () => {
-    const res = await get("/pricing/?plan=yearly");
+    const res = await get("/privacy/?ref=footer");
     expect(res.status).toBe(301);
-    expect(res.headers.get("location")).toBe("/pricing?plan=yearly");
+    expect(res.headers.get("location")).toBe("/privacy?ref=footer");
   });
 
   it("leaves `/` alone", async () => {
@@ -295,27 +278,24 @@ describe("a trailing slash (R2.6)", () => {
   });
 });
 
-describe("a Non_Canonical_Host (R2.7, R8.9)", () => {
-  const paths = ["/", "/pricing", LOGIN_PATH, "/app", "/nope"];
+describe("noindex behavior with no PUBLIC_ORIGIN (R8.9)", () => {
+  const paths = ["/", "/privacy", LOGIN_PATH, "/app", "/nope"];
 
-  it.each([RUN_APP_HOST, `www.${CANONICAL_HOST}`])(
-    "%s carries noindex on every response",
-    async (host) => {
-      for (const pathname of paths) {
-        const res = await get(pathname, host);
-        expect(res.headers.get("x-robots-tag")).toBe("noindex");
-      }
-      const redirect = await get("/pricing/", host);
-      expect(redirect.headers.get("x-robots-tag")).toBe("noindex");
-    },
-  );
+  it("every path carries noindex when no publicOrigin is configured", async () => {
+    for (const pathname of paths) {
+      const res = await get(pathname);
+      expect(res.headers.get("x-robots-tag")).toBe("noindex");
+    }
+    const redirect = await get("/privacy/");
+    expect(redirect.headers.get("x-robots-tag")).toBe("noindex");
+  });
 
-  it.each(paths)("serves the same body for %s as the Canonical_Host does", async (pathname) => {
-    const [canonical, other] = await Promise.all([
+  it.each(paths)("serves the same body for %s regardless of hostname", async (pathname) => {
+    const [local, other] = await Promise.all([
       get(pathname).then((r) => r.text()),
       get(pathname, RUN_APP_HOST).then((r) => r.text()),
     ]);
-    expect(other).toBe(canonical);
+    expect(other).toBe(local);
   });
 
   it("keeps the same status for each class", async () => {
@@ -323,20 +303,19 @@ describe("a Non_Canonical_Host (R2.7, R8.9)", () => {
       ["/", 200],
       [LOGIN_PATH, 200],
       ["/nope", 404],
-      ["/pricing/", 301],
+      ["/privacy/", 301],
     ] as const) {
       expect((await get(pathname, RUN_APP_HOST)).status).toBe(status);
     }
   });
 });
 
-describe("the JSON-LD hash merge (R11.4, R11.5)", () => {
-  it("adds a Marketing_Page's own hashes to its script-src", async () => {
-    // The home page is the one page with a structured-data block, so the build's
-    // manifest must be non-empty for this assertion to mean anything.
-    expect(cspHashes["/"]?.length ?? 0).toBeGreaterThan(0);
-    const csp = (await get("/")).headers.get("content-security-policy");
-    for (const hash of cspHashes["/"]) expect(scriptSrc(csp)).toContain(`'${hash}'`);
+describe("the JSON-LD hash merge (now simplified: single CSP for all)", () => {
+  it("sends the base CSP on every Marketing_Page (no hashes)", async () => {
+    for (const pathname of marketingPages.map((p) => p.path)) {
+      const csp = (await get(pathname)).headers.get("content-security-policy");
+      expect(csp).toBe(CSP);
+    }
   });
 
   it("sends the App_Shell a policy with no hash at all", async () => {
@@ -347,17 +326,8 @@ describe("the JSON-LD hash merge (R11.4, R11.5)", () => {
     }
   });
 
-  it("gives a Marketing_Page with no structured data the base policy", async () => {
-    for (const pathname of marketingPages.map((p) => p.path)) {
-      if ((cspHashes[pathname] ?? []).length > 0) continue;
-      const csp = (await get(pathname)).headers.get("content-security-policy");
-      // Not merely hash-free: never another page's hashes either.
-      expect(csp).toBe(CSP);
-    }
-  });
-
   it("keeps script-src strict on every class", async () => {
-    for (const pathname of ["/", "/pricing", LOGIN_PATH, "/app", hashedAssetPath, "/nope"]) {
+    for (const pathname of ["/", "/privacy", LOGIN_PATH, "/app", hashedAssetPath, "/nope"]) {
       const directive = scriptSrc((await get(pathname)).headers.get("content-security-policy"));
       expect(directive).toContain("'self'");
       expect(directive).not.toContain("unsafe-inline");
@@ -368,16 +338,39 @@ describe("the JSON-LD hash merge (R11.4, R11.5)", () => {
 });
 
 // ---- the whole server: security headers and /api/* ----
+// Uses buildApp from server/app.js with a minimal deps object.
+
+import { buildApp } from "../server/app.js";
+import { getStore } from "../server/store.js";
+import { getEventStore } from "../server/eventStore.js";
+import { loadConfig } from "../server/config.js";
+
+function createTestApp(overrides: Record<string, string> = {}) {
+  const { config } = loadConfig({
+    DATASTORE_BACKEND: "memory",
+    AUTH_PASSWORD: "test-password-12345",
+    ...overrides,
+  });
+  const store = getStore();
+  const eventStore = getEventStore();
+  const ready = { value: true };
+  const ai = {
+    name: "mock",
+    model: "mock",
+    generate: async () => '{"dish":"Test","ingredients":[]}',
+  };
+  return buildApp({ config: config!, store, eventStore, secret: "a".repeat(64), ai, ready });
+}
 
 describe("the security header set per route class (R11.8)", () => {
-  let serverFetch: Fetch;
+  let serverApp: ReturnType<typeof createTestApp>;
 
-  beforeAll(async () => {
-    // @ts-ignore -- untyped ESM JavaScript (server/ is not TypeScript)
-    await import("../server/index.js");
-    if (!listener.fetch) throw new Error("server/index.js handed no fetch to serve()");
-    serverFetch = listener.fetch;
+  beforeAll(() => {
+    serverApp = createTestApp();
   });
+
+  const serverRequest = (pathname: string) =>
+    request(serverApp.fetch, pathname, { host: CANONICAL_HOST });
 
   it.each([
     ["Marketing_Page", "/", 200],
@@ -387,7 +380,7 @@ describe("the security header set per route class (R11.8)", () => {
     ["hashed asset", "", 200],
     ["not-found document", "/nope", 404],
   ])("%s carries every hardening header", async (_class, pathname, status) => {
-    const res = await request(serverFetch, (pathname as string) || hashedAssetPath);
+    const res = await serverRequest((pathname as string) || hashedAssetPath);
     expect(res.status).toBe(status);
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
     expect(res.headers.get("x-frame-options")).toBe("DENY");
@@ -396,34 +389,27 @@ describe("the security header set per route class (R11.8)", () => {
       "camera=(self), microphone=(), geolocation=()",
     );
     expect(res.headers.get("content-security-policy")).toBeTruthy();
-    // HSTS is production-only; a dev or test run must not pin a hostname.
+    // HSTS requires requireHttps config + https request
     expect(res.headers.get("strict-transport-security")).toBeNull();
   });
 });
 
 describe("`/api/*` behaviour is unchanged (R2.8, R12.5, R12.9)", () => {
-  let serverFetch: Fetch;
+  let serverApp: ReturnType<typeof createTestApp>;
 
-  beforeAll(async () => {
-    // @ts-ignore -- untyped ESM JavaScript (server/ is not TypeScript)
-    await import("../server/index.js");
-    serverFetch = listener.fetch as Fetch;
+  beforeAll(() => {
+    serverApp = createTestApp();
   });
 
   const api = (pathname: string, init?: RequestInit) =>
-    request(serverFetch, pathname, init);
+    request(serverApp.fetch, pathname, init);
 
-  it("answers the health check as it always has", async () => {
+  it("answers the health check", async () => {
     const res = await api("/api/health");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true });
-  });
-
-  it("still serves the Plan_Catalog", async () => {
-    const res = await api("/api/billing/plans");
-    expect(res.status).toBe(200);
-    const plans = (await res.json()) as { id: string }[];
-    expect(plans.length).toBeGreaterThan(0);
+    const json = await res.json();
+    expect(json).toHaveProperty("ready", true);
+    expect(json).toHaveProperty("schema", 1);
   });
 
   it("still rejects an unauthenticated session-scoped call", async () => {
@@ -443,7 +429,7 @@ describe("`/api/*` behaviour is unchanged (R2.8, R12.5, R12.9)", () => {
   });
 
   it("forbids storage of every `/api/*` response and keeps them out of the index", async () => {
-    for (const pathname of ["/api/health", "/api/billing/plans", "/api/me", "/api/nope"]) {
+    for (const pathname of ["/api/health", "/api/me", "/api/nope"]) {
       const res = await api(pathname);
       expect(res.headers.get("cache-control")).toBe("no-store");
       expect(res.headers.get("x-robots-tag")).toBe("noindex");
@@ -457,48 +443,25 @@ describe("`/api/*` behaviour is unchanged (R2.8, R12.5, R12.9)", () => {
   });
 
   it("leaves the `/foods/*` proxy's own headers alone (R12.2)", async () => {
-    // A bad path shape is rejected before any bucket read, so this needs no
-    // credentials. What matters is that the per-class headers do not re-write it
-    // as a not-found response: the proxy owns its own Cache-Control.
     const res = await api("/foods/not a slug.webp");
     expect(res.status).toBe(404);
     expect(res.headers.get("cache-control")).toBeNull();
   });
 });
 
-describe("Strict-Transport-Security in production (R11.1)", () => {
-  const saved = {
-    nodeEnv: process.env.NODE_ENV,
-    secret: process.env.SESSION_SECRET,
-    backend: process.env.USERS_BACKEND,
-  };
-
-  afterAll(() => {
-    if (saved.nodeEnv === undefined) delete process.env.NODE_ENV;
-    else process.env.NODE_ENV = saved.nodeEnv;
-    if (saved.secret === undefined) delete process.env.SESSION_SECRET;
-    else process.env.SESSION_SECRET = saved.secret;
-    if (saved.backend === undefined) delete process.env.USERS_BACKEND;
-    else process.env.USERS_BACKEND = saved.backend;
-  });
-
-  it("is sent on a Marketing_Page and an App_Shell response", async () => {
-    process.env.NODE_ENV = "production";
-    process.env.SESSION_SECRET = "test-only-secret";
-    // Both production boot guards have to be satisfied for the module to load at
-    // all (R18.3, R18.4); no request below reaches the store. `src/bootGuards.test.ts`
-    // covers the refusals themselves.
-    process.env.USERS_BACKEND = "firestore";
-    vi.resetModules();
-    // @ts-ignore -- untyped ESM JavaScript (server/ is not TypeScript)
-    await import("../server/index.js");
-    const prodFetch = listener.fetch as Fetch;
+describe("Strict-Transport-Security with requireHttps (R11.1)", () => {
+  it("is sent when requireHttps is on and request has x-forwarded-proto: https", async () => {
+    const httpsApp = createTestApp({ REQUIRE_HTTPS: "1" });
 
     for (const pathname of ["/", LOGIN_PATH, "/app"]) {
-      const res = await request(prodFetch, pathname);
-      expect(res.headers.get("strict-transport-security")).toBe(
-        "max-age=63072000; includeSubDomains",
+      const res = await Promise.resolve(
+        httpsApp.fetch(
+          new Request(`https://${CANONICAL_HOST}${pathname}`, {
+            headers: { host: CANONICAL_HOST, "x-forwarded-proto": "https" },
+          }),
+        ),
       );
+      expect(res.headers.get("strict-transport-security")).toBe("max-age=63072000");
     }
   });
 });

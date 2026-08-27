@@ -1,25 +1,6 @@
 /**
  * Per-class response headers for the Origin_Server: `Cache-Control`,
- * `X-Robots-Tag`, `Content-Type`, and `Content-Security-Policy`
- * (Requirements 2.7, 8.6, 8.9, 11.1, 11.4, 11.5, 11.7, 12.1–12.5).
- *
- * The design's route resolution table is the authoritative matrix, and this
- * module is that table expressed once, as data. `classifyPath` names the class a
- * response belongs to and the three lookup functions read the row. Everything
- * here is pure and takes the request path, the request Host, and the status the
- * handlers produced, so the header behaviour can be asserted without a socket.
- *
- * It lives beside `routes.js` rather than inside `index.js` for the same reason
- * that module does: `index.js` calls `serve()` at import time. `index.js` calls
- * `applySiteHeaders` from its existing security middleware, which keeps the rest
- * of that header set (HSTS, nosniff, frame options, referrer, permissions)
- * untouched — this adds to it, and never removes or weakens a header it sets.
- *
- * `Content-Security-Policy` is set here rather than in `index.js` because the
- * policy is a per-class choice too: a Marketing_Page response carries the hash
- * sources of its own structured-data blocks and every other class, the App_Shell
- * included, gets the hash-free base policy (Requirements 11.4, 11.5). The policy
- * itself lives in `./csp.js`; this module only picks which one a class gets.
+ * `X-Robots-Tag`, `Content-Type`, and `Content-Security-Policy`.
  *
  * Classification is deliberately driven by the *actual* response status for the
  * redirect and not-found rows, so the headers describe what the server really
@@ -27,12 +8,14 @@
  */
 
 import {
-  CANONICAL_ORIGIN,
   LOGIN_PATH,
   isAppPath,
   isMarketingPath,
 } from "../shared/site.js";
-import { CSP, cspForMarketingPath } from "./csp.js";
+import { CSP, cspFor } from "./csp.js";
+
+// Re-export for consumers that import from headers.js
+export { cspFor };
 
 /** The header classes of the design's route resolution table. */
 export const CLASS = Object.freeze({
@@ -58,41 +41,27 @@ export const CLASS = Object.freeze({
   NOT_FOUND: "not-found",
 });
 
-/** The hostname of the Canonical_Host, derived rather than repeated. */
-const CANONICAL_HOST = new URL(CANONICAL_ORIGIN).hostname;
-
 const HTML_TYPE = "text/html; charset=utf-8";
 
 /** `Cache-Control` per class. `null` means "leave whatever the handler set". */
 const CACHE_CONTROL = Object.freeze({
   [CLASS.API]: "no-store",
-  // The /foods/* handler already sets the immutable directive; re-stating it
-  // here would be a second copy to keep in sync (Requirement 12.2).
   [CLASS.FOODS]: null,
   [CLASS.MARKETING]: "public, max-age=0, s-maxage=3600, must-revalidate",
   [CLASS.APP_SHELL]: "no-cache",
   [CLASS.HASHED_ASSET]: "public, max-age=31536000, immutable",
   [CLASS.REVALIDATE_ASSET]: "no-cache",
   [CLASS.CRAWLER_FILE]: "public, max-age=3600",
-  // Unhashed but stable files: bounded so a deploy is picked up within the hour
-  // without asking for a revalidation on every icon.
   [CLASS.OTHER_STATIC]: "public, max-age=3600",
-  // The table leaves the 301 uncached: the redirect target is a document whose
-  // own headers decide its freshness.
   [CLASS.REDIRECT]: null,
   [CLASS.NOT_FOUND]: "no-store",
 });
 
-/** The classes that carry `noindex` on the Canonical_Host too. */
+/** The classes that carry `noindex` even when PUBLIC_ORIGIN is set. */
 const NOINDEX_CLASSES = new Set([CLASS.API, CLASS.APP_SHELL, CLASS.NOT_FOUND]);
 
 /**
  * The class a response belongs to.
- *
- * Order matters. `/api/*` and `/foods/*` come first because they are answered by
- * handlers registered ahead of the Route_Table and keep their own behaviour. The
- * status is consulted next so a real redirect or a real 404 is headed as one,
- * whatever path produced it.
  *
  * @param {string} pathname the request path
  * @param {number} status the status the handlers produced
@@ -117,35 +86,26 @@ export function cacheControlFor(cls) {
 }
 
 /**
- * Whether the request Host is the Canonical_Host. A port is ignored so a local
- * `snapgut.com:8080` behaves like production; an absent or unparseable Host is
- * treated as non-canonical, which only ever adds `noindex`.
- */
-export function isCanonicalHost(host) {
-  if (typeof host !== "string" || host === "") return false;
-  const name = host.trim().toLowerCase().replace(/:\d+$/, "");
-  return name === CANONICAL_HOST;
-}
-
-/**
  * Whether the response carries `X-Robots-Tag: noindex`.
  *
- * True for the Login_Route, the App_Routes, `/api/*`, and the not-found response
- * on any host (Requirements 8.6, 12.x), and true for *every* response on a
- * Non_Canonical_Host, so the `*.run.app` hostname and `www.snapgut.com` cannot
- * be indexed as duplicate content (Requirements 2.7, 8.9).
+ * When `publicOrigin` is unset (null/undefined), noindex is returned for ALL
+ * classes — the operator has not declared a public URL, so nothing should be
+ * indexed.
+ *
+ * When `publicOrigin` is set, noindex is returned only for NOINDEX_CLASSES
+ * (API, app-shell, not-found).
+ *
+ * @param {string} cls a CLASS value
+ * @param {string|null|undefined} publicOrigin the configured PUBLIC_ORIGIN
  */
-export function shouldNoIndex(cls, host) {
-  return NOINDEX_CLASSES.has(cls) || !isCanonicalHost(host);
+export function shouldNoIndex(cls, publicOrigin) {
+  if (!publicOrigin) return true;
+  return NOINDEX_CLASSES.has(cls);
 }
 
 /**
  * The `Content-Type` this module asserts, or `null` where the response's own
- * type stands (a `/foods/*` image, an `/api/*` JSON body, a hashed asset).
- *
- * Stated explicitly for the document and crawler classes so Requirement 11.7
- * holds regardless of the static file server's mime table, and so the not-found
- * document does not answer with a differently-cased charset than the pages.
+ * type stands.
  */
 export function contentTypeFor(cls, pathname) {
   switch (cls) {
@@ -165,73 +125,46 @@ export function contentTypeFor(cls, pathname) {
 }
 
 /**
- * The `Content-Security-Policy` for a class.
+ * Every header this module owns, for one response.
  *
- * Only the Marketing class differs from the base policy, and it differs by
- * exactly the hash sources of that page's own `application/ld+json` blocks
- * (Requirement 11.4). Every other class — the App_Shell, `/api/*`, the not-found
- * document, a static file — gets the base policy, whose `script-src` carries no
- * hashes at all (Requirement 11.5).
- *
- * @param {string} cls a `CLASS` value
- * @param {string} pathname the request path
- * @param {Record<string, string[]>} [hashes] substitutes a manifest for testing
+ * @param {{ pathname: string, status?: number, publicOrigin?: string|null }} options
  */
-export function cspFor(cls, pathname, hashes) {
-  if (cls !== CLASS.MARKETING) return CSP;
-  return cspForMarketingPath(pathname, hashes);
-}
-
-/**
- * Every header this module owns, for one response. Returned as data so a test
- * can assert the whole row at once; a `null` value means "do not set".
- *
- * `hashes` substitutes a JSON-LD hash manifest; the default is the one read from
- * the Build_Output at boot.
- */
-export function headersFor({ pathname, host, status = 200, hashes }) {
+export function headersFor({ pathname, status = 200, publicOrigin = null }) {
   const cls = classifyPath(pathname, status);
   return {
     class: cls,
     cacheControl: cacheControlFor(cls),
-    robots: shouldNoIndex(cls, host) ? "noindex" : null,
+    robots: shouldNoIndex(cls, publicOrigin) ? "noindex" : null,
     contentType: contentTypeFor(cls, pathname),
-    csp: cspFor(cls, pathname, hashes),
+    csp: cspFor(cls, pathname),
   };
 }
 
 /**
  * Apply the per-class headers to a finalized response.
  *
- * Call after `await next()`, from the security-header middleware, so the class
- * is decided against the status the handlers actually produced. Only sets the
- * four headers above; every other header on the response is left as it is.
+ * Requires `c._publicOrigin` to be set on the context (injected by the security
+ * middleware from config). Falls back to null (noindex for all).
  */
 export function applySiteHeaders(c) {
   const { pathname } = new URL(c.req.url);
   const { cacheControl, robots, contentType, csp } = headersFor({
     pathname,
-    host: c.req.header("host"),
     status: c.res.status,
+    publicOrigin: c._publicOrigin ?? null,
   });
   if (cacheControl) c.header("Cache-Control", cacheControl);
   if (robots) c.header("X-Robots-Tag", robots);
   if (contentType) c.header("Content-Type", contentType);
-  // Unconditional: Requirement 11.1 asks for a policy on every response, and
-  // this is the only place that sets one.
   c.header("Content-Security-Policy", csp);
 }
 
 /**
  * Register the per-class headers as standalone middleware.
- *
- * `index.js` does not use this — it calls `applySiteHeaders` from the middleware
- * that already sets the security headers — but a test that mounts the site
- * routes on a fresh Hono app needs the same behaviour, and both paths run the
- * one function so they cannot drift.
  */
-export function registerSiteHeaders(app) {
+export function registerSiteHeaders(app, { publicOrigin = null } = {}) {
   app.use("*", async (c, next) => {
+    c._publicOrigin = publicOrigin;
     await next();
     applySiteHeaders(c);
   });

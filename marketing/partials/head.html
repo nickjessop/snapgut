@@ -1,6 +1,8 @@
-<!-- An indexable Marketing_Page's head: the shared metadata plus this page's
-     canonical URL, which og:url repeats verbatim (Req 8.2, 8.3). -->
+<!-- An indexable Marketing_Page's head: the shared metadata plus the canonical
+     URL (conditional on PUBLIC_ORIGIN being set at build time). -->
 <!--#include meta-->
 
+{{#canonical}}
 <link rel="canonical" href="{{canonical}}" />
 <meta property="og:url" content="{{canonical}}" />
+{{/canonical}}

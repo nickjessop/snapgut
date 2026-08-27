@@ -2,39 +2,28 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   DISCLOSURE_VERSION,
   ackDisclosure,
-  applyEntitlement,
   clearPersistedSyncSettingsForTests,
-  getEntitlementSnapshot,
   getSnapshot,
   hasAckedDisclosure,
   isDestinationEnabled,
-  isProEntitled,
   isRestored,
   resetSyncSettingsForTests,
   restore,
   setDestinationEnabled,
   subscribe,
-  type DestinationId,
 } from "./syncSettings";
 
 // Feature: cloud-sync — task 3.4
 //
-// Unit tests for the stateful half of `syncSettings`: persistence of the two
-// enabled states, the fail-closed reads, the restore lifecycle, the
-// persistence-failure path, the cold-start entitlement default, and the
-// disclosure acknowledgement.
+// Unit tests for the stateful half of `syncSettings`: persistence of the
+// enabled state, the fail-closed reads, the restore lifecycle, the
+// persistence-failure path, and the disclosure acknowledgement.
 //
 // The pure predicates (`isDestinationActive`, `shouldNudgeBackup`) are covered by
 // `syncSettings.nudge.test.ts` and are not re-tested here.
 
 const CLOUD_KEY = "snapgut-sync-cloud-enabled";
-const SHEETS_KEY = "snapgut-sync-sheets-enabled";
-const ENTITLEMENT_KEY = "snapgut-sync-entitlement";
 const DISCLOSURE_KEY = "snapgut-sync-disclosure-ack";
-
-const KEY_OF: Record<DestinationId, string> = { cloud: CLOUD_KEY, sheets: SHEETS_KEY };
-const OTHER: Record<DestinationId, DestinationId> = { cloud: "sheets", sheets: "cloud" };
-const DESTINATIONS: readonly DestinationId[] = ["cloud", "sheets"];
 
 /**
  * An app restart: in-memory state (including the memoized `restore()` promise and
@@ -107,56 +96,28 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// Independent toggling: all four combinations reachable and persisted
+// Independent toggling: enabled/disabled reachable and persisted
 // Requirements 3.11, 3.2
 // ---------------------------------------------------------------------------
 
-describe("independent toggling (Req 3.11, 3.2)", () => {
-  const COMBINATIONS: ReadonlyArray<[boolean, boolean]> = [
-    [false, false],
-    [true, false],
-    [false, true],
-    [true, true],
-  ];
-
-  it.each(COMBINATIONS)(
-    "reaches and persists cloud=%s sheets=%s across a restart",
-    async (cloud, sheets) => {
-      await restore();
-
-      expect(setDestinationEnabled("cloud", cloud)).toEqual({ persisted: true });
-      expect(setDestinationEnabled("sheets", sheets)).toEqual({ persisted: true });
-
-      expect(isDestinationEnabled("cloud")).toBe(cloud);
-      expect(isDestinationEnabled("sheets")).toBe(sheets);
-      expect(getSnapshot().enabled).toEqual({ cloud, sheets });
-
-      // Persisted as the two independent boolean values of Req 3.1, one key each.
-      expect(localStorage.getItem(CLOUD_KEY)).toBe(String(cloud));
-      expect(localStorage.getItem(SHEETS_KEY)).toBe(String(sheets));
-
-      await restart();
-      expect(getSnapshot().enabled).toEqual({ cloud, sheets });
-    },
-  );
-
-  it.each(DESTINATIONS)("toggling %s leaves the other destination untouched", async (id) => {
+describe("toggling (Req 3.11, 3.2)", () => {
+  it("reaches and persists cloud enabled/disabled across a restart", async () => {
     await restore();
-    const other = OTHER[id];
 
-    // Start from "only the other one enabled" so a leak in either direction shows.
-    setDestinationEnabled(other, true);
-    const otherPersistedBefore = localStorage.getItem(KEY_OF[other]);
+    expect(setDestinationEnabled("cloud", true)).toEqual({ persisted: true });
+    expect(isDestinationEnabled("cloud")).toBe(true);
+    expect(getSnapshot().enabled).toEqual({ cloud: true });
+    expect(localStorage.getItem(CLOUD_KEY)).toBe("true");
 
-    for (const value of [true, false, true]) {
-      setDestinationEnabled(id, value);
-      expect(isDestinationEnabled(id)).toBe(value);
-      expect(isDestinationEnabled(other)).toBe(true);
-      expect(localStorage.getItem(KEY_OF[other])).toBe(otherPersistedBefore);
-    }
+    await restart();
+    expect(getSnapshot().enabled).toEqual({ cloud: true });
+
+    setDestinationEnabled("cloud", false);
+    await restart();
+    expect(getSnapshot().enabled).toEqual({ cloud: false });
   });
 
-  it("writes only the toggled destination's own key, touching no cursor or outbox state", async () => {
+  it("writes only the cloud key, touching no cursor or outbox state", async () => {
     await restore();
     const setItem = vi.spyOn(Storage.prototype, "setItem");
     const removeItem = vi.spyOn(Storage.prototype, "removeItem");
@@ -169,16 +130,16 @@ describe("independent toggling (Req 3.11, 3.2)", () => {
 
   it("notifies subscribers of a changed enabled state (Req 3.8)", async () => {
     await restore();
-    const seen: Array<Record<DestinationId, boolean>> = [];
+    const seen: Array<Record<string, boolean>> = [];
     const unsubscribe = subscribe((s) => seen.push(s.enabled));
 
-    setDestinationEnabled("sheets", true);
+    setDestinationEnabled("cloud", true);
     // Same value again: nothing changed, so nothing to report.
-    setDestinationEnabled("sheets", true);
+    setDestinationEnabled("cloud", true);
     unsubscribe();
-    setDestinationEnabled("sheets", false);
+    setDestinationEnabled("cloud", false);
 
-    expect(seen).toEqual([{ cloud: false, sheets: true }]);
+    expect(seen).toEqual([{ cloud: true }]);
   });
 });
 
@@ -188,9 +149,9 @@ describe("independent toggling (Req 3.11, 3.2)", () => {
 // ---------------------------------------------------------------------------
 
 describe("disabled fallback for absent or corrupt persisted values (Req 3.6)", () => {
-  it("reports both destinations disabled when nothing is persisted", async () => {
+  it("reports cloud disabled when nothing is persisted", async () => {
     await restore();
-    expect(getSnapshot().enabled).toEqual({ cloud: false, sheets: false });
+    expect(getSnapshot().enabled).toEqual({ cloud: false });
   });
 
   const CORRUPT_VALUES = [
@@ -214,46 +175,34 @@ describe("disabled fallback for absent or corrupt persisted values (Req 3.6)", (
 
   it.each(CORRUPT_VALUES)("reads the non-boolean value %j as disabled", async (raw) => {
     localStorage.setItem(CLOUD_KEY, raw);
-    localStorage.setItem(SHEETS_KEY, raw);
     await restore();
-    expect(getSnapshot().enabled).toEqual({ cloud: false, sheets: false });
+    expect(getSnapshot().enabled).toEqual({ cloud: false });
   });
 
-  it("reads the two boolean values exactly", async () => {
+  it("reads the boolean value exactly", async () => {
     localStorage.setItem(CLOUD_KEY, "true");
-    localStorage.setItem(SHEETS_KEY, "false");
     await restore();
-    expect(getSnapshot().enabled).toEqual({ cloud: true, sheets: false });
+    expect(getSnapshot().enabled).toEqual({ cloud: true });
   });
 
-  it.each(DESTINATIONS)(
-    "reads an unreadable %s value as disabled without disturbing the other",
-    async (id) => {
-      localStorage.setItem(CLOUD_KEY, "true");
-      localStorage.setItem(SHEETS_KEY, "true");
-      throwOnRead(KEY_OF[id]);
-
-      await restore();
-
-      expect(isDestinationEnabled(id)).toBe(false);
-      expect(isDestinationEnabled(OTHER[id])).toBe(true);
-    },
-  );
+  it("reads an unreadable cloud value as disabled", async () => {
+    localStorage.setItem(CLOUD_KEY, "true");
+    throwOnRead(CLOUD_KEY);
+    await restore();
+    expect(isDestinationEnabled("cloud")).toBe(false);
+  });
 
   it("survives storage that is unreadable entirely", async () => {
     localStorage.setItem(CLOUD_KEY, "true");
-    const original = Storage.prototype.getItem;
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new DOMException("blocked", "SecurityError");
     });
 
     await expect(restore()).resolves.toBeUndefined();
-    expect(getSnapshot().enabled).toEqual({ cloud: false, sheets: false });
-    expect(isProEntitled()).toBe(false);
+    expect(getSnapshot().enabled).toEqual({ cloud: false });
     expect(isRestored()).toBe(true);
 
     vi.restoreAllMocks();
-    expect(Storage.prototype.getItem).toBe(original);
   });
 });
 
@@ -263,24 +212,18 @@ describe("disabled fallback for absent or corrupt persisted values (Req 3.6)", (
 // ---------------------------------------------------------------------------
 
 describe("restore lifecycle (Req 3.5, 3.9)", () => {
-  it("reports every destination disabled and not restored before restore() runs", () => {
+  it("reports disabled and not restored before restore() runs", () => {
     localStorage.setItem(CLOUD_KEY, "true");
-    localStorage.setItem(SHEETS_KEY, "true");
 
-    // Req 3.5: while restoration has not completed, a trigger reading these must
-    // see "disabled" and therefore no-op.
     expect(isRestored()).toBe(false);
     expect(getSnapshot().restored).toBe(false);
     expect(isDestinationEnabled("cloud")).toBe(false);
-    expect(isDestinationEnabled("sheets")).toBe(false);
   });
 
   it("reports restoration complete synchronously, before any awaiter resumes", async () => {
     localStorage.setItem(CLOUD_KEY, "true");
 
     const pending = restore();
-    // Req 3.9: no window exists in which a caller can observe a resolved restore
-    // yet an unrestored state — the flag flips before the promise is handed back.
     expect(isRestored()).toBe(true);
     expect(isDestinationEnabled("cloud")).toBe(true);
 
@@ -289,7 +232,7 @@ describe("restore lifecycle (Req 3.5, 3.9)", () => {
   });
 
   it("is idempotent: one read, one notification, the same promise", async () => {
-    localStorage.setItem(SHEETS_KEY, "true");
+    localStorage.setItem(CLOUD_KEY, "true");
     let notifications = 0;
     subscribe(() => {
       notifications += 1;
@@ -301,12 +244,12 @@ describe("restore lifecycle (Req 3.5, 3.9)", () => {
 
     expect(second).toBe(first);
     expect(notifications).toBe(1);
-    expect(isDestinationEnabled("sheets")).toBe(true);
+    expect(isDestinationEnabled("cloud")).toBe(true);
 
     // A value written behind the module's back is not re-read by a repeat call.
-    localStorage.setItem(SHEETS_KEY, "false");
+    localStorage.setItem(CLOUD_KEY, "false");
     await restore();
-    expect(isDestinationEnabled("sheets")).toBe(true);
+    expect(isDestinationEnabled("cloud")).toBe(true);
   });
 
   it("does not overwrite an in-session change made after restoration", async () => {
@@ -333,35 +276,17 @@ describe("persistence failure (Req 3.10)", () => {
   ];
 
   describe.each(FAILURE_MODES)("%s", (_label, install) => {
-    it.each(DESTINATIONS)("reports %s unsaved but keeps the change in memory", async (id) => {
+    it("reports cloud unsaved but keeps the change in memory", async () => {
       await restore();
-      install(KEY_OF[id]);
+      install(CLOUD_KEY);
 
-      expect(setDestinationEnabled(id, true)).toEqual({ persisted: false });
+      expect(setDestinationEnabled("cloud", true)).toEqual({ persisted: false });
 
-      // Kept for the remainder of the session.
-      expect(isDestinationEnabled(id)).toBe(true);
+      expect(isDestinationEnabled("cloud")).toBe(true);
       const snapshot = getSnapshot();
-      expect(snapshot.enabled[id]).toBe(true);
-      // ...and surfaced as unsaved, which Settings renders.
-      expect(snapshot.persistFailed).toBe(id);
+      expect(snapshot.enabled.cloud).toBe(true);
+      expect(snapshot.persistFailed).toBe("cloud");
     });
-
-    it.each(DESTINATIONS)(
-      "leaves the other destination's state and persisted value unchanged when %s fails",
-      async (id) => {
-        await restore();
-        const other = OTHER[id];
-        setDestinationEnabled(other, true);
-        const otherPersisted = localStorage.getItem(KEY_OF[other]);
-
-        install(KEY_OF[id]);
-        setDestinationEnabled(id, true);
-
-        expect(isDestinationEnabled(other)).toBe(true);
-        expect(localStorage.getItem(KEY_OF[other])).toBe(otherPersisted);
-      },
-    );
 
     it("writes nothing else — no cursor, no outbox, no other key", async () => {
       await restore();
@@ -389,26 +314,15 @@ describe("persistence failure (Req 3.10)", () => {
     expect(localStorage.getItem(CLOUD_KEY)).toBe("true");
   });
 
-  it("keeps one destination's unsaved indication when the other persists", async () => {
-    await restore();
-    const spy = throwOnWrite(CLOUD_KEY);
-    setDestinationEnabled("cloud", true);
-
-    setDestinationEnabled("sheets", true);
-
-    expect(getSnapshot().persistFailed).toBe("cloud");
-    spy.mockRestore();
-  });
-
   it("notifies subscribers when a change is kept but unsaved", async () => {
     await restore();
-    const seen: Array<DestinationId | null> = [];
+    const seen: Array<string | null> = [];
     subscribe((s) => seen.push(s.persistFailed));
-    throwOnWrite(SHEETS_KEY);
+    throwOnWrite(CLOUD_KEY);
 
-    setDestinationEnabled("sheets", true);
+    setDestinationEnabled("cloud", true);
 
-    expect(seen).toEqual(["sheets"]);
+    expect(seen).toEqual(["cloud"]);
   });
 
   it("does not carry an unsaved change across a restart", async () => {
@@ -422,106 +336,6 @@ describe("persistence failure (Req 3.10)", () => {
     // Nothing durable was written, so a cold launch fails closed (Req 3.6).
     expect(isDestinationEnabled("cloud")).toBe(false);
     expect(getSnapshot().persistFailed).toBeNull();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Cold-start entitlement default fails closed
-// Requirements 1.9
-// ---------------------------------------------------------------------------
-
-describe("cold-start entitlement default (Req 1.9)", () => {
-  it("is not Pro before restore() and with no persisted snapshot", async () => {
-    expect(isProEntitled()).toBe(false);
-    expect(getEntitlementSnapshot()).toBeNull();
-
-    await restore();
-
-    expect(isProEntitled()).toBe(false);
-    expect(getEntitlementSnapshot()).toBeNull();
-    expect(getSnapshot().entitlement).toBeNull();
-  });
-
-  it("is not Pro when the enabled state says otherwise", async () => {
-    localStorage.setItem(CLOUD_KEY, "true");
-    localStorage.setItem(SHEETS_KEY, "true");
-    await restore();
-
-    expect(isDestinationEnabled("cloud")).toBe(true);
-    expect(isProEntitled()).toBe(false);
-  });
-
-  const CORRUPT_SNAPSHOTS = [
-    "",
-    "not json",
-    "null",
-    "true",
-    "42",
-    "[]",
-    "{}",
-    '{"pro":"true","proUntil":null,"receivedAt":1}',
-    '{"pro":true,"proUntil":null}',
-    '{"pro":true,"receivedAt":1}',
-    '{"pro":true,"proUntil":"soon","receivedAt":1}',
-    '{"pro":true,"proUntil":null,"receivedAt":"now"}',
-    '{"pro":true,"proUntil":null,"receivedAt":null}',
-  ];
-
-  it.each(CORRUPT_SNAPSHOTS)("treats the corrupt snapshot %j as never persisted", async (raw) => {
-    localStorage.setItem(ENTITLEMENT_KEY, raw);
-    await restore();
-
-    expect(getEntitlementSnapshot()).toBeNull();
-    expect(isProEntitled()).toBe(false);
-  });
-
-  it("becomes Pro only once a server response supplies a snapshot, and retains it", async () => {
-    await restore();
-    expect(isProEntitled()).toBe(false);
-
-    const proUntil = Date.now() + 30 * 86_400_000;
-    applyEntitlement({ pro: true, proUntil });
-
-    expect(isProEntitled()).toBe(true);
-    const snapshot = getEntitlementSnapshot();
-    expect(snapshot).toMatchObject({ pro: true, proUntil });
-    expect(snapshot?.receivedAt).toBeTypeOf("number");
-
-    await restart();
-
-    // Req 1.8: the snapshot, including the receive time, survives the restart.
-    expect(getEntitlementSnapshot()).toEqual(snapshot);
-    expect(isProEntitled()).toBe(true);
-  });
-
-  it("honours an expiry and an open-ended entitlement", async () => {
-    await restore();
-
-    applyEntitlement({ pro: true, proUntil: Date.now() - 1 });
-    expect(isProEntitled()).toBe(false);
-
-    applyEntitlement({ pro: true, proUntil: null });
-    expect(isProEntitled()).toBe(true);
-
-    applyEntitlement({ pro: false, proUntil: null });
-    expect(isProEntitled()).toBe(false);
-
-    await restart();
-    expect(isProEntitled()).toBe(false);
-    expect(getEntitlementSnapshot()).toMatchObject({ pro: false });
-  });
-
-  it("keeps the snapshot in memory when it cannot be persisted", async () => {
-    await restore();
-    throwOnWrite(ENTITLEMENT_KEY);
-
-    applyEntitlement({ pro: true, proUntil: null });
-
-    // Applied to the gate for this session; a cold start then fails closed again.
-    expect(isProEntitled()).toBe(true);
-    vi.restoreAllMocks();
-    await restart();
-    expect(isProEntitled()).toBe(false);
   });
 });
 
@@ -579,7 +393,6 @@ describe("disclosure acknowledgement (Req 18.9, 18.6)", () => {
     await restore();
     ackDisclosure(EMAIL);
 
-    // Req 18.9 persists the acknowledgement only; enabling stays a separate action.
     expect(isDestinationEnabled("cloud")).toBe(false);
     expect(localStorage.getItem(CLOUD_KEY)).toBeNull();
 

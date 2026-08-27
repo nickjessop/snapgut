@@ -1,8 +1,6 @@
-<!-- Shared metadata: title, description, icons, and the full OG + Twitter set
-     (Req 8.1, 8.3). Included by head.html and head-notfound.html, which differ
-     only in the canonical URL an indexable page carries and the 404 does not.
-     og:image is an absolute URL on the Canonical_Host, served from public/ at a
-     fixed name because a crawler reads it as a literal string (Req 8.4). -->
+<!-- Shared metadata: title, description, icons, and the full OG + Twitter set.
+     Included by head.html and head-notfound.html.
+     og:image is root-relative so it works at any origin. -->
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
@@ -24,7 +22,7 @@
 <meta property="og:locale" content="en_US" />
 <meta property="og:title" content="{{title}}" />
 <meta property="og:description" content="{{description}}" />
-<meta property="og:image" content="https://snapgut.com/og.png" />
+<meta property="og:image" content="/og.png" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
 <meta property="og:image:alt" content="SnapGut — know what your gut is telling you" />
@@ -32,12 +30,12 @@
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="{{title}}" />
 <meta name="twitter:description" content="{{description}}" />
-<meta name="twitter:image" content="https://snapgut.com/og.png" />
+<meta name="twitter:image" content="/og.png" />
 
 <!-- Root-relative, so Vite emits it content-hashed (Req 7.3) *and* the href
      resolves the same way in dev as in the build. It cannot be document-relative:
      this partial is included by pages that the dev server rewrites to
-     internally, so the browser's URL stays `/pricing` while the document is
-     `marketing/pricing.html`, and `./marketing.css` would resolve against the
+     internally, so the browser's URL stays `/privacy` while the document is
+     `marketing/privacy.html`, and `./marketing.css` would resolve against the
      wrong directory and 404. The site's only stylesheet (Req 7.7). -->
 <link rel="stylesheet" href="/marketing/marketing.css" />

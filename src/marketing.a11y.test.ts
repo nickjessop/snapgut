@@ -54,7 +54,6 @@ const DOCUMENTS: readonly string[] = [
  */
 const SOURCES = [
   "shared/site.js",
-  "shared/plans.js",
   "vite.config.ts",
   "vite/partials.js",
   "vite/marketing.js",

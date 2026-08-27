@@ -27,8 +27,6 @@ import { marketingBuild, marketingInputs } from "./vite/marketing.js";
 // @ts-expect-error -- untyped ESM JavaScript (vite/ is plain JS, like server/ and shared/)
 import { marketingDevRoutes } from "./vite/devRoutes.js";
 // @ts-expect-error -- untyped ESM JavaScript (vite/ is plain JS, like server/ and shared/)
-import { pricingPlans } from "./vite/pricing.js";
-// @ts-expect-error -- untyped ESM JavaScript (vite/ is plain JS, like server/ and shared/)
 import { NAVIGATE_FALLBACK, navigateFallbackDenylist, precacheIgnores } from "./vite/pwa.js";
 
 export default defineConfig({
@@ -42,10 +40,6 @@ export default defineConfig({
     // their title, description, and canonical URL from the Route_Table. A no-op
     // for the App_Shell.
     marketingPartials(),
-    // Renders the pricing page's plan table from the Plan_Catalog in
-    // shared/plans.js, so no price is written by hand in the template and a
-    // catalog change needs no copy edit (Requirements 7.6, 9.3, 9.8).
-    pricingPlans(),
     // Flattens dist/marketing/*.html to the Route_Table's `file` paths and fails
     // the build on an asset a page references but the build did not emit.
     marketingBuild(),
@@ -142,20 +136,6 @@ export default defineConfig({
               expiration: {
                 maxEntries: 1200,
                 maxAgeSeconds: 60 * 60 * 24 * 180, // 180 days
-              },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // Legacy TheMealDB thumbnails — only reachable when the dev-only
-            // VITE_MEALDB_FALLBACK flag is on (see src/foodImages.ts).
-            urlPattern: /^https:\/\/www\.themealdb\.com\/images\/ingredients\//,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "food-images",
-              expiration: {
-                maxEntries: 600,
-                maxAgeSeconds: 60 * 60 * 24 * 60, // 60 days
               },
               cacheableResponse: { statuses: [0, 200] },
             },

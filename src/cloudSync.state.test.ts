@@ -15,8 +15,6 @@
 //
 // - `off` whenever no Session_Token is held, *regardless of every other field*
 //   (Req 1.6, 12.8 step 1).
-// - `blocked_no_pro` outranks `syncing` and `error`, so a Pro lapse during an
-//   in-flight or failed cycle reads as paused rather than broken (Req 12.6).
 // - never `synced` while the Outbox is non-empty (Req 12.8 step 7).
 // - the `synced → idle` move of Req 12.9 falls out of derivation: raising the
 //   Outbox count on a `synced` snapshot yields `idle` with the last-successful
@@ -50,7 +48,6 @@ const STATE_NAMES: readonly StateName[] = [
   "syncing",
   "synced",
   "error",
-  "blocked_no_pro",
 ];
 
 /**
@@ -73,17 +70,15 @@ function derive(i: SyncStateInputLike): SyncState {
 function tableState(i: SyncStateInputLike): StateName {
   const ordered: ReadonlyArray<readonly [boolean, StateName]> = [
     [!i.hasSession, "off"], // 1 (Req 1.6)
-    [!i.pro && i.enabled, "blocked_no_pro"], // 2 (Req 1.3)
-    [!i.pro && !i.enabled, "off"], // 3 (Req 1.4)
-    [!i.enabled, "off"], // 4 (Req 12.1)
-    [i.cycleInProgress, "syncing"], // 5 (Req 12.3)
-    [i.lastCycleFailed && !i.succeededSinceFailure, "error"], // 6 (Req 12.5)
-    [i.lastSyncAt !== null && i.outboxCount === 0, "synced"], // 7 (Req 12.4)
+    [!i.enabled, "off"], // 2 (Req 12.1)
+    [i.cycleInProgress, "syncing"], // 3 (Req 12.3)
+    [i.lastCycleFailed && !i.succeededSinceFailure, "error"], // 4 (Req 12.5)
+    [i.lastSyncAt !== null && i.outboxCount === 0, "synced"], // 5 (Req 12.4)
   ];
   for (const [matches, state] of ordered) {
     if (matches) return state;
   }
-  return "idle"; // 8 (Req 12.2)
+  return "idle"; // 6 (Req 12.2)
 }
 
 function expectNonNegativeInteger(value: unknown): void {
@@ -140,12 +135,6 @@ function expectWellFormed(state: SyncState, i: SyncStateInputLike): void {
       expect(typeof state.message).toBe("string");
       expect(state.message.length).toBeGreaterThan(0);
       break;
-
-    case "blocked_no_pro":
-      expect(keys).toEqual(["daysUntilPurge", "lastSyncAt", "state"]);
-      expect(state.lastSyncAt).toBe(i.lastSyncAt);
-      expect(state.daysUntilPurge).toBe(i.daysUntilPurge);
-      break;
   }
 }
 
@@ -155,7 +144,6 @@ const arbSyncedInput: fc.Arbitrary<SyncStateInputLike> = fc
   .map(([base, lastSyncAt]) => ({
     ...base,
     hasSession: true,
-    pro: true,
     enabled: true,
     cycleInProgress: false,
     // Either no failure, or one a later cycle has already superseded.
@@ -214,29 +202,6 @@ describe("Property 15: Sync_State derivation is total and single-valued", () => 
         expect(derive(i)).toEqual({ state: "off" });
       }),
       { numRuns: 200 },
-    );
-  });
-
-  it("ranks `blocked_no_pro` above `syncing` and `error` (Req 1.3, 12.6)", () => {
-    fc.assert(
-      fc.property(arbSyncStateInput, (base) => {
-        const i: SyncStateInputLike = {
-          ...base,
-          hasSession: true,
-          pro: false,
-          enabled: true,
-          // Both lower-ranked conditions match at once, and neither may win.
-          cycleInProgress: true,
-          lastCycleFailed: true,
-          succeededSinceFailure: false,
-        };
-        expect(derive(i)).toEqual({
-          state: "blocked_no_pro",
-          lastSyncAt: i.lastSyncAt,
-          daysUntilPurge: i.daysUntilPurge,
-        });
-      }),
-      { numRuns: 300 },
     );
   });
 

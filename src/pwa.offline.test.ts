@@ -140,7 +140,7 @@ describe("a Marketing_Page navigation is not answered from precache (R5.4)", () 
   });
 
   it("leaves a trailing-slash Marketing_Page path to the Origin_Server's redirect", async () => {
-    const outcome = await onlineWorker.navigate("/pricing/");
+    const outcome = await onlineWorker.navigate("/privacy/");
     expect(outcome.handledByWorker).toBe(false);
   });
 });

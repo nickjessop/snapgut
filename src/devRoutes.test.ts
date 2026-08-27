@@ -57,7 +57,7 @@ describe("devRouteFor", () => {
 
   it("ignores the query and fragment when resolving", () => {
     expect(devRouteFor("/login?next=%2Fapp%2Flogs")).toBe(APP_SHELL);
-    expect(devRouteFor("/pricing?utm_source=x#plans")).toBe("/marketing/pricing.html");
+    expect(devRouteFor("/privacy?ref=footer#data")).toBe("/marketing/privacy.html");
   });
 
   it("leaves every other path for Vite to handle", () => {
@@ -67,7 +67,8 @@ describe("devRouteFor", () => {
       "/@vite/client",
       "/foods/apple.webp",
       "/appearance", // shares a prefix with /app but is not an App_Route
-      "/pricing/", // trailing slash: the Origin_Server 301s it, dev does not fake that
+      "/pricing/", // trailing slash: not a known route, dev does not fake that
+      "/pricing", // no longer a marketing page
       "/nope",
       "",
     ]) {
@@ -83,7 +84,7 @@ describe("devRouteFor", () => {
 
 describe("marketingDevRoutes middleware", () => {
   it("rewrites a navigation request and always calls next", () => {
-    expect(serve({ url: "/pricing" })).toEqual({ url: "/marketing/pricing.html", nexted: true });
+    expect(serve({ url: "/privacy" })).toEqual({ url: "/marketing/privacy.html", nexted: true });
     expect(serve({ url: "/app/logs" })).toEqual({ url: APP_SHELL, nexted: true });
     expect(serve({ url: "/nope" })).toEqual({ url: "/nope", nexted: true });
   });

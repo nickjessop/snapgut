@@ -2,23 +2,20 @@
  * D2: the HTML partial-injection plugin.
  *
  * The Marketing_Pages share a head scaffold, a header, and a footer. Rather than
- * copy that markup into every page (Requirement 7.2), each page carries include
- * markers and per-page placeholders:
+ * copy that markup into every page, each page carries include markers and
+ * per-page placeholders:
  *
  *     <!--#include head-->                 → marketing/partials/head.html
  *     <title>{{title}}</title>             → the Route_Table entry's title
  *     <meta name="description" …>          → …its description
- *     <link rel="canonical" href="{{canonical}}">  → CANONICAL_ORIGIN + its path
+ *     {{#canonical}}…{{/canonical}}        → conditional on PUBLIC_ORIGIN
  *
  * Substituted values come from the page's own Route_Table entry in
- * `shared/site.js`, matched by output filename, so titles, descriptions, and
- * canonical URLs cannot drift from the table the server and sitemap read
- * (Requirements 8.1, 8.2).
+ * `shared/site.js`, matched by output filename. The canonical URL is only
+ * generated when the `PUBLIC_ORIGIN` environment variable is set.
  *
  * `transformIndexHtml` runs in both `vite` and `vite build`, so the same markup
- * is produced in development and in the Build_Output. No dependency is added —
- * the whole thing is string replacement over files, which keeps the
- * supply-chain posture in `docs/security-and-infra-todo.md` intact.
+ * is produced in development and in the Build_Output.
  *
  * Anything outside `marketing/` — the App_Shell above all — passes through
  * untouched.
@@ -26,13 +23,16 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { CANONICAL_ORIGIN, MARKETING_PAGES, NOT_FOUND_FILE } from "../shared/site.js";
+import { MARKETING_PAGES, NOT_FOUND_FILE } from "../shared/site.js";
 
 /** `<!--#include head-->`, naming a file in `marketing/partials/`. */
 const INCLUDE = /<!--#include\s+([\w-]+)\s*-->/g;
 
 /** `{{title}}` and friends. Anything else is left alone. */
 const PLACEHOLDER = /\{\{\s*(title|description|canonical|path)\s*\}\}/g;
+
+/** `{{#key}}…{{/key}}` conditional blocks — rendered only when key is truthy. */
+const CONDITIONAL_BLOCK = /\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g;
 
 /** A partial that includes itself would otherwise expand forever. */
 const MAX_INCLUDE_DEPTH = 5;
@@ -64,13 +64,14 @@ export function marketingPartials({ root = process.cwd(), dir = "marketing" } = 
   const marketingDir = path.resolve(root, dir);
   const partialsDir = path.join(marketingDir, "partials");
 
+  // PUBLIC_ORIGIN drives canonical/og:url generation. If not set, those tags
+  // are omitted entirely.
+  const publicOrigin = process.env.PUBLIC_ORIGIN?.trim() || null;
+
   /** The Route_Table entry for a document, or null if it is not a Marketing_Page. */
   const pageForFile = (filename) => {
     if (!filename) return null;
     const absolute = path.resolve(root, filename);
-    // Only documents sitting directly in marketing/ — this is what keeps
-    // app/index.html from being mistaken for the home page, which shares its
-    // basename, and keeps the partials themselves out.
     if (path.dirname(absolute) !== marketingDir) return null;
     const file = path.basename(absolute);
     return (
@@ -103,24 +104,36 @@ export function marketingPartials({ root = process.cwd(), dir = "marketing" } = 
   return {
     name: "snapgut-marketing-partials",
     transformIndexHtml: {
-      // Pre, so Vite still sees and rewrites the asset references the injected
-      // partials bring with them.
       order: "pre",
       handler(html, ctx) {
         const page = pageForFile(ctx?.filename) ?? pageForPath(ctx?.path);
         if (!page) return; // the App_Shell and anything else: unchanged
 
+        const canonical = page.path && publicOrigin
+          ? new URL(page.path, publicOrigin).href
+          : "";
+
         const values = {
           title: page.title,
           description: page.description,
           path: page.path ?? "",
-          canonical: page.path ? new URL(page.path, CANONICAL_ORIGIN).href : "",
+          canonical,
         };
 
         // Includes first, so placeholders inside a partial are substituted too.
-        return expandIncludes(html, 0).replace(PLACEHOLDER, (_marker, key) =>
+        let result = expandIncludes(html, 0);
+
+        // Conditional blocks: {{#key}}…{{/key}} — render contents only when key is truthy.
+        result = result.replace(CONDITIONAL_BLOCK, (_match, key, content) => {
+          return values[key] ? content : "";
+        });
+
+        // Simple placeholders.
+        result = result.replace(PLACEHOLDER, (_marker, key) =>
           escapeHtml(values[key])
         );
+
+        return result;
       },
     },
   };

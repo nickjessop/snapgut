@@ -35,7 +35,7 @@ export default function CameraPermissionSheet({ onClose }: { onClose: () => void
 
         <ol className="install-steps">
           <li>
-            Open <strong>Safari</strong> and go to <strong>snapgut.com</strong>.
+            Open <strong>Safari</strong> and go to <strong>this site</strong>.
           </li>
           <li>
             Tap the page settings button at the left of the address bar — the{" "}

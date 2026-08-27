@@ -1,23 +1,10 @@
-// Client-side session + auth/billing. Token stored in localStorage, attached to
-// API calls as a Bearer header. Entitlement = Pro flag + free-AI trial counter.
+// Client-side session + auth. Token stored in localStorage, attached to
+// API calls as a Bearer header.
 
 const TOKEN_KEY = "snapgut-token";
 
-export interface Entitlement {
-  pro: boolean;
-  proUntil: number | null;
-  freeAiUsed: number;
-  freeAiLimit: number;
-}
-export interface Me extends Entitlement {
+export interface Me {
   email: string;
-}
-export interface Plan {
-  id: string;
-  price: number; // cents
-  label: string;
-  caption: string;
-  per: string;
 }
 
 export function getToken(): string | null {
@@ -45,14 +32,10 @@ async function post(path: string, body?: unknown) {
   return data;
 }
 
-export function requestCode(email: string): Promise<{ ok: boolean; dev?: boolean; code?: string }> {
-  return post("/api/auth/request", { email });
-}
-
-export async function verifyCode(email: string, code: string): Promise<Me> {
-  const data = (await post("/api/auth/verify", { email, code })) as Me & { token: string };
+export async function signIn(password: string): Promise<Me> {
+  const data = (await post("/api/auth/signin", { password })) as Me & { token: string };
   setToken(data.token);
-  return data;
+  return { email: data.email };
 }
 
 export async function fetchMe(): Promise<Me | null> {
@@ -65,24 +48,7 @@ export async function fetchMe(): Promise<Me | null> {
   return res.json();
 }
 
-export async function fetchPlans(): Promise<Plan[]> {
-  const res = await fetch("/api/billing/plans");
-  return res.ok ? res.json() : [];
-}
-
-/** Dev: returns { simulated, ...entitlement }. Prod: returns { url } to redirect. */
-export function checkout(
-  plan: string
-): Promise<{ simulated?: boolean; url?: string } & Partial<Entitlement>> {
-  return post("/api/billing/checkout", { plan });
-}
-
 /** Delete the server-side account (entitlement). Caller wipes local data + token. */
 export function deleteAccount(): Promise<{ ok: boolean }> {
   return post("/api/account/delete");
-}
-
-/** Open the Stripe billing portal (manage/cancel subscription). Returns { url }. */
-export function openPortal(): Promise<{ url?: string }> {
-  return post("/api/billing/portal");
 }

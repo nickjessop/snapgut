@@ -1,161 +1,133 @@
-# Datastore
+# Datastore — SQLite Schema Reference
 
-Every Firestore collection the server writes: its document key, its fields, whether it holds
-personal data, and what expires it. Satisfies Requirements 19.2, 19.3, 19.4, 19.6, and 19.7 in
-`.kiro/specs/marketing-site-and-routing/`. `infra/firestore.ts` is the machine-readable form of
-the database and its TTL policies; this document is the explanation.
+The server persists all data in a single SQLite file at the path given by `DB_PATH` (default:
+`/data/snapgut.db`). The schema is applied automatically on first boot and on every subsequent
+start by the `migrate()` function in `server/sqlite/schema.js`.
 
-Compiled by reading `server/store.js`, `server/index.js`, and `server/eventStore.js`, and by
-querying the live database, not from a previous version of this file.
+## PRAGMAs
 
-## The database
+Applied on every connection open:
 
-`projects/REDACTED-GCP-PROJECT/databases/(default)` — Native mode, `us-central1`, pessimistic
-concurrency, App Engine integration disabled. Declared and imported in `infra/firestore.ts`
-with `protect: true`, so an ordinary `pulumi up` or `destroy` cannot remove it.
+| PRAGMA | Value | Purpose |
+| --- | --- | --- |
+| `journal_mode` | `WAL` | Concurrent readers and crash-safe writes |
+| `foreign_keys` | `ON` | Enforce referential integrity |
+| `busy_timeout` | `5000` | Wait up to 5 seconds for a write lock rather than failing immediately |
 
-`USERS_BACKEND` selects it. Only the exact value `firestore` does; anything else selects a
-per-process in-memory map that loses everything on the next deploy, which is why production
-refuses to boot without it (see `docs/configuration.md`). Local development and the test suite
-run on the in-memory backend with no configuration at all, and it has no TTL concept — expiry
-is a Firestore-only concern, and the memory backend's rate limiter is a sliding window over an
-array in memory.
-
-**Recovery posture: none configured.** No point-in-time recovery, no scheduled backup
-(Requirement 19.8, Decision D12). The reasoning and the one-line change that reverses it are in
-`infra/firestore.ts`.
-
-## The collections
-
-| Collection | Document key | Fields | Personal data | Expiry |
-| --- | --- | --- | --- | --- |
-| `users` | the normalised email address | `email`, `pro`, `proUntil`, `freeAiUsed`, `stripeCustomerId`, `createdAt` | **Yes** — the email address, both as the key and as a field | None. Removed only by `/api/account/delete` |
-| `authCodes` | the normalised email address | `hash` (SHA-256 of the six-digit code), `expiresAt` (epoch ms), `attempts` | **Yes** — the email address is the key | None. Overwritten per request, deleted on verify and on account deletion. See the gap below |
-| `rateLimits` | `<limit key>:<window bucket>` | `count`, `expireAt` (Timestamp) | **Yes, in the key** — the auth limits embed an email address or an IP address | TTL on `expireAt`, one window past the end of the window it counts |
-| `missingFoods` | the food slug | `slug`, `reason` (`no_image` \| `unknown`), `count`, `lastSeen` (epoch ms), `expireAt` (Timestamp) | No — aggregate tallies, never linked to a user (Requirement 19.5) | TTL on `expireAt`, 90 days after the last sighting |
-
-Two subcollections under `users/<email>` belong to the cloud-sync feature and are specified in
-`.kiro/specs/cloud-sync/`, not here: `users/<email>/events` (stored Event_Records and
-tombstones) and `users/<email>/sync/meta` (the sequence and purge epoch). They are named here
-only so this table is not read as the whole picture. Note that deleting a `users` document does
-**not** delete its subcollections, which is why `/api/account/delete` purges events first and
-removes the user record second.
+## Tables
 
 ### `users`
 
-The record of the account and of Pro entitlement, written by `upsertUser`, `setPro`, and
-`incFreeAi`. It holds no logs, no photos, and no profile fields.
+The account record. After the self-hosted conversion this holds only the email and a creation
+timestamp — no profile fields, no entitlement, no usage counters.
 
-**It holds personal data and is in scope for account deletion** (Requirement 19.7).
-`POST /api/account/delete` purges the caller's stored events, then `deleteUser(email)` removes
-`users/<email>` and `authCodes/<email>` together. Nothing else in this database is keyed by an
-account, apart from the `rateLimits` documents described below, which expire on their own within
-a couple of minutes.
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| `email` | TEXT | PRIMARY KEY | Normalised email address |
+| `created_at` | INTEGER | NOT NULL | Unix timestamp (ms) when the account was created |
 
-`stripeCustomerId` is queried with a single-field equality filter (`getUserByStripeCustomerId`,
-the join a renewal webhook needs). Firestore's automatic single-field index serves it; the note
-in `server/store.js` records what would change that.
+### `rate_limits`
 
-### `authCodes`
+Fixed-window counters for brute-force protection on sign-in and sync endpoints.
 
-One document per sign-in attempt in flight, keyed by the address the code was sent to. The code
-itself is never stored — only its SHA-256 hash, its ten-minute expiry, and the attempt count
-(five attempts, then the code is dead).
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| `key` | TEXT | NOT NULL, part of PK | Limit identifier (e.g. `auth-ip:127.0.0.1`, `sync-user:user@example.com`) |
+| `bucket` | INTEGER | NOT NULL, part of PK | Window bucket: `floor(now / windowMs)` |
+| `count` | INTEGER | NOT NULL | Number of requests in this window |
+| `expires_at` | INTEGER | NOT NULL | Unix timestamp (ms) after which this row can be swept |
 
-**Known gap, deliberately not fixed here.** `expiresAt` is application-enforced, not a TTL
-field, and there is no TTL policy on this collection because the normal path deletes the
-document on verify. An *abandoned* sign-in therefore leaves one document holding an email
-address and a dead code hash indefinitely. It is bounded by the per-email throttle (one code per
-30 s) and by being overwritten per address rather than accumulating, and the live database holds
-exactly one such document today. Requirement 19 does not classify `authCodes` as a
-Transient_Collection, so adding a TTL policy would be a scope change rather than a fix; it is
-recorded here as the honest state and is worth doing.
+- `WITHOUT ROWID` table with composite primary key `(key, bucket)`.
+- Expired rows are swept piggybacked on each `rateLimit()` call — rows whose `expires_at` is
+  more than two windows in the past are deleted.
 
-### `rateLimits`
+**Index:**
 
-Fixed-window counters, shared across Cloud Run instances so a limit is a limit and not a limit
-per instance. A request at instant `t` with window `w` reads and writes
-`<key>:<floor(t / w)>` and increments `count` in a transaction.
-
-Keys in use:
-
-| Key | Limit | Where |
+| Name | Columns | Purpose |
 | --- | --- | --- |
-| `auth-ip:<Client_IP>` | 20 per 60 s | `/api/auth/*`, `server/index.js` |
-| `auth-email:<email>` | 1 per 30 s | `/api/auth/request`, `server/index.js` |
-| `sync-ip:<Client_IP>` | 120 per 60 s | `/api/sync/*`, `server/sync.js` |
-| `sync-user:<email>` | 60 per 60 s | `/api/sync/*`, `server/sync.js` |
+| `rate_limits_expires` | `expires_at` | Efficient sweep of expired rows |
 
-**So the document key carries personal data** — an email address or an IP address — even though
-the document body is a single integer. That is what makes the expiry a privacy property as well
-as a storage one, and the reason the collection is not a place to add a longer retention window
-later.
+### `missing_foods`
 
-**Expiry (Requirement 19.4): `(bucket + 2) × windowMs`.** The document for bucket `b` is
-consulted only by requests in `[b×w, (b+1)×w)`, so it stops being able to affect a limit
-decision at exactly `(b+1)×w`, when the key rolls over and a fresh document takes over. That
-instant is the earliest correct expiry; the value written is one whole window later. The margin
-is deliberate and asymmetric, because the two failure directions are not equally bad:
+Coverage tally: which logged foods have no illustration yet, so the next generation batch knows
+what to draw. Written fire-and-forget from the recognition annotator and the food-pack 404
+handler. Aggregate only — never linked to a user.
 
-- expiring **early** deletes a live counter, so requests already counted stop counting and the
-  limit silently widens — a security regression, and an invisible one;
-- expiring **late** keeps one document holding one integer for one extra window.
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| `slug` | TEXT | PRIMARY KEY | Canonical food slug |
+| `reason` | TEXT | NOT NULL | Why it is missing: `no_image` or `unknown` |
+| `count` | INTEGER | NOT NULL | How many times it has been requested |
+| `last_seen` | INTEGER | NOT NULL | Unix timestamp (ms) of the most recent request |
 
-The bucket comes from the calling instance's clock while the deletion is scheduled against
-Firestore's, so a margin is the only thing that makes skew between them harmless. Firestore also
-deletes at or after the timestamp, never before, and in practice within 24 hours rather than
-promptly — so the margin costs nothing measurable.
+- `WITHOUT ROWID` table.
 
-The expiry is derived from the bucket rather than from `Date.now()`, which makes it identical for
-every write in a window: the merge never moves it, and the value is a pure function of the key.
-`rateLimitWindow` in `server/store.js` is that function, and `src/rateLimitExpiry.test.ts` pins
-the bound.
+### `sync_meta`
 
-**`expireAt` must be a Firestore `Timestamp`.** A TTL policy ignores a field of any other type,
-so the numeric `Date.now() + windowMs` this code used to write meant the policy was attached and
-expired nothing. Eight such documents existed in production, all from finished windows and all
-permanently orphaned — the key includes the bucket, so a later request never overwrites them —
-and they were deleted as a one-off after the fix, guarded to numeric `expireAt` values already
-in the past. The collection is empty as of 2026-07-31.
+Per-account bookkeeping for the cloud-sync protocol: the current sequence counter and purge
+epoch.
 
-### `missingFoods`
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| `email` | TEXT | PRIMARY KEY, FK → `users(email) ON DELETE CASCADE` | Account identifier |
+| `seq` | INTEGER | NOT NULL, DEFAULT 0 | Highest sequence number assigned to an event for this account |
+| `epoch` | INTEGER | NOT NULL, DEFAULT 1 | Purge generation — incremented on `deleteAll`, invalidating previously issued cursors |
+| `last_tombstone_sweep_at` | INTEGER | nullable | Unix timestamp (ms) of the last expired-tombstone sweep |
 
-The Coverage_Tally: which logged foods have no illustration yet, so the next generation batch
-knows what to draw. Written fire-and-forget from `annotateIngredients` and from the `/foods/*`
-404 path, and only for slugs that are real canonical Food_Dictionary entries, so the client's
-slug-variant probing does not pollute it.
+### `events`
 
-Aggregate only — slug, reason, count, timestamp. No email, no session token, no reference to an
-event (Requirement 19.5). `/api/admin/missing-foods` serves exactly those four fields;
-`expireAt` is stripped from the response so the two backends return the same shape.
+The event store: one row per sync record (meal, symptom, or tombstone) per account. The
+`record` column holds the full wire-format JSON; other columns are denormalised for indexing.
 
-Every write pushes `expireAt` 90 days out, so a food that is still being logged never expires
-and one that stopped being logged ages out. Existing documents pick up the field on their next
-write, since the write merges.
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| `email` | TEXT | NOT NULL, part of PK | Account identifier |
+| `id` | TEXT | NOT NULL, part of PK | Client-generated record identifier |
+| `seq` | INTEGER | NOT NULL | Monotonically increasing sequence number within the account |
+| `clamped_from` | INTEGER | nullable | Original `updatedAt` value if it was clamped (future clock) |
+| `deleted` | INTEGER | NOT NULL, DEFAULT 0 | `1` if this is a tombstone, `0` otherwise |
+| `updated_at` | INTEGER | nullable | Denormalised copy of the record's `updatedAt` for sweep indexing |
+| `record` | TEXT | NOT NULL | The complete record as key-sorted JSON |
 
-**Index (Requirement 19.6): none needed.** The only non-trivial query is
-`orderBy("count", "desc").limit(n)`. Firestore's default field configuration indexes every field
-ascending, descending, and array-contains at collection scope, so an automatic single-field index
-serves it. Verified: `gcloud firestore indexes composite list` returns `[]`, and
-`gcloud firestore indexes fields list` shows only the `__default__` wildcard with no exemption.
+- `WITHOUT ROWID` table with composite primary key `(email, id)`.
+- The `record` column is the source of truth. `deleted` and `updated_at` are denormalised
+  copies that exist solely to support indexed queries — they are never read as authoritative.
 
-## Verifying the state
+**Indexes:**
 
-```bash
-# TTL policies: both should report ACTIVE on expireAt
-gcloud firestore fields ttls list --collection-group=rateLimits \
-  --database='(default)' --project=REDACTED-GCP-PROJECT
-gcloud firestore fields ttls list --collection-group=missingFoods \
-  --database='(default)' --project=REDACTED-GCP-PROJECT
+| Name | Columns | Purpose |
+| --- | --- | --- |
+| `events_seq` | `(email, seq)` | Cursor-based pagination on pull |
+| `events_sweep` | `(email, deleted, updated_at)` | Efficient tombstone expiry sweep |
 
-# Native mode, location, and recovery posture
-gcloud firestore databases describe --database='(default)' --project=REDACTED-GCP-PROJECT
+## Cursors
 
-# Indexes: an empty composite list and only the __default__ field config are expected
-gcloud firestore indexes composite list --database='(default)' --project=REDACTED-GCP-PROJECT
-gcloud firestore indexes fields list --database='(default)' --project=REDACTED-GCP-PROJECT
-```
+The sync cursor format is `"{epoch}:{seq}"` — two decimal integers separated by a colon,
+matched by `/^(\d+):(\d+)$/`. A cursor is invalid when it fails the pattern, exceeds the
+safe-integer range, or carries an epoch other than the account's current one. `deleteAll`
+increments the epoch and resets seq to 0, which invalidates every previously issued cursor.
 
-A TTL policy is only as good as the type of the field it points at. If `rateLimits` starts
-growing, check that first: read one document and confirm `expireAt` is a Timestamp and not a
-number.
+## Tombstone sweep
+
+Records marked as deleted (`deleted = 1`) are retained for 180 days (the tombstone retention
+period) so that other devices can learn about the deletion during sync. After 180 days they
+are swept — deleted from the `events` table — on the next `pull` or `countFor` call for that
+account.
+
+## Migrations
+
+Migrations are forward-only (no down migrations). The schema uses `CREATE TABLE IF NOT EXISTS`
+and `CREATE INDEX IF NOT EXISTS`, making `migrate()` idempotent: re-running on an already-
+initialised database is a no-op.
+
+On upgrade, the server applies any new migrations automatically at boot. The recommended
+practice is to back up the database file before upgrading — see the README's upgrade section.
+
+## Backup and restore
+
+The database is a single file at `DB_PATH`. To back up:
+
+1. Stop the server (or use `sqlite3 /path/to/snapgut.db ".backup /path/to/backup.db"`).
+2. Copy the `.db` file and any `-wal` / `-shm` files alongside it.
+
+To restore, stop the server, replace the database file with the backup, and start the server.

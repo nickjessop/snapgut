@@ -17,18 +17,15 @@
 // unknown path, so it carries no canonical URL and no `og:url` and declares
 // `noindex`; its absences are asserted rather than treated as omissions.
 //
-// One value cannot be checked by the build: `og:image` is an absolute URL
-// hardcoded in `marketing/partials/meta.html`, because a crawler reads it as a
-// literal string. Being absolute, it is invisible to the missing-asset check in
-// `vite/marketing.js` (Requirement 7.4) — so the origin is compared against
-// `CANONICAL_ORIGIN` and the file is looked for in the Build_Output here.
+// After origin independence, canonical and og:url are conditional on
+// PUBLIC_ORIGIN. Since the build sets no PUBLIC_ORIGIN, those fields are absent.
+// og:image is root-relative (/og.png) so it works at any origin.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  CANONICAL_ORIGIN,
   MARKETING_PAGES,
   NOT_FOUND_FILE,
 } from "../shared/site.js";
@@ -43,7 +40,7 @@ const notFoundFile = NOT_FOUND_FILE as string;
 
 /** Everything the emitted documents' metadata is derived from. */
 const SOURCE_DIRS = ["marketing", "public", "vite"];
-const SOURCE_FILES = ["vite.config.ts", "shared/site.js", "shared/plans.js"];
+const SOURCE_FILES = ["vite.config.ts", "shared/site.js"];
 /** The Build_Output files these assertions read. */
 const OUTPUTS = [...pages.map((page) => page.file), notFoundFile];
 
@@ -96,9 +93,6 @@ const ogContent = (doc: Document, property: string) =>
 
 const canonicalOf = (doc: Document) => attr(doc, 'link[rel="canonical"]', "href");
 
-/** The absolute URL a page's canonical and `og:url` must both carry (R8.2). */
-const canonicalUrlFor = (page: MarketingPage) => new URL(page.path, CANONICAL_ORIGIN).href;
-
 beforeAll(() => {
   buildIfStale();
   for (const file of OUTPUTS) {
@@ -127,16 +121,16 @@ describe.each(pages.map((page) => [page.path, page] as const))(
       expect(metaContent(doc, "description")).toBe(page.description);
     });
 
-    it("carries the absolute canonical URL of this page (R8.2)", () => {
-      expect(canonicalOf(documentFor(page.file))).toBe(canonicalUrlFor(page));
+    it("carries no canonical URL when PUBLIC_ORIGIN is unset at build time (R8.2)", () => {
+      expect(canonicalOf(documentFor(page.file))).toBeNull();
     });
 
-    it("carries the full Open Graph set with og:url equal to the canonical (R8.3)", () => {
+    it("carries the full Open Graph set (R8.3)", () => {
       const doc = documentFor(page.file);
       expect(ogContent(doc, "og:title")).toBe(page.title);
       expect(ogContent(doc, "og:description")).toBe(page.description);
       expect(ogContent(doc, "og:type")).toBe("website");
-      expect(ogContent(doc, "og:url")).toBe(canonicalUrlFor(page));
+      // og:url is absent when no PUBLIC_ORIGIN
       expect(ogContent(doc, "og:image")?.trim()).toBeTruthy();
     });
 
@@ -167,28 +161,21 @@ describe("the titles and descriptions are unique within the Marketing_Site (R8.1
     const descriptions = pages.map((page) => metaContent(documentFor(page.file), "description"));
     expect(new Set(descriptions).size).toBe(pages.length);
   });
-
-  it("gives every page a distinct canonical URL", () => {
-    const canonicals = pages.map((page) => canonicalOf(documentFor(page.file)));
-    expect(new Set(canonicals).size).toBe(pages.length);
-  });
 });
 
-describe("the og:image is a same-origin asset of the Canonical_Host (R8.4)", () => {
-  // The one value in the metadata that can drift silently: it is hardcoded
-  // absolute in the shared partial, so the build's missing-asset check skips it.
+describe("the og:image is a root-relative asset in the Build_Output (R8.4)", () => {
   it.each(pages.map((page) => [page.path, page] as const))(
-    "%s points at the Canonical_Host's own origin",
+    "%s uses a root-relative og:image path",
     (_path, page) => {
       const image = ogContent(documentFor(page.file), "og:image") ?? "";
-      expect(new URL(image).origin).toBe(new URL(CANONICAL_ORIGIN).origin);
+      expect(image.startsWith("/")).toBe(true);
     },
   );
 
   it("resolves to a file the Build_Output contains", () => {
     for (const page of pages) {
-      const image = new URL(ogContent(documentFor(page.file), "og:image") ?? "");
-      expect(existsSync(path.join(distDir, image.pathname))).toBe(true);
+      const image = ogContent(documentFor(page.file), "og:image") ?? "";
+      expect(existsSync(path.join(distDir, image.slice(1)))).toBe(true);
     }
   });
 
@@ -232,8 +219,7 @@ describe("the not-found document is metadata-complete but not indexable", () => 
     const doc = documentFor(notFoundFile);
     expect(ogContent(doc, "og:title")).toBe(doc.title);
     expect(metaContent(doc, "twitter:card")).toBe("summary_large_image");
-    expect(new URL(ogContent(doc, "og:image") ?? "").origin).toBe(
-      new URL(CANONICAL_ORIGIN).origin,
-    );
+    const image = ogContent(doc, "og:image") ?? "";
+    expect(image.startsWith("/")).toBe(true);
   });
 });

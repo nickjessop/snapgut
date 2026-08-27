@@ -10,9 +10,6 @@
  * `shared/site.d.ts` carries the types for the TypeScript side.
  */
 
-/** Absolute origin of the Canonical_Host, used for canonical URLs and the sitemap. */
-export const CANONICAL_ORIGIN = "https://snapgut.com";
-
 /**
  * The v1 marketing page set (Decision D1). `file` is the path of the emitted
  * document inside the Build_Output, relative to its root.
@@ -26,13 +23,6 @@ export const MARKETING_PAGES = [
       "A fast food and symptom diary that does the statistics properly. Snap a photo, log how you feel, and see which foods track with your symptoms.",
   },
   {
-    path: "/pricing",
-    file: "pricing.html",
-    title: "Pricing — SnapGut",
-    description:
-      "Logging, on-device stats, food ranking, and export are free forever. Pro adds AI meal recognition and insights. Monthly, yearly, and lifetime plans.",
-  },
-  {
     path: "/privacy",
     file: "privacy.html",
     title: "Privacy — SnapGut",
@@ -44,7 +34,7 @@ export const MARKETING_PAGES = [
     file: "terms.html",
     title: "Terms — SnapGut",
     description:
-      "The terms for using SnapGut: what the app does and does not claim, how billing and cancellation work, and what we each agree to.",
+      "The terms for using SnapGut: what the app does and does not claim, your responsibilities as the operator of a self-hosted instance, and what we each agree to.",
   },
 ];
 
@@ -93,16 +83,10 @@ export const indexablePaths = () => marketingPaths();
 /**
  * The names of the files the build generates into the Build_Output root.
  *
- * These are a contract between two sides that must not import each other: the
- * emitter in `vite/marketing.js` writes them, and the Origin_Server reads
- * `csp-hashes.json` at boot (Requirement 11.4). The server cannot import from
- * `vite/` — that is build-time code, and pulling it in would drag Vite into the
- * runtime — so the names live here, with the rest of the Route_Table, and both
- * sides read the one definition.
+ * Defined here so both `vite/marketing.js` (the emitter) and the Origin_Server
+ * (which serves them) share one definition.
  */
 export const GENERATED_FILES = Object.freeze({
   robots: "robots.txt",
   sitemap: "sitemap.xml",
-  cspHashes: "csp-hashes.json",
-  sizeReport: "size-report.json",
 });

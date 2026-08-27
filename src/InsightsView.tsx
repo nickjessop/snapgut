@@ -2,11 +2,10 @@ import { useEffect, useState } from "react";
 import { getEvents, type LogEvent } from "./db";
 import ConfirmOutcomes from "./ConfirmOutcomes";
 import { computeEvidence, type EvidenceSummary } from "./insights";
-import { getInsights, AuthError, UpgradeRequiredError } from "./api";
+import { getInsights, AuthError } from "./api";
 import { isStale, listInsights, recordInsight, type PastInsight } from "./insightHistory";
 import TriggerInfoSheet from "./TriggerInfoSheet";
 import { groupForLabel } from "./triggerInfo";
-import type { Entitlement } from "./session";
 import FoodsTab from "./FoodsTab";
 import HeaderStats from "./HeaderStats";
 import InfoNote from "./InfoNote";
@@ -31,22 +30,16 @@ interface AiInsight {
 
 interface Props {
   reloadKey?: number;
-  entitlement: Entitlement | null;
   /** Whether a session is held. The narrative needs one; the on-device stats
    *  above it do not, which is the whole point of deferring sign-in. */
   authed?: boolean;
-  onEntitlement?: (e?: Entitlement) => void;
-  onNeedUpgrade?: () => void;
   onNeedSignIn?: () => void;
   onSignedOut?: () => void;
 }
 
 export default function InsightsView({
   reloadKey = 0,
-  entitlement,
   authed = true,
-  onEntitlement,
-  onNeedUpgrade,
   onNeedSignIn,
   onSignedOut,
 }: Props) {
@@ -56,7 +49,7 @@ export default function InsightsView({
     <div className="insights">
       <div className="insights-header">
         <h1>Insights</h1>
-        <HeaderStats entitlement={entitlement} onUpgrade={() => onNeedUpgrade?.()} />
+        <HeaderStats />
       </div>
 
       <div className="tabs">
@@ -77,10 +70,7 @@ export default function InsightsView({
       {tab === "patterns" ? (
         <PatternsTab
           reloadKey={reloadKey}
-          entitlement={entitlement}
           authed={authed}
-          onEntitlement={onEntitlement}
-          onNeedUpgrade={onNeedUpgrade}
           onNeedSignIn={onNeedSignIn}
           onSignedOut={onSignedOut}
         />
@@ -93,54 +83,28 @@ export default function InsightsView({
 
 function PatternsTab({
   reloadKey,
-  entitlement,
   authed = true,
-  onEntitlement,
-  onNeedUpgrade,
   onNeedSignIn,
   onSignedOut,
 }: {
   reloadKey: number;
-  entitlement: Entitlement | null;
   authed?: boolean;
-  onEntitlement?: (e?: Entitlement) => void;
-  onNeedUpgrade?: () => void;
   onNeedSignIn?: () => void;
   onSignedOut?: () => void;
 }) {
   const [summary, setSummary] = useState<EvidenceSummary | null>(null);
-  /** Kept so the confirmation prompt can work from the same read as the summary. */
   const [events, setEvents] = useState<LogEvent[]>([]);
-  /** Bumped after an outcome is answered, to recompute without a full remount. */
   const [outcomeKey, setOutcomeKey] = useState(0);
   const [ai, setAi] = useState<AiInsight | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** Stored narratives, newest first. Read on mount, updated after each generation. */
   const [history, setHistory] = useState<PastInsight[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
-  /** The trigger label whose explanation sheet is open, if any. */
   const [explain, setExplain] = useState<string | null>(null);
 
-  const pro = entitlement?.pro ?? false;
-  const freeLeft = entitlement
-    ? Math.max(0, entitlement.freeAiLimit - entitlement.freeAiUsed)
-    : 0;
-
-  /**
-   * The insight on display, always the newest stored one.
-   *
-   * Read from history rather than from the `ai` response, because `generate` records
-   * before it returns and hands back the updated list — so the newest entry *is* the
-   * one just generated. Deriving it from `ai` instead meant fabricating a timestamp
-   * that could not match the stored copy, which then showed up twice: once pinned and
-   * once in the history list below.
-   */
   const latest: PastInsight | null = history[0] ?? null;
   const stale = isStale(latest);
-  /** Generated this session, or recent enough that a date would be noise. */
   const latestIsFresh = ai !== null || (latest !== null && !stale);
-  /** Everything except the one pinned above, so nothing is listed twice. */
   const older = history.slice(1);
 
   async function generate(ev: EvidenceSummary) {
@@ -149,9 +113,6 @@ function PatternsTab({
     try {
       const insight = await getInsights(ev);
       setAi(insight);
-      onEntitlement?.(insight.entitlement);
-      // Kept so leaving the tab no longer discards it. Awaited only for the
-      // returned list; a storage failure still leaves the insight on screen.
       setHistory(
         await recordInsight({
           headline: insight.headline,
@@ -163,7 +124,6 @@ function PatternsTab({
       );
     } catch (e) {
       if (e instanceof AuthError) onSignedOut?.();
-      else if (e instanceof UpgradeRequiredError) onNeedUpgrade?.();
       else setError((e as Error).message);
     } finally {
       setLoading(false);
@@ -181,20 +141,14 @@ function PatternsTab({
       setEvents(events);
       setHistory(stored);
 
-      // Pro used to regenerate on *every* visit to this tab, which spent an AI call
-      // to re-narrate data that had not changed. Now it regenerates only when the
-      // stored one has gone stale, and otherwise shows what is already there.
-      //
-      // A free user is never auto-generated for: their AI is a small fixed
-      // allowance, and spending one without being asked is not ours to do. They see
-      // the last one with its date and refresh when they choose.
-      if (pro && isStale(stored[0] ?? null)) generate(ev);
+      // Regenerate when the stored one has gone stale.
+      if (authed && isStale(stored[0] ?? null)) generate(ev);
     })();
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reloadKey, pro, outcomeKey]);
+  }, [reloadKey, authed, outcomeKey]);
 
   return (
     <>
@@ -247,11 +201,6 @@ function PatternsTab({
         </div>
       )}
 
-      {/* Gated on `summary` because both are set from the same read: mounting before
-          the events arrive would freeze an empty queue (see ConfirmOutcomes).
-          Deliberately *not* keyed on `outcomeKey` — an answer recomputes the numbers
-          above but must leave the list standing, or the row would disappear from under
-          the tap that just set it and take the undo with it. */}
       {summary && (
         <ConfirmOutcomes
           key={reloadKey}
@@ -265,10 +214,6 @@ function PatternsTab({
       {loading && <p className="status">Analyzing your patterns…</p>}
       {error && <div className="error-banner">Couldn't generate insights right now.</div>}
 
-      {/* The current read, pinned at the top and kept between visits. Before this it
-          was generated and discarded, so the screen had nothing to show until an AI
-          call completed — and a free user who had already spent their allowance saw
-          nothing at all. */}
       {latest && !loading && (
         <div className="insight-block">
           <div className="insight-head">
@@ -279,19 +224,9 @@ function PatternsTab({
             <button
               className="insight-refresh"
               onClick={() => summary && generate(summary)}
-              disabled={!summary || loading || (!pro && freeLeft === 0)}
-              aria-label={
-                pro
-                  ? "Refresh this insight"
-                  : `Refresh this insight — uses 1 of your ${freeLeft} free AI uses`
-              }
-              title={
-                pro
-                  ? "Refresh"
-                  : freeLeft > 0
-                    ? `Uses 1 of your ${freeLeft} free AI uses`
-                    : "No free AI uses left"
-              }
+              disabled={!summary || loading}
+              aria-label="Refresh this insight"
+              title="Refresh"
             >
               <RefreshIcon size={15} />
             </button>
@@ -302,15 +237,8 @@ function PatternsTab({
         </div>
       )}
 
-      {/* The offer to generate a first one. Suppressed once there is an insight on
-          screen, because refreshing it is the refresh control's job — two ways to ask
-          for the same thing, one of which spends an AI use, is how a free allowance
-          gets spent by accident.
-          Everything above this point — the stat cards, the associations, the Foods
-          ranking — is computed on the device and needs no account, so an anonymous
-          visitor sees their real patterns and is asked for an email only for the
-          narrative. */}
-      {!latest && !loading && !pro && summary && (
+      {/* The offer to generate a first one. */}
+      {!latest && !loading && summary && (
         <div className="ai-lock">
           <div className="ai-lock-title">
             <InsightsIcon size={16} />
@@ -320,30 +248,20 @@ function PatternsTab({
             <>
               <p className="ai-lock-sub">
                 Your patterns above are computed here on your device. The written
-                read-out runs on our server, so it needs an account — sign in and
-                your first {entitlement?.freeAiLimit ?? 10} AI uses are free.
+                read-out runs on our server, so it needs an account — sign in to
+                use AI.
               </p>
               <button className="primary" onClick={() => onNeedSignIn?.()}>
                 Sign in to use AI
               </button>
             </>
-          ) : freeLeft > 0 ? (
-            <>
-              <p className="ai-lock-sub">
-                Get an AI read on your patterns. Uses 1 of your {freeLeft} free AI
-                {freeLeft === 1 ? " use" : " uses"}.
-              </p>
-              <button className="primary reveal" onClick={() => generate(summary)}>
-                Reveal AI insight
-              </button>
-            </>
           ) : (
             <>
               <p className="ai-lock-sub">
-                You've used your free AI. Unlock unlimited AI insights with Pro.
+                Get an AI read on your patterns.
               </p>
-              <button className="primary" onClick={() => onNeedUpgrade?.()}>
-                Unlock Pro
+              <button className="primary reveal" onClick={() => generate(summary)}>
+                Reveal AI insight
               </button>
             </>
           )}
@@ -396,8 +314,6 @@ function PatternsTab({
             Symptoms within {summary.lagWindowHours}h of a meal are linked back to it.
           </InfoNote>
           {summary.associations.map((a, i) => {
-            // Only rows whose trigger we can actually explain become tappable —
-            // offering a tap that opens nothing is worse than not offering one.
             const explainable = groupForLabel(a.trigger) !== null;
             const body = (
               <>
@@ -428,8 +344,6 @@ function PatternsTab({
         </>
       )}
 
-      {/* Past insights. Collapsed by default: the current read is the point of the
-          screen, and history is for when someone goes looking. */}
       {older.length > 0 && (
         <div className="past-insights">
           <button
@@ -455,8 +369,6 @@ function PatternsTab({
                       year: "numeric",
                     })}
                     {p.mealCount != null && p.dayCount != null && (
-                      // The evidence behind it, so an older read can be judged on
-                      // what it actually had to work with.
                       <span className="past-meta">
                         {" · "}
                         {p.mealCount} meals over {p.dayCount} days

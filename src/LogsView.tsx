@@ -16,7 +16,6 @@ import {
   DeleteIcon,
   NoteIcon,
 } from "./icons";
-import type { Entitlement } from "./session";
 import HeaderStats from "./HeaderStats";
 
 
@@ -32,16 +31,12 @@ import { requestSync } from "./cloudSync";
 interface Props {
   onEdit: (event: LogEvent) => void;
   reloadKey: number;
-  entitlement: Entitlement | null;
-  onUpgrade: () => void;
   onOpenSettings: () => void;
 }
 
 export default function LogsView({
   onEdit,
   reloadKey,
-  entitlement,
-  onUpgrade,
   onOpenSettings,
 }: Props) {
   const [events, setEvents] = useState<LogEvent[]>([]);
@@ -132,7 +127,7 @@ export default function LogsView({
       <div className="history-header">
         <h1>Timeline</h1>
         <div className="header-right">
-          <HeaderStats entitlement={entitlement} streak={streak} onUpgrade={onUpgrade} />
+          <HeaderStats streak={streak} />
           <button className="icon-round" onClick={onOpenSettings} aria-label="Settings">
             <SettingsIcon size={20} />
           </button>

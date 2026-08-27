@@ -1,28 +1,21 @@
 // @vitest-environment node
 //
-// Claim safety and price parity, asserted against the built Marketing_Site.
+// Claim safety, asserted against the built Marketing_Site.
 //
-// Validates: Requirements 9.1, 9.2, 9.3
+// Validates: Requirements 9.1, 9.2
 //
-// Two guarantees live here, and both are deliberately checked against `dist/`
-// rather than against the templates:
+// One guarantee lives here, deliberately checked against `dist/` rather than
+// against the templates:
 //
-//   1. No Forbidden_Claim appears anywhere in a shipped Marketing_Page. The
-//      phrase-pattern list below is the maintained list Requirement 9.2 asks
-//      for, derived entry by entry from the "Claims we must not make" section of
-//      `docs/positioning.md`.
-//   2. Every price the pricing page displays equals its `shared/plans.js` value,
-//      and no plan outside the Plan_Catalog appears.
+//   No Forbidden_Claim appears anywhere in a shipped Marketing_Page. The
+//   phrase-pattern list below is the maintained list Requirement 9.2 asks
+//   for, derived entry by entry from the "Claims we must not make" section of
+//   `docs/positioning.md`.
 //
 // Why the built documents and not the sources. Copy reaches a page through the
-// partial injection of `vite/partials.js`, the plan table of `vite/pricing.js`,
-// and the flattening step of `vite/marketing.js`. A claim can therefore be
-// introduced by a partial, a Route_Table title or description, or a catalog
-// value — none of which a template scan would see. `src/pricing.plugin.test.ts`
-// already covers the renderer in isolation (`formatPrice`, `renderPlans`, the
-// marker transform, and the template's own freedom from figures); this file
-// deliberately asserts none of that, and instead reads only the emitted
-// `dist/pricing.html` to confirm what the shipped page actually says.
+// partial injection of `vite/partials.js` and the flattening step of
+// `vite/marketing.js`. A claim can therefore be introduced by a partial, a
+// Route_Table title or description — none of which a template scan would see.
 //
 // Source comments do *not* ship: `vite/marketing.js` strips them from the
 // flattened documents, so the editing notes in `marketing/` stay in the
@@ -70,9 +63,6 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { MARKETING_PAGES, NOT_FOUND_FILE } from "../shared/site.js";
-import { PLANS, type PlanId } from "../shared/plans.js";
-// @ts-ignore -- untyped ESM JavaScript (vite/ is not TypeScript)
-import { formatPrice } from "../vite/pricing.js";
 
 const repoRoot = path.resolve(__dirname, "..");
 const distDir = path.join(repoRoot, "dist");
@@ -81,9 +71,7 @@ const distDir = path.join(repoRoot, "dist");
 const CONTENT_SOURCES = [
   "marketing",
   "shared/site.js",
-  "shared/plans.js",
   "vite/partials.js",
-  "vite/pricing.js",
   "vite/marketing.js",
   "vite.config.ts",
 ];
@@ -360,22 +348,6 @@ const scanForClaims = (documentName: string, text: string): ClaimHit[] => {
   return hits;
 };
 
-// ── Price parity helpers ───────────────────────────────────────────────────
-
-/** One plan card as `vite/pricing.js` emits it, keyed by its catalog id. */
-const PLAN_CARD = /<li\b[^>]*data-plan="([^"]+)"[^>]*>([\s\S]*?)<\/li>/g;
-
-/** Any currency figure, wherever it appears in a document. */
-const CURRENCY_FIGURE = /\$\d[\d,]*(?:\.\d{1,2})?/g;
-
-const planIds = Object.keys(PLANS) as PlanId[];
-
-/** Figures the Plan_Catalog authorises: each price, plus any inside `per`. */
-const catalogFigures = new Set<string>([
-  ...planIds.map((id) => formatPrice(PLANS[id].price) as string),
-  ...planIds.flatMap((id) => PLANS[id].per.match(CURRENCY_FIGURE) ?? []),
-]);
-
 const marketingDocuments = [...MARKETING_PAGES.map((page) => page.file), NOT_FOUND_FILE];
 
 const built = new Map<string, string>();
@@ -435,54 +407,5 @@ describe("the phrase patterns still catch what they are for (R9.2)", () => {
     for (const sentence of approved) {
       expect(scanForClaims("approved", normalize(sentence)), sentence).toEqual([]);
     }
-  });
-});
-
-describe("the built pricing page's prices equal the Plan_Catalog's (R9.3)", () => {
-  const cards = () => {
-    const html = built.get("pricing.html")!;
-    PLAN_CARD.lastIndex = 0;
-    return new Map([...html.matchAll(PLAN_CARD)].map(([, id, body]) => [id, body]));
-  };
-
-  it.each(planIds)("%s displays its catalog price, label, and caption", (id) => {
-    const body = cards().get(id);
-    expect(body, `no card for plan "${id}" in the built pricing page`).toBeTruthy();
-    const plan = PLANS[id];
-    expect(body).toContain(formatPrice(plan.price));
-    expect(body).toContain(plan.label);
-    expect(body).toContain(plan.caption);
-    expect(body).toContain(plan.per);
-  });
-
-  it("displays no plan absent from the Plan_Catalog", () => {
-    expect([...cards().keys()].sort()).toEqual([...planIds].sort());
-  });
-
-  it("holds exactly one card in the plan table, per catalog entry", () => {
-    const table = built
-      .get("pricing.html")!
-      .split("</ul>")
-      .find((chunk) => chunk.includes("data-plan="))!;
-    expect(table.match(/<li\b/g) ?? []).toHaveLength(planIds.length);
-  });
-
-  it("shows no currency figure the Plan_Catalog does not authorise", () => {
-    const figures = built.get("pricing.html")!.match(CURRENCY_FIGURE) ?? [];
-    expect(figures.length).toBeGreaterThan(0);
-    expect([...new Set(figures)].filter((figure) => !catalogFigures.has(figure))).toEqual([]);
-  });
-
-  it("shows every catalog price somewhere on the page", () => {
-    const html = built.get("pricing.html")!;
-    for (const id of planIds) expect(html).toContain(formatPrice(PLANS[id].price));
-  });
-});
-
-describe("no other Marketing_Page names a price (R9.3)", () => {
-  // A figure anywhere else is by definition hand-written: only the pricing page
-  // renders from the Plan_Catalog, so a second copy can only drift.
-  it.each(marketingDocuments.filter((file) => file !== "pricing.html"))("%s", (file) => {
-    expect(built.get(file)!.match(CURRENCY_FIGURE) ?? []).toEqual([]);
   });
 });

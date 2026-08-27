@@ -57,7 +57,6 @@ vi.mock("./session", async (importOriginal) => {
 });
 
 import App from "./App";
-import { countLogSaved } from "./metrics";
 
 /** Every URL fetched during a test, so "no AI request was made" is checkable. */
 let calls: string[] = [];
@@ -199,53 +198,5 @@ describe("where the account is asked for", () => {
     // Neither control means anything without a session.
     expect(screen.queryByText("Sign out")).toBeNull();
     expect(screen.queryByText("Delete account & data")).toBeNull();
-  });
-});
-
-describe("the log counters", () => {
-  it("reports first_log once per device and log_saved every time", async () => {
-    countLogSaved();
-    countLogSaved();
-    countLogSaved();
-
-    const posted = calls.filter((u) => u.includes("/api/metrics"));
-    // Three saves, three ticks — but only the first is also a first log, because
-    // "did an anonymous visitor ever log anything" is a conversion, not a rate.
-    expect(posted).toHaveLength(4);
-
-    const bodies = (globalThis.fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock
-      .calls.map(([, init]) => String(init?.body));
-    expect(bodies.filter((b) => b.includes("first_log"))).toHaveLength(1);
-    expect(bodies.filter((b) => b.includes("log_saved"))).toHaveLength(3);
-  });
-
-  it("sends no identifier with a tick", async () => {
-    countLogSaved();
-
-    const [, init] = (
-      globalThis.fetch as unknown as { mock: { calls: [string, RequestInit][] } }
-    ).mock.calls[0];
-    // The event name and the build id, and nothing else. The build is shared by
-    // every client on a deploy, so it names a release rather than a person — and it
-    // is the only extra field allowed here. No device id, no session, no timestamp,
-    // so two ticks still cannot be known to share a device.
-    const body = JSON.parse(String(init?.body));
-    expect(Object.keys(body).sort()).toEqual(["build", "event"]);
-    expect(body.event).toBe("log_saved");
-    expect(body.build).toBe("0.0.0-test");
-    expect(init?.headers).not.toHaveProperty("Authorization");
-  });
-
-  it("never throws when the network is gone", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        throw new Error("offline");
-      })
-    );
-
-    // A counter that can break a save is worse than no counter at all.
-    expect(() => countLogSaved()).not.toThrow();
-    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
   });
 });

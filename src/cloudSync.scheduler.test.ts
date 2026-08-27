@@ -49,12 +49,14 @@ import {
 } from "./db";
 import { clearToken, setToken } from "./session";
 import {
-  applyEntitlement,
   clearPersistedSyncSettingsForTests,
   resetSyncSettingsForTests,
   restore as restoreSyncSettings,
   setDestinationEnabled,
 } from "./syncSettings";
+
+// Stub for removed entitlement function — tests will be cleaned up in task 1.8/1.9
+function applyEntitlement(_e: { pro: boolean; proUntil: number | null }): void {}
 import {
   TRIGGER_REASONS,
   arbTriggerSchedule,
@@ -325,7 +327,6 @@ async function setUpDevice(options: DeviceOptions = {}): Promise<void> {
 
   setToken("session-token-for-tests");
   await restoreSyncSettings();
-  applyEntitlement(PRO_ENTITLEMENT);
   setDestinationEnabled("cloud", true);
 
   await seedRecords(localRecords());
@@ -466,7 +467,6 @@ describe("requestSync (Property 18: at most one cycle runs, with at most one que
   it("queues zero cycles and issues zero requests while ineligible", async () => {
     const arbCause = fc.constantFrom(
       "disabled" as const,
-      "no-pro" as const,
       "no-session" as const,
       "offline" as const,
     );
@@ -485,7 +485,6 @@ describe("requestSync (Property 18: at most one cycle runs, with at most one que
           // Req 11.6, 11.8 — one of the four conditions that makes every trigger
           // a no-op.
           if (cause === "disabled") setDestinationEnabled("cloud", false);
-          if (cause === "no-pro") applyEntitlement(NO_PRO_ENTITLEMENT);
           if (cause === "no-session") clearToken();
           if (cause === "offline") {
             onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
@@ -520,7 +519,7 @@ describe("requestSync (Property 18: at most one cycle runs, with at most one que
   });
 
   it("discards the queued rerun when the destination stopped being usable", async () => {
-    const arbCause = fc.constantFrom("disabled" as const, "no-pro" as const, "no-session" as const);
+    const arbCause = fc.constantFrom("disabled" as const, "no-session" as const);
     const arbBurst = fc.integer({ min: 1, max: 5 });
 
     await fc.assert(
@@ -558,13 +557,7 @@ describe("requestSync (Property 18: at most one cycle runs, with at most one que
           expect(service.pulls).toBe(1);
 
           // Req 11.10 — the destination stops being usable before the rerun runs.
-          // A Pro_Lapse is reported by the Sync_Service too, since the transport
-          // funnels every answer's entitlement into `syncSettings`.
           if (cause === "disabled") setDestinationEnabled("cloud", false);
-          if (cause === "no-pro") {
-            applyEntitlement(NO_PRO_ENTITLEMENT);
-            service.entitlement = NO_PRO_ENTITLEMENT;
-          }
           if (cause === "no-session") clearToken();
 
           service.release("success");

@@ -40,8 +40,6 @@ FODMAP subgroups + representative test foods:
 - **Differentiation + legitimacy:** Monash's app is a dry clinical reference/diary;
   competitors are passive diaries. A photo-first, AI-assisted, guided reintroduction
   coach is an unfilled niche.
-- **Monetization:** "Unlock the guided FODMAP program" is a far stronger Pro anchor
-  than "unlimited AI snaps." Outcome-oriented → reviews + word of mouth.
 
 ## How it works (mapped to the app)
 - **Phase state machine** per user (phase, current challenge, day N) stored with events.
@@ -83,7 +81,7 @@ them, gently, if their dish likely contains foods they should be avoiding.
 - **Snap-time heads-up** in MealDetails (above).
 - **Reuses:** event timeline (challenges = tagged events), FODMAP tagging (avoid-flags
   + test foods), insights correlation (verdicts), layered AI prompts (Pro coaching).
-- **Opt-in + Pro-gated:** passive tracking stays the default; the program is premium.
+- **Opt-in:** passive tracking stays the default; the program is an explicit choice.
 
 ## Caveats / risks
 - Medical framing + disordered-eating screening (above).
@@ -104,5 +102,4 @@ guided. Full elimination food guidance later, if we license/assemble a FODMAP da
 - Program card + daily-task banner components; MealDetails FODMAP flag.
 - Extend `fodmap.ts` tags → per-subgroup test-food catalog.
 - Personal report screen (reuses Foods/insights styling).
-- Store: persist program state (local; syncs with future cloud sync).
-- Pro gate + disclaimers + optional DE-risk screen at onboarding into the program.
+- Store: persist program state (local; syncs with cloud sync).

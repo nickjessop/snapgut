@@ -89,7 +89,6 @@ const arbActivity: fc.Arbitrary<DestinationActivity> = arbNow.chain((now) =>
   fc.record({
     enabled: fc.boolean(),
     configured: fc.boolean(),
-    entitled: fc.boolean(),
     outcome: arbOutcome(now),
     now: fc.constant(now),
   }),
@@ -100,19 +99,17 @@ const arbActiveActivity: fc.Arbitrary<DestinationActivity> = arbActivity.map((a)
   ...a,
   enabled: true,
   configured: true,
-  entitled: true,
   outcome:
     a.outcome.lastOutcome === "failure"
       ? { ...a.outcome, lastOutcome: "success" as const, lastSuccessAt: a.now }
       : a.outcome,
 }));
 
-type MissingCondition = "enabled" | "configured" | "entitled" | "failing";
+type MissingCondition = "enabled" | "configured" | "failing";
 
 const MISSING_CONDITIONS: readonly MissingCondition[] = [
   "enabled",
   "configured",
-  "entitled",
   "failing",
 ];
 
@@ -125,8 +122,6 @@ const arbInactiveActivity: fc.Arbitrary<DestinationActivity> = fc
         return { ...a, enabled: false };
       case "configured":
         return { ...a, configured: false };
-      case "entitled":
-        return { ...a, entitled: false };
       case "failing":
         return {
           ...a,
@@ -318,11 +313,11 @@ function expectedActive(a: DestinationActivity): boolean {
   const failing =
     a.outcome.lastOutcome === "failure" &&
     (a.outcome.lastSuccessAt === null || a.now - a.outcome.lastSuccessAt > FAILING_GRACE_MS);
-  return a.enabled && a.configured && a.entitled && !failing;
+  return a.enabled && a.configured && !failing;
 }
 
-describe("Property 17: destination activity requires all four conditions", () => {
-  it("is true if and only if enabled, configured, entitled, and not failing", () => {
+describe("Property 17: destination activity requires all three conditions", () => {
+  it("is true if and only if enabled, configured, and not failing", () => {
     fc.assert(
       fc.property(arbActivity, (a) => {
         expect(isDestinationActive(a)).toBe(expectedActive(a));
@@ -336,7 +331,6 @@ describe("Property 17: destination activity requires all four conditions", () =>
       fc.property(arbActivity, (a) => {
         expect(isDestinationActive({ ...a, enabled: false })).toBe(false);
         expect(isDestinationActive({ ...a, configured: false })).toBe(false);
-        expect(isDestinationActive({ ...a, entitled: false })).toBe(false);
         expect(
           isDestinationActive({
             ...a,
@@ -350,7 +344,6 @@ describe("Property 17: destination activity requires all four conditions", () =>
             ...a,
             enabled: true,
             configured: true,
-            entitled: true,
             outcome: { ...a.outcome, lastOutcome: "success", lastSuccessAt: a.now },
           }),
         ).toBe(true);
@@ -362,7 +355,7 @@ describe("Property 17: destination activity requires all four conditions", () =>
   it("treats a failure as terminal only once 72 hours have passed without a success", () => {
     fc.assert(
       fc.property(arbNow, arbSuccessAge, (now, age) => {
-        const base = { enabled: true, configured: true, entitled: true, now };
+        const base = { enabled: true, configured: true, now };
         const withSuccessAge = (lastOutcome: DestinationOutcome["lastOutcome"]) => ({
           ...base,
           outcome: { lastOutcome, lastSuccessAt: now - age, lastFailureAt: now },
@@ -381,7 +374,7 @@ describe("Property 17: destination activity requires all four conditions", () =>
 
   it("pins the 72-hour boundary and the never-succeeded case", () => {
     const now = 1_700_000_000_000;
-    const base = { enabled: true, configured: true, entitled: true, now };
+    const base = { enabled: true, configured: true, now };
     const failedWithSuccessAt = (lastSuccessAt: number | null) =>
       isDestinationActive({
         ...base,

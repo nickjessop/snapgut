@@ -303,8 +303,8 @@ describe("cloud copy deletion", () => {
     expect(await store.countFor(email)).toBe(0);
 
     // The account and its entitlement live in the user store and are untouched.
-    expect(await users.getUser(email)).toMatchObject({ email, pro: true });
-    expect(verifyToken(token)).toBe(email);
+    expect(await users.getUser(email)).toMatchObject({ email });
+    expect(verifyToken(token, process.env.SESSION_SECRET || "test-secret-for-vitest-only-do-not-use-in-production")).toBe(email);
 
     // Every cursor issued before the purge now reports invalid, so a device
     // holding one re-enqueues its timeline instead of skipping it (Req 17.5).
@@ -342,8 +342,8 @@ describe("cloud copy deletion", () => {
     // Nothing was removed, and the account is still usable, so the client can
     // simply repeat the request (Req 17.2).
     expect(await store.countFor(email)).toBe(1);
-    expect(await users.getUser(email)).toMatchObject({ email, pro: true });
-    expect(verifyToken(token)).toBe(email);
+    expect(await users.getUser(email)).toMatchObject({ email });
+    expect(verifyToken(token, process.env.SESSION_SECRET || "test-secret-for-vitest-only-do-not-use-in-production")).toBe(email);
   });
 });
 
@@ -395,8 +395,8 @@ describe("account deletion ordering", () => {
     // The user record, the entitlement, and the Session_Token all survive, so the
     // account remains usable and the request can be repeated (Req 17.2).
     expect(await store.countFor(email)).toBe(1);
-    expect(await users.getUser(email)).toMatchObject({ email, pro: true });
-    expect(verifyToken(token)).toBe(email);
+    expect(await users.getUser(email)).toMatchObject({ email });
+    expect(verifyToken(token, process.env.SESSION_SECRET || "test-secret-for-vitest-only-do-not-use-in-production")).toBe(email);
   });
 
   it("fails safe when the purge errors", async () => {
@@ -416,8 +416,8 @@ describe("account deletion ordering", () => {
 
     vi.restoreAllMocks();
     expect(await store.countFor(email)).toBe(1);
-    expect(await users.getUser(email)).toMatchObject({ email, pro: true });
-    expect(verifyToken(token)).toBe(email);
+    expect(await users.getUser(email)).toMatchObject({ email });
+    expect(verifyToken(token, process.env.SESSION_SECRET || "test-secret-for-vitest-only-do-not-use-in-production")).toBe(email);
     expectRedacted(token);
   });
 });

@@ -621,7 +621,6 @@ export const arbClockSequence: fc.Arbitrary<number[]> = fc
 /** Mirrors the `SyncStateInput` shape from design.md; task 8.5 owns the real type. */
 export interface SyncStateInputLike {
   hasSession: boolean;
-  pro: boolean;
   enabled: boolean;
   cycleInProgress: boolean;
   lastCycleFailed: boolean;
@@ -631,7 +630,6 @@ export interface SyncStateInputLike {
   lastSyncAt: number | null;
   skipped: number;
   restoreMerged: number | null;
-  daysUntilPurge: number | null;
 }
 
 /**
@@ -641,7 +639,6 @@ export interface SyncStateInputLike {
  */
 export const arbSyncStateInput: fc.Arbitrary<SyncStateInputLike> = fc.record({
   hasSession: fc.boolean(),
-  pro: fc.boolean(),
   enabled: fc.boolean(),
   cycleInProgress: fc.boolean(),
   lastCycleFailed: fc.boolean(),
@@ -665,10 +662,6 @@ export const arbSyncStateInput: fc.Arbitrary<SyncStateInputLike> = fc.record({
   restoreMerged: fc.oneof(
     { arbitrary: fc.constant(null), weight: 2 },
     { arbitrary: fc.integer({ min: 0, max: 100_000 }), weight: 1 },
-  ),
-  daysUntilPurge: fc.oneof(
-    { arbitrary: fc.constant(null), weight: 2 },
-    { arbitrary: fc.integer({ min: 0, max: 90 }), weight: 1 },
   ),
 });
 

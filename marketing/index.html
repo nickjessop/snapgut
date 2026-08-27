@@ -15,13 +15,7 @@
   it is presented as a Pro feature, never as free and never as forthcoming
   (Req 9.4).
 
-  Pro covers two things, and the page says so in both places it comes up: the AI
-  features, and syncing — to SnapGut Cloud or to a Google Sheet the reader owns.
-  Neither is offered on the free tier, so neither may be described as if it were.
-
-  No prices appear here. `/pricing` renders them from the Plan_Catalog in
-  `shared/plans.js` at build time, and repeating a number on this page is exactly
-  the drift Requirement 9.3 exists to catch.
+  In self-hosted mode, every feature is included with no tiers or paywalls.
 
   The illustrations come from `scripts/gen-marketing-images.mjs`, which sends the
   same locked style clause as the food pack, so the art on this page and the 3,036
@@ -64,31 +58,7 @@
          failed load leaves this page readable (Req 6.7). -->
     <script type="module" src="/marketing/standalone.ts"></script>
 
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@graph": [
-          {
-            "@type": "WebSite",
-            "@id": "https://snapgut.com/#website",
-            "url": "https://snapgut.com/",
-            "name": "SnapGut",
-            "inLanguage": "en"
-          },
-          {
-            "@type": "WebApplication",
-            "@id": "https://snapgut.com/#app",
-            "name": "SnapGut",
-            "url": "https://snapgut.com/",
-            "applicationCategory": "LifestyleApplication",
-            "operatingSystem": "Any device with a modern web browser",
-            "browserRequirements": "Requires a browser with camera access",
-            "isPartOf": { "@id": "https://snapgut.com/#website" },
-            "description": "A food and symptom diary that logs meals from a photo and shows which foods track with your symptoms, measured against your own baseline."
-          }
-        ]
-      }
-    </script>
+
   </head>
   <body>
     <!--#include header-->
@@ -116,7 +86,6 @@
 
             <p class="btn-row">
               <a class="btn btn-primary" href="/login">Open the app</a>
-              <a class="btn btn-secondary" href="/pricing">See pricing</a>
             </p>
 
             <p class="note">No download. Open a link and start.</p>
@@ -428,45 +397,33 @@
         </div>
       </section>
 
-      <!-- Free versus Pro, without a single price — /pricing renders those from
-           the Plan_Catalog (Req 9.3, 9.8). -->
       <section class="section">
         <div class="wrap">
-          <h2>Free to log. Pro adds AI and sync.</h2>
+          <h2>Everything included</h2>
 
           <p class="lede">
-            Pro adds two things: the AI features, and sync — either to SnapGut Cloud
-            on our servers, or to a Google Sheet you own.
+            Self-hosted means you get every feature. No tiers, no paywalls.
           </p>
 
-          <!-- Pro first: it is the plan being sold, and the free column reads
-               better as the reassurance underneath it than as the opener. -->
           <ul class="grid">
             <li class="card card-featured">
-              <h3>Pro <span class="badge">AI + sync</span></h3>
+              <h3>All features <span class="badge">included</span></h3>
               <ul class="checklist">
-                <li><strong>AI:</strong> photo recognition on every meal</li>
+                <li><strong>AI:</strong> photo recognition with your own model</li>
                 <li><strong>AI:</strong> written insights over your own patterns</li>
-                <li><strong>Sync:</strong> cross-device, through SnapGut Cloud</li>
-                <li><strong>Sync:</strong> a mirror in a Google Sheet you own</li>
-              </ul>
-              <p class="note">
-                Pro buys the AI and the syncing, not access to your own history.
-                Logging, your stats, and export are never paywalled.
-              </p>
-            </li>
-            <li class="card">
-              <h3>Free forever</h3>
-              <ul class="checklist">
+                <li><strong>Sync:</strong> cross-device, through your own server</li>
                 <li>Manual logging, for as long as you want it</li>
                 <li>On-device statistics and food ranking</li>
                 <li>CSV and JSON export</li>
               </ul>
+              <p class="note">
+                Your data stays on your machine. Bring your own AI provider.
+              </p>
             </li>
           </ul>
 
           <p class="btn-row">
-            <a class="btn btn-primary" href="/pricing">See the plans</a>
+            <a class="btn btn-primary" href="/login">Open the app</a>
           </p>
         </div>
       </section>

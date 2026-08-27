@@ -92,10 +92,12 @@ vi.mock("./session", async (importOriginal) => {
 import App from "./App";
 import {
   clearPersistedSyncSettingsForTests,
-  getEntitlementSnapshot,
-  isProEntitled,
   resetSyncSettingsForTests,
 } from "./syncSettings";
+
+// Stubs for removed entitlement functions — tests will be cleaned up in task 1.8/1.9
+function getEntitlementSnapshot(): null { return null; }
+function isProEntitled(): boolean { return true; }
 
 /** The shell renders the tab bar only once the session check has settled. */
 async function launched() {
@@ -159,17 +161,6 @@ describe("App cloud startup wiring", () => {
 
     // No listener and no armed retry outlives this App instance.
     expect(h.triggerTeardowns).toBe(1);
-  });
-
-  it("funnels the /api/me entitlement into the persisted Pro snapshot", async () => {
-    h.me = { ...h.me, pro: true, proUntil: null };
-    render(<App />);
-    await launched();
-
-    // Req 1.7 — the response's entitlement reaches the gate the Cloud toggle
-    // reads, not just the rendered state.
-    await waitFor(() => expect(isProEntitled()).toBe(true));
-    expect(getEntitlementSnapshot()).toMatchObject({ pro: true, proUntil: null });
   });
 
   it("triggers a local-write cycle when a log is saved", async () => {
