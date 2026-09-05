@@ -17,7 +17,7 @@
     "preview": "npm run build && node server/main.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "ci": "npm run typecheck && npm test && npm run build"
+    "ci": "npm run typecheck && npm run build && npm test"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
@@ -32,6 +32,8 @@
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
+    "@types/jsdom": "^21.1.7",
+    "@types/node": "^24.13.3",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",

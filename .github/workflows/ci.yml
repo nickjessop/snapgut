@@ -53,11 +53,17 @@ jobs:
       - name: Typecheck (tsc --noEmit)
         run: npm run typecheck
 
-      - name: Unit and property tests (vitest run)
-        run: npm test
-
+      # The build has to precede the tests. `dist/` is gitignored, so a fresh
+      # checkout has none, and src/marketing.isolation.test.ts,
+      # src/pwa.offline.test.ts and src/marketing.budget.test.ts assert against
+      # the built output — they compare the marketing documents' module graphs
+      # against the app bundle and check the service-worker precache manifest.
+      # Run them first and seven fail for want of an artifact rather than a bug.
       - name: Production build (vite build)
         run: npm run build
+
+      - name: Unit and property tests (vitest run)
+        run: npm test
 
   docker:
     name: Docker image build
