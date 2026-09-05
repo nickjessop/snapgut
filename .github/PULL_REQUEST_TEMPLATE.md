@@ -21,9 +21,8 @@
 
 ## Checklist
 
-- [ ] `npm test` passes
-- [ ] `npm run typecheck` passes
-- [ ] `npm run build` passes
+- [ ] `npm run ci` passes (typecheck, then build, then test — in that order)
+- [ ] Ran on Node 24 or newer
 - [ ] Docs updated if behaviour or configuration changed
 - [ ] `.env.example` updated if a new env var was added
 - [ ] No unrelated reformatting in the diff

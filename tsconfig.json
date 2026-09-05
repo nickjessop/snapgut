@@ -11,7 +11,17 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "types": ["vitest/globals"],
+    // An explicit `types` array switches off automatic @types discovery, so every
+    // global the suite relies on has to be named here. "node" is listed because
+    // tests under src/ import node:fs, node:path, node:os, node:buffer and
+    // node:sqlite, and read `process` and `__dirname`. It resolved by accident
+    // until now: @types/node reached node_modules only as an optional peer of
+    // vite/vitest and as a dependency of an @types/request left behind by the
+    // removed Google Cloud packages. A clean install on a newer npm skips
+    // undeclared optional peers, so CI saw 132 errors that no local run did.
+    // @types/node is now a real devDependency, pinned to the major that matches
+    // engines.node (">=24") so a Node 26-only API cannot slip past the floor.
+    "types": ["vitest/globals", "node"],
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,

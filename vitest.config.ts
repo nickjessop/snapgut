@@ -29,6 +29,9 @@ export default defineConfig({
     // glob would turn the CI gate green while asserting nothing at all — the
     // one failure the gate exists to catch.
     passWithNoTests: false,
+    // Node >= 22 installs a broken `localStorage` global that shadows jsdom's.
+    // See the file for why this is repaired here rather than with a CLI flag.
+    setupFiles: ["./src/test/webStorageSetup.ts"],
     env: {
       DATASTORE_BACKEND: "memory",
     },

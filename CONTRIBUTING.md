@@ -46,13 +46,32 @@ node --env-file=.env server/main.js      # API server with .env loaded by Node
 
 ## Checks a change must pass
 
-Run all three before opening a pull request:
+One command runs everything CI runs, in the order CI runs it:
 
 ```bash
-npm test          # vitest, the whole suite
+npm run ci
+```
+
+That is `typecheck`, then `build`, then `test`. Individually:
+
+```bash
 npm run typecheck # tsc --noEmit
 npm run build     # vite production build
+npm test          # vitest, the whole suite
 ```
+
+**Build before you test.** `dist/` is gitignored, and a few tests assert against the built
+output — `marketing.isolation.test.ts` compares the marketing documents' module graphs against
+the app bundle, `pwa.offline.test.ts` checks the service-worker precache manifest, and
+`marketing.budget.test.ts` checks asset sizes. On a fresh clone with no `dist/`, running `npm
+test` first fails seven of them for want of an artifact rather than because anything is wrong.
+For the same reason, rebuild after changing anything under `marketing/` or `vite/`, or those
+tests will be measuring a stale `dist/`.
+
+Node 24 or newer is required, and not only by `engines`. Below it the suite gives misleading
+results: `node:sqlite` does not exist, so the SQLite tests cannot run, and Node's own
+`localStorage` global — the thing `src/test/webStorageSetup.ts` repairs — is absent, so you
+will not exercise what CI exercises.
 
 ## Project layout
 
