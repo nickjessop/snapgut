@@ -1,0 +1,78 @@
+# The gate for pushes to master and for every pull request targeting it.
+#
+# `npm run ci` runs the same three checks locally in the same order, so a
+# contributor can reproduce a red run without reading this file. The steps are
+# split out here (rather than invoking `npm run ci`) so a failed check names
+# itself in the PR check list instead of hiding inside one combined step.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+# Read-only by default. Neither job writes to the repository, publishes a
+# package, or pushes an image, so nothing here needs a broader token.
+permissions:
+  contents: read
+
+# One in-flight run per ref. A force-push supersedes its predecessor rather
+# than queueing behind it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      # Report every version's result. A failure on the Current line should not
+      # hide a pass on the supported one, or the reverse.
+      fail-fast: false
+      matrix:
+        # 24 is the floor: `engines.node` requires it and the server depends on
+        # the built-in `node:sqlite`. 26 is the Current line, kept in the matrix
+        # so a break shows up here first.
+        node: ["24", "26"]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node ${{ matrix.node }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies (npm ci)
+        run: npm ci
+
+      - name: Typecheck (tsc --noEmit)
+        run: npm run typecheck
+
+      - name: Unit and property tests (vitest run)
+        run: npm test
+
+      - name: Production build (vite build)
+        run: npm run build
+
+  docker:
+    name: Docker image build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

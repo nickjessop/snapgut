@@ -2,8 +2,11 @@
 
 import { createOllamaProvider } from "./ollama.js";
 import { createOpenaiProvider } from "./openai.js";
+import { createAnthropicProvider } from "./anthropic.js";
 import { createGeminiProvider } from "./gemini.js";
 import { createMockProvider } from "./mock.js";
+
+export { normalizeBaseUrl, joinApiPath, mergeHeaders } from "./url.js";
 
 /**
  * @typedef {{ prompt: string, image?: { data: string, mimeType: string },
@@ -24,7 +27,15 @@ export class ConfigError extends Error {
   }
 }
 
-const SUPPORTED_PROVIDERS = ["ollama", "openai", "gemini", "mock"];
+const SUPPORTED_PROVIDERS = [
+  "ollama",
+  "openai",
+  "openai-compatible",
+  "litellm",
+  "anthropic",
+  "gemini",
+  "mock",
+];
 
 /**
  * Create an AI provider from the application config.
@@ -33,13 +44,18 @@ const SUPPORTED_PROVIDERS = ["ollama", "openai", "gemini", "mock"];
  * @throws {ConfigError} on an unknown provider or missing required setting.
  */
 export function createAiProvider(config) {
-  const { provider, baseUrl, model, apiKey } = config.ai;
+  const { provider, baseUrl, model, apiKey, jsonMode, extraHeaders } = config.ai;
 
   if (!SUPPORTED_PROVIDERS.includes(provider)) {
     throw new ConfigError(
       `Unknown AI provider "${provider}". Supported values: ${SUPPORTED_PROVIDERS.join(", ")}`
     );
   }
+
+  // config.js applies these defaults too; repeated here so a hand-built config object
+  // with baseUrl: null still works.
+  const mode = jsonMode || "auto";
+  const headers = extraHeaders || null;
 
   switch (provider) {
     case "ollama": {
@@ -49,7 +65,12 @@ export function createAiProvider(config) {
           `AI provider "ollama" requires a base URL (AI_BASE_URL). Default: http://127.0.0.1:11434`
         );
       }
-      return createOllamaProvider({ baseUrl: url, model });
+      return createOllamaProvider({
+        baseUrl: url,
+        model,
+        jsonMode: mode,
+        extraHeaders: headers,
+      });
     }
 
     case "openai": {
@@ -59,7 +80,64 @@ export function createAiProvider(config) {
           `AI provider "openai" requires a base URL (AI_BASE_URL). Default: https://api.openai.com`
         );
       }
-      return createOpenaiProvider({ baseUrl: url, model, apiKey });
+      return createOpenaiProvider({
+        baseUrl: url,
+        model,
+        apiKey,
+        name: "openai",
+        jsonMode: mode,
+        extraHeaders: headers,
+      });
+    }
+
+    case "litellm": {
+      const url = baseUrl || "http://127.0.0.1:4000";
+      if (!url || !url.trim()) {
+        throw new ConfigError(
+          `AI provider "litellm" requires a base URL (AI_BASE_URL). Default: http://127.0.0.1:4000`
+        );
+      }
+      return createOpenaiProvider({
+        baseUrl: url,
+        model,
+        apiKey,
+        name: "litellm",
+        jsonMode: mode,
+        extraHeaders: headers,
+      });
+    }
+
+    case "openai-compatible": {
+      if (!baseUrl || !baseUrl.trim()) {
+        throw new ConfigError(
+          `AI provider "openai-compatible" requires a base URL (AI_BASE_URL). ` +
+            `There is no default — point it at your gateway, e.g. http://127.0.0.1:8000/v1`
+        );
+      }
+      return createOpenaiProvider({
+        baseUrl,
+        model,
+        apiKey,
+        name: "openai-compatible",
+        jsonMode: mode,
+        extraHeaders: headers,
+      });
+    }
+
+    case "anthropic": {
+      if (!apiKey || !apiKey.trim()) {
+        throw new ConfigError(
+          `AI provider "anthropic" requires an API key (AI_API_KEY).`
+        );
+      }
+      const url = baseUrl || "https://api.anthropic.com";
+      return createAnthropicProvider({
+        baseUrl: url,
+        model,
+        apiKey,
+        jsonMode: mode,
+        extraHeaders: headers,
+      });
     }
 
     case "gemini": {
@@ -68,7 +146,14 @@ export function createAiProvider(config) {
           `AI provider "gemini" requires an API key (AI_API_KEY).`
         );
       }
-      return createGeminiProvider({ model, apiKey });
+      const url = baseUrl || "https://generativelanguage.googleapis.com";
+      return createGeminiProvider({
+        baseUrl: url,
+        model,
+        apiKey,
+        jsonMode: mode,
+        extraHeaders: headers,
+      });
     }
 
     case "mock": {

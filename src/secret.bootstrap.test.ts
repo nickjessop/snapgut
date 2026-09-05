@@ -13,6 +13,7 @@ import { mkdtempSync, rmSync, readFileSync, writeFileSync, statSync } from "node
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
+// @ts-ignore -- untyped ESM JavaScript
 import { resolveSessionSecret } from "../server/secret.js";
 
 function makeTempDir(): string {

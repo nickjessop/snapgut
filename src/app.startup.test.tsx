@@ -12,20 +12,16 @@ import { ONBOARDED_KEY } from "./Intro";
 //   - the ambient triggers are installed on mount and torn down on unmount
 //     (Req 11.4, 11.9)
 //   - saving a log triggers a `local-write` cycle (Req 11.1)
-//   - the `/api/me` entitlement lands in the persisted Pro snapshot (Req 1.7)
 //
-// Validates: Requirements 1.7, 3.9, 5.6, 11.1, 11.2, 11.4, 11.9
+// Validates: Requirements 3.9, 5.6, 11.1, 11.2, 11.4, 11.9
 
 const h = vi.hoisted(() => ({
   /** Every observed startup step, in the order the shell ran it. */
   steps: [] as string[],
   triggerTeardowns: 0,
+  /** What `/api/me` answers: the endpoint returns the email and nothing else. */
   me: {
     email: "a@b.c",
-    pro: false as boolean,
-    proUntil: null as number | null,
-    freeAiUsed: 0,
-    freeAiLimit: 5,
   },
 }));
 
@@ -67,8 +63,8 @@ vi.mock("./cloudSync", async (importOriginal) => {
   };
 });
 
-// `restore()` keeps its real behaviour — the entitlement funnel assertion reads
-// the real snapshot — and only reports that it ran.
+// `restore()` keeps its real behaviour — the ordering assertions observe the real
+// restore, not a stub — and only reports that it ran.
 vi.mock("./syncSettings", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./syncSettings")>();
   return {
@@ -95,10 +91,6 @@ import {
   resetSyncSettingsForTests,
 } from "./syncSettings";
 
-// Stubs for removed entitlement functions — tests will be cleaned up in task 1.8/1.9
-function getEntitlementSnapshot(): null { return null; }
-function isProEntitled(): boolean { return true; }
-
 /** The shell renders the tab bar only once the session check has settled. */
 async function launched() {
   await screen.findByLabelText("Add log");
@@ -108,13 +100,7 @@ describe("App cloud startup wiring", () => {
   beforeEach(() => {
     h.steps = [];
     h.triggerTeardowns = 0;
-    h.me = {
-      email: "a@b.c",
-      pro: false,
-      proUntil: null,
-      freeAiUsed: 0,
-      freeAiLimit: 5,
-    };
+    h.me = { email: "a@b.c" };
     localStorage.clear();
     localStorage.setItem(ONBOARDED_KEY, "1");
     resetSyncSettingsForTests();

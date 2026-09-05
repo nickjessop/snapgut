@@ -1,12 +1,27 @@
 // OpenAI-compatible AI provider adapter — calls POST {baseUrl}/v1/chat/completions.
+// Shared by the "openai", "litellm" and "openai-compatible" providers; `name` only
+// changes the label used in the ai log line.
+
+import { joinApiPath, mergeHeaders } from "./url.js";
 
 /**
- * @param {{ baseUrl: string, model: string, apiKey: string|null }} opts
+ * @param {{ baseUrl: string, model: string, apiKey: string|null, name?: string,
+ *           jsonMode?: "auto"|"json_object"|"off",
+ *           extraHeaders?: Record<string, string>|null }} opts
  * @returns {import("./index.js").AiProvider}
  */
-export function createOpenaiProvider({ baseUrl, model, apiKey }) {
+export function createOpenaiProvider({
+  baseUrl,
+  model,
+  apiKey,
+  name = "openai",
+  jsonMode = "auto",
+  extraHeaders = null,
+}) {
+  const url = joinApiPath(baseUrl, "/v1/chat/completions");
+
   return {
-    name: "openai",
+    name,
     model,
 
     /**
@@ -36,17 +51,18 @@ export function createOpenaiProvider({ baseUrl, model, apiKey }) {
 
       /** @type {Record<string, any>} */
       const body = { model, messages };
-      if (json) {
+      if (json && jsonMode !== "off") {
         body.response_format = { type: "json_object" };
       }
 
       /** @type {Record<string, string>} */
-      const headers = { "Content-Type": "application/json" };
+      const own = { "Content-Type": "application/json" };
       if (apiKey) {
-        headers["Authorization"] = `Bearer ${apiKey}`;
+        own["Authorization"] = `Bearer ${apiKey}`;
       }
+      const headers = mergeHeaders(own, extraHeaders);
 
-      const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+      const res = await fetch(url, {
         method: "POST",
         headers,
         body: JSON.stringify(body),

@@ -2082,8 +2082,8 @@ body {
 
 /* ---------- Install nudge ----------
    Was an inline card in the Logs list; now a sheet raised over the tab shell, so it
-   is seen wherever the user is rather than only on one tab. Borrows the paywall's
-   head styles, since it is the same kind of ask. */
+   is seen wherever the user is rather than only on one tab. Borrows the shared
+   bottom-sheet head styles, since it is the same kind of ask. */
 .install-steps {
   margin: 0 2px 14px;
   padding-left: 22px;
@@ -2470,128 +2470,25 @@ body {
   margin: 0;
 }
 
-/* ---------- Credits pill ---------- */
-.credits-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 38px;
-  font-size: 14px;
-  font-weight: 800;
-  color: var(--text);
-  background: var(--card-2);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  padding: 0 12px;
-  cursor: pointer;
-  transition: transform 0.16s var(--spring), background 0.15s ease;
-}
-.credits-pill:active {
-  transform: scale(0.94);
-  background: var(--card-3);
-}
-
-/* ---------- Paywall ---------- */
-.paywall-head {
+/* ---------- Bottom-sheet head ----------
+   The title-and-subtitle block at the top of an explanatory bottom sheet, shared by
+   `CameraPermissionSheet` and `InstallSteps`. Named for the role rather than for
+   either sheet, because it belongs to both and to any explanatory sheet added
+   later. */
+.sheet-head {
   text-align: center;
   padding: 4px 8px 12px;
 }
-.paywall-title {
+.sheet-title {
   font-size: 20px;
   font-weight: 800;
   letter-spacing: -0.01em;
 }
-.paywall-sub {
+.sheet-sub {
   font-size: 13px;
   color: var(--muted);
   margin-top: 4px;
   line-height: 1.4;
-}
-.action-item.pack {
-  justify-content: space-between;
-}
-.pack-price {
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--accent);
-}
-
-/* ---------- Pro badge ---------- */
-.pro-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  color: var(--on-accent);
-  background: var(--accent-grad);
-  border-radius: var(--r-sm);
-  height: 38px;
-  padding: 0 12px;
-}
-
-/* ---------- Upgrade plans ---------- */
-.plan-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: 100%;
-  background: var(--card-2);
-  border: 1.5px solid transparent;
-  border-radius: var(--r);
-  padding: 16px 18px;
-  cursor: pointer;
-  color: var(--text);
-  transition: transform 0.16s var(--spring), border-color 0.15s ease;
-}
-.plan-card:active {
-  transform: scale(0.98);
-}
-.plan-card.best {
-  border-color: var(--accent-border);
-  background: linear-gradient(160deg, var(--accent-soft), transparent 60%),
-    var(--card-2);
-}
-.plan-left {
-  text-align: left;
-}
-.plan-label {
-  font-size: 17px;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.plan-tag {
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--on-accent);
-  background: var(--accent-grad);
-  border-radius: 999px;
-  padding: 2px 7px;
-}
-.plan-caption {
-  font-size: 13px;
-  color: var(--muted);
-  margin-top: 2px;
-}
-.plan-right {
-  text-align: right;
-  flex: 0 0 auto;
-}
-.plan-price {
-  font-size: 20px;
-  font-weight: 800;
-  color: var(--accent);
-}
-.plan-per {
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 2px;
 }
 
 /* ---------- AI lock (free insight reveal) ---------- */
@@ -2751,7 +2648,9 @@ body {
 .toggle-item.locked .si-sub {
   opacity: 0.72;
 }
-/* a Pro-gated row: readable, visibly inert (Req 15.1) */
+/* `.locked` row (the `locked` prop on `SettingsItem`/`ToggleItem`): still
+   readable, but visibly inert so it does not read as a control that failed
+   (Req 15.1). No call site sets it today; the styling is kept with the prop. */
 .settings-item.locked .si-ico,
 .settings-item.locked .si-body,
 .settings-item.locked .si-chev {

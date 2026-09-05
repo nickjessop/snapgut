@@ -31,9 +31,9 @@ export default function InstallSteps({
       >
         <div className="action-grip" />
 
-        <div className="paywall-head">
-          <div className="paywall-title">Add to Home Screen</div>
-          <div className="paywall-sub">
+        <div className="sheet-head">
+          <div className="sheet-title">Add to Home Screen</div>
+          <div className="sheet-sub">
             {ios
               ? "Safari can clear a website's data after a week of not visiting it. Adding SnapGut to your Home Screen stops that, and it opens straight to the camera."
               : "Your browser handles this from its own menu. Installing keeps your log from being cleared, and opens straight to the camera."}

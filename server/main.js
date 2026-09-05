@@ -90,7 +90,17 @@ async function boot() {
     console.warn(`food-pack: ${w}`);
   }
 
-  const authStatus = config.auth.password ? "AUTH_PASSWORD set" : "no password (open access)";
+  // Three states, not two. `config.auth.password` is null both when nothing was
+  // configured and when what was configured is unusable (under 12 characters
+  // after trimming), and those mean opposite things to an operator reading the
+  // summary: the first is an intentionally open loopback instance, the second is
+  // a misconfiguration where sign-in is closed. Neither line reveals the
+  // credential or its length (Req 6.16).
+  const authStatus = config.auth.password
+    ? "AUTH_PASSWORD set"
+    : config.auth.credentialRejected
+      ? "AUTH_PASSWORD set but unusable (under 12 characters) — sign-in disabled"
+      : "no password (sign-in disabled)";
 
   serve({ fetch: app.fetch, port: config.port, hostname: config.bindHost }, () => {
     ready.value = true;

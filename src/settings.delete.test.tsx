@@ -63,7 +63,6 @@ import { resetCloudSyncForTests } from "./cloudSync";
 import {
   ackDisclosure,
   clearPersistedSyncSettingsForTests,
-  isDestinationEnabled,
   resetSyncSettingsForTests,
   restore,
   setDestinationEnabled,

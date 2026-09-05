@@ -9,7 +9,6 @@
 // `writeBundle` — against a throwaway `dist/` tree, so the flattening and the
 // missing-asset failure are exercised without running a real build.
 
-import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -35,7 +34,6 @@ let outDir = "";
 
 /** Read one generated artifact out of the throwaway `dist/`. */
 const generated = (name: string) => readFileSync(path.join(outDir, name), "utf8");
-const generatedJson = <T>(name: string): T => JSON.parse(generated(name)) as T;
 
 /** Write a nested `dist/marketing/<file>` document, as Rollup would. */
 const emit = (file: string, html = "<!doctype html><html lang=\"en\"><body></body></html>") => {

@@ -1,10 +1,24 @@
 // Gemini AI provider adapter — calls the Gemini REST endpoint with an API key (no ADC).
 
+import { normalizeBaseUrl, mergeHeaders } from "./url.js";
+
+const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com";
+
 /**
- * @param {{ model: string, apiKey: string }} opts
+ * @param {{ model: string, apiKey: string, baseUrl?: string|null,
+ *           jsonMode?: "auto"|"json_object"|"off",
+ *           extraHeaders?: Record<string, string>|null }} opts
  * @returns {import("./index.js").AiProvider}
  */
-export function createGeminiProvider({ model, apiKey }) {
+export function createGeminiProvider({
+  model,
+  apiKey,
+  baseUrl = DEFAULT_BASE_URL,
+  jsonMode = "auto",
+  extraHeaders = null,
+}) {
+  const host = normalizeBaseUrl(baseUrl) || DEFAULT_BASE_URL;
+
   return {
     name: "gemini",
     model,
@@ -28,15 +42,20 @@ export function createGeminiProvider({ model, apiKey }) {
         contents: [{ parts }],
       };
 
-      if (json) {
+      if (json && jsonMode !== "off") {
         body.generationConfig = { responseMimeType: "application/json" };
       }
 
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const url = `${host}/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+      const headers = mergeHeaders(
+        { "Content-Type": "application/json" },
+        extraHeaders
+      );
 
       const res = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(body),
         signal,
       });

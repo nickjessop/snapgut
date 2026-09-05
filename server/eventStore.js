@@ -3,8 +3,8 @@
 //
 // This module owns everything that touches stored Event_Records: the merge rule,
 // Server_Sequence allocation, the cursor codec, the purge generation, and
-// tombstone retention. `server/sync.js` owns the HTTP shell — auth, entitlement,
-// rate limits, and every size/shape validation — so by the time a record reaches
+// tombstone retention. `server/sync.js` owns the HTTP shell — auth, rate limits,
+// and every size/shape validation — so by the time a record reaches
 // `push()` it is already validated and rejection has already happened without
 // storing anything (Req 6.10).
 //
@@ -50,12 +50,13 @@ export const INITIAL_EPOCH = 1;
  * Bookkeeping a backend holds *beside* the record, never inside it.
  *
  * `seq` is the Server_Sequence and `clampedFrom` is the Revision_Time the clock
- * clamp consumed (see `republishedClamp`). Both are server-side state, and the
- * Firestore backend keeps them as fields of the same document as the record —
- * so a pushed field of either name is dropped rather than preserved as an
- * unknown field. Letting one through would put server state on the wire, where
- * the client would preserve it and push it back, and would leave the memory
- * backend holding a shape the Firestore document could not reproduce.
+ * clamp consumed (see `republishedClamp`). Both are server-side state, and a
+ * backend is free to keep them right beside the record it stores — the SQLite
+ * backend gives them their own columns on the `events` row. So a pushed field of
+ * either name is dropped rather than preserved as an unknown field: letting one
+ * through would put server state on the wire, where the client would preserve it
+ * and push it back, and it would collide with the backend's own bookkeeping for
+ * that record.
  */
 const STORE_ONLY_KEYS = new Set(["seq", "clampedFrom"]);
 
@@ -129,17 +130,24 @@ export function normalizeForStore(record, now = Date.now()) {
 // ---------------------------------------------------------------------------
 // Storable ids (Req 6.3, 18.1)
 //
-// An Event_Record is keyed by the pair of user identity and `id`, and on the
-// Firestore backend both halves of that pair become one path segment. Firestore
-// cannot address every string as a segment, so the set below is the same on every
-// backend: what one backend can key, all of them can, and a developer running the
-// memory backend cannot build an id production would refuse.
+// An Event_Record is keyed by the pair of user identity and `id` — a composite
+// primary key on the SQLite backend, a Map key on the memory one.
+//
+// The accepted set below is deliberately narrower than either of those two can
+// actually hold. It is the portable subset: a key some store would have to address
+// as a path segment rather than as an opaque string, which rules out the separator
+// `/`, the relative segments `.` and `..`, a reserved `__…__` form, and anything
+// past a conservative byte ceiling. Holding one set across every backend is what
+// keeps a developer on the memory backend from minting an id another store would
+// refuse, and what keeps the accepted-id contract from widening by accident —
+// widening it is a one-way door, because clients would start minting ids that a
+// later backend cannot key. Loosen these only with that in mind.
 //
 // `server/sync.js` applies this at the edge, where an unstorable `id` earns a
 // per-id `invalid_record` rejection.
 // ---------------------------------------------------------------------------
 
-/** Firestore's document id byte ceiling — the tightest limit of any backend. */
+/** Byte ceiling on a stored `id` — the tightest limit any backend would impose. */
 const MAX_ID_BYTES = 1_500;
 
 const idEncoder = new TextEncoder();
@@ -148,9 +156,9 @@ const idEncoder = new TextEncoder();
  * Whether this value can key a stored Event_Record.
  *
  * Rejected: anything that is not a non-empty string, an id containing `/` (which
- * would address another document rather than fail), the relative segments `.` and
- * `..`, the `__reserved__` pattern Firestore keeps for itself, and anything over
- * the byte ceiling.
+ * would address somewhere else rather than fail), the relative segments `.` and
+ * `..`, the `__reserved__` form stores conventionally keep for themselves, and
+ * anything over the byte ceiling.
  */
 export function storableId(value) {
   if (typeof value !== "string" || value.length === 0) return false;
@@ -421,12 +429,12 @@ export function planPush(records, lookup, now) {
 // ---------------------------------------------------------------------------
 // in-memory backend (dev + tests)
 //
-// Per-process, so it is only suitable for local development — the Firestore
-// backend below is what production uses. Sequence allocation is the same
-// block allocation the Firestore transaction performs: read `seq`, write all N
-// records with `seq + 1 … seq + N`, then write `seq + N`. Here that block runs
-// without an intervening `await`, so a concurrent push can never observe a `seq`
-// that has advanced past a record it cannot read (Req 6.3, 8.9).
+// Per-process, so it is only suitable for local development and tests — the SQLite
+// backend in `server/sqlite/eventStore.js` is the durable one. Sequence allocation
+// is the same block allocation the SQLite push transaction performs: read `seq`,
+// write all N records with `seq + 1 … seq + N`, then write `seq + N`. Here that
+// block runs without an intervening `await`, so a concurrent push can never
+// observe a `seq` that has advanced past a record it cannot read (Req 6.3, 8.9).
 // ---------------------------------------------------------------------------
 
 function newUserState() {
@@ -448,14 +456,14 @@ function newUserState() {
  * window.
  *
  * A record that is not a Tombstone is never dropped by this sweep, which is what
- * Requirement 13.7 asks of the store: a lapsed user's Event_Records are retained
- * indefinitely (Decision D1), so nothing here removes a record on account of
- * entitlement. The only thing that empties a user is `deleteAll`, and only because
- * the user asked (Req 17.1, 17.4).
+ * Requirement 13.7 asks of the store: a stored Event_Record is retained for as
+ * long as the account exists, and no automatic process here removes one. The only
+ * thing that empties a user is `deleteAll`, and only because the user asked
+ * (Req 17.1, 17.4).
  *
- * `lastTombstoneSweepAt` records when this last ran, which is also what tells the
- * two backends apart: the Firestore backend does not sweep, so the field stays
- * null there (see the KNOWN DIVERGENCE note below).
+ * `lastTombstoneSweepAt` records when this last ran. Both backends sweep from the
+ * same two entry points — `pull` and `countFor` — so the value is comparable
+ * across them, which is what the equivalence tests read.
  */
 function sweepExpiredTombstones(state, now) {
   const cutoff = now - TOMBSTONE_RETENTION_MS;
@@ -556,8 +564,8 @@ export function createMemoryEventStore() {
     /**
      * Delete every stored Event_Record and Tombstone for the user and bump the
      * purge generation, so every cursor already issued reports invalid on the
-     * next pull (Req 17.1, 17.4, 17.5). The user record and its entitlement live
-     * in `store.js` and are untouched here.
+     * next pull (Req 17.1, 17.4, 17.5). The user record lives in `store.js` and is
+     * untouched here.
      */
     async deleteAll(email) {
       const state = stateFor(email);
@@ -588,7 +596,6 @@ export function createMemoryEventStore() {
 }
 
 // ---------------------------------------------------------------------------
-// Firestore backend removed (Decision D1).
 // The SQLite backend lives in `server/sqlite/eventStore.js`.
 // ---------------------------------------------------------------------------
 

@@ -4,6 +4,19 @@ dist
 .gitignore
 *.log
 .DS_Store
+coverage/
+*.tsbuildinfo
+
+# Secrets. `Dockerfile` does a `COPY . .` in the build stage, so anything left
+# here lands in that layer even though the run stage copies only server/, shared/
+# and dist/. Nothing in the build or at runtime reads .env.example, so every env
+# file is excluded.
+.env
+.env.*
+
+# Self-hosted runtime data — the SQLite database lives on a mounted volume, and a
+# developer's local copy must never be baked into an image.
+data/
 
 # Food illustration pack — mounted at runtime from the host volume, not baked into the image
 food-pack/
@@ -11,8 +24,10 @@ food-pack/
 # Icon sources — only used by `npm run icons`; the emitted icons live in public/
 brand/
 
-# Local scratch and planning, neither of which the build reads. Keeps the context
-# (and so the upload on every `gcloud run deploy --source`) small.
+# Local scratch, planning, and release notes, none of which the build reads.
+# Keeps the build context small and the build-stage layer free of material that
+# is not part of the image.
 .playwright-mcp/
 .kiro/
 .vscode/
+RELEASE-READINESS.md

@@ -2,7 +2,7 @@
 // Requirements: 5.1, 5.2, 5.3, 5.4
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, symlinkSync, mkdirSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 

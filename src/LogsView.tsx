@@ -53,11 +53,12 @@ export default function LogsView({
 
   // An active sync destination replaces the manual backup nudge and must dismiss a
   // shown one right away, then bring it back as soon as the last destination goes
-  // inactive — including through a Pro lapse (cloud-sync Req 14.4, 14.5, 14.7,
-  // 15.6). The decision comes from the shared `syncSettings` predicate rather than
+  // inactive — the toggle turned off, the session ended, or the destination has
+  // been failing past the grace period (cloud-sync Req 14.4, 14.5, 14.7, 15.6).
+  // The decision comes from the shared `syncSettings` predicate rather than
   // any single destination's connection state, and `syncSettings` is also the only
   // store subscribed to: it notifies synchronously on every input of that predicate
-  // (enabled state, entitlement snapshot, per-destination outcome), so the 1-second
+  // (enabled state, held Session_Token, per-destination outcome), so the 1-second
   // bounds hold. A Sheets connect or disconnect reaches it too, because both store
   // the spreadsheet id and flip the shared enabled flag through `syncSettings`.
   useEffect(() => {

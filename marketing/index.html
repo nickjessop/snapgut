@@ -10,9 +10,9 @@
   line is "no profile, no quiz — just an email", since deferred sign-in has not
   shipped and a stronger claim would be untrue.
 
-  Cross-device sync (SnapGut Cloud) shipped with the `cloud-sync` spec and is
-  gated on Pro — `/api/sync/*` answers `upgrade_required` to a free session — so
-  it is presented as a Pro feature, never as free and never as forthcoming
+  Cross-device sync shipped with the `cloud-sync` spec and runs through the
+  server the operator runs themselves. There are no tiers, so it is presented as
+  an opt-in destination — never as forthcoming, and never as something to unlock
   (Req 9.4).
 
   In self-hosted mode, every feature is included with no tiers or paywalls.
@@ -22,10 +22,6 @@
   food thumbnails read as one collection. They live in `public/img/` and are kept
   out of the Precache_Manifest by `vite/pwa.js`: they belong to a document the
   Service_Worker never serves from cache.
-
-  The store rows for the native apps are inert list items, not links. There is
-  nothing to link to yet, and a focusable control that goes nowhere is worse than
-  a label.
 
   The whole page is static markup: readable with JavaScript disabled (Req 1.4)
   and nothing above the fold waits on a module (Req 15.6). Two scripts, and only
@@ -222,10 +218,10 @@
         </div>
       </section>
 
-      <!-- The no-install framing — pillar 4 in docs/positioning.md, including its
-           honest trade-off note about native apps. The icon is the one image below
-           the fold, so it loads lazily with intrinsic dimensions (Req 15.3, 15.4);
-           the header's brand mark is the eager one above it. -->
+      <!-- The no-install framing — pillar 4 in docs/positioning.md. Text only:
+           there is no native app and no store listing to point at, so the section
+           makes the case for the browser on its own terms rather than promising a
+           download that does not exist. -->
       <section class="section section-alt">
         <div class="wrap">
           <h2>Start in your browser, in seconds</h2>
@@ -251,46 +247,6 @@
           <p class="btn-row">
             <a class="btn btn-primary" href="/login">Open the app</a>
           </p>
-
-          <!-- The official store badges, downloaded from Apple's Marketing Tools
-               and Google's badge resources rather than redrawn — both companies
-               require their own supplied artwork. Google ships its badge inside
-               its own mandated clear space; that transparent padding is trimmed so
-               CSS can set the spacing and both badges present at one height. The
-               artwork itself is untouched.
-
-               The rows are deliberately not links: there is nothing to link to
-               until the apps ship, and a focusable control that goes nowhere is
-               worse than a label. The `alt` names the platform rather than reading
-               "Download on the App Store", which would promise a download that is
-               not there yet. -->
-          <h3>Native apps</h3>
-          <ul class="store-row">
-            <li class="store-btn">
-              <img
-                class="store-badge"
-                src="/img/badge-app-store.svg"
-                alt="App Store"
-                width="120"
-                height="40"
-                loading="lazy"
-                decoding="async"
-              />
-              <span class="badge badge-soon">Coming soon</span>
-            </li>
-            <li class="store-btn">
-              <img
-                class="store-badge"
-                src="/img/badge-google-play.png"
-                alt="Google Play"
-                width="134"
-                height="40"
-                loading="lazy"
-                decoding="async"
-              />
-              <span class="badge badge-soon">Coming soon</span>
-            </li>
-          </ul>
         </div>
       </section>
 
@@ -352,8 +308,11 @@
             <!-- The sync list sits in the copy column rather than in its own row
                  below it. On its own it left the short paragraph floating beside a
                  much taller illustration, and the empty space under it read as a
-                 break in the section. -->
-            <h3>You choose where it syncs</h3>
+                 break in the section.
+
+                 Two destinations, because two is all there are: staying on the
+                 device, and the operator's own server. Nothing here is gated. -->
+            <h3>You choose whether it syncs</h3>
 
             <ul class="checklist">
               <li>
@@ -361,13 +320,8 @@
                 is a photo being identified.
               </li>
               <li>
-                <strong>A Google Sheet you own.</strong> Your log, mirrored into your
-                own spreadsheet. A <strong>Pro</strong> feature; photos are never
-                written to it.
-              </li>
-              <li>
-                <strong>SnapGut Cloud.</strong> Cross-device sync, opt-in, a
-                <strong>Pro</strong> feature. Your device stays the source of truth.
+                <strong>Between your own devices.</strong> Cross-device sync, opt-in,
+                through the server you run. Your device stays the source of truth.
               </li>
             </ul>
           </div>
@@ -386,9 +340,8 @@
 
         <div class="wrap">
           <p class="note">
-            Switch destinations or turn them off at any time. Export everything to CSV
-            or JSON, free, whenever you want — your data is yours, so keep a copy
-            wherever you like.
+            Turn sync on or off at any time. Export everything to CSV or JSON
+            whenever you want — your data is yours, so keep a copy wherever you like.
           </p>
 
           <p class="btn-row">

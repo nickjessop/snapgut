@@ -15,12 +15,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 // @ts-ignore -- untyped ESM JavaScript (shared/ is not TypeScript)
-import {
-  APP_PREFIX,
-  GENERATED_FILES,
-  indexablePaths,
-  LOGIN_PATH,
-} from "../shared/site.js";
+import { GENERATED_FILES } from "../shared/site.js";
 
 const repoRoot = path.resolve(__dirname, "..");
 const distDir = path.join(repoRoot, "dist");

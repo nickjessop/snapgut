@@ -67,9 +67,10 @@ function bearer(c) {
  * (Req 19.4, 19.5).
  *
  * Derived from the same window `store.rateLimit` applies, which is what
- * Requirement 19.6 insists on: the Firestore backend buckets by
- * `floor(now / windowMs)`, so the window this reports is the bucket boundary the
- * limiter itself rolls over at.
+ * Requirement 19.6 insists on: every backend counts into a fixed bucket keyed
+ * `floor(now / windowMs)` (see `rateLimitWindow` in `server/store.js`), so the
+ * wait reported here is the instant the limiter itself rolls over — not an
+ * independent guess that could let a caller back in early or hold it out late.
  */
 export function retryAfterSeconds(windowMs = RATE_WINDOW_MS, now = Date.now()) {
   const remaining = windowMs - (now % windowMs);
@@ -540,8 +541,8 @@ const DEADLINE_EXCEEDED = Symbol("deadline_exceeded");
  * `{ ok: false, reason }` — the purge did not complete, either because it
  * outran the deadline (`"timeout"`, Req 17.2) or because the store failed
  * (`"failed"`). The caller must answer with an error status and change nothing
- * else: Requirement 17.2 wants the user record, the Pro_Entitlement, and the
- * Session_Token all still valid so the client can simply repeat the request.
+ * else: Requirement 17.2 wants the user record and the Session_Token both still
+ * valid so the client can simply repeat the request.
  *
  * Repeating it is safe. `deleteAll` on an already-empty user reports
  * `deleted: 0` and succeeds, which is the idempotence Requirement 17.2 asks for.
@@ -574,22 +575,19 @@ export async function purgeEventData(email, deadlineMs = DELETION_DEADLINE_MS, i
 }
 
 // ---------------------------------------------------------------------------
-// Retention after a Pro_Lapse — Decision D1, settled: retain indefinitely
+// Retention — settled: stored Event_Records are retained indefinitely
 //
-// A lapsed user's stored Event_Records are kept for as long as the account exists.
-// There is no retention window, no purge, and therefore nothing for a request to
-// evaluate: the middleware chain below has no retention step, the store holds no
-// lapse instant, and the only thing that ever empties a user is a deletion they
-// asked for (`DELETE /api/sync/data`, Req 17.4, or account deletion, Req 17.1).
+// A user's stored Event_Records are kept for as long as the account exists. There
+// is no retention window and no automatic purge, so there is nothing here for a
+// request to evaluate: the middleware chain below has no retention step, and the
+// only thing that ever empties a user is a deletion they asked for
+// (`DELETE /api/sync/data`, Req 17.4, or account deletion, Req 17.1). Worth
+// stating as an absence, so a reader looking for the retention step can stop.
 //
-// What survives of the cancelled purge is the `epoch` in the Sync_Cursor, which
-// Requirement 17.4 needs on its own: `deleteAll` bumps it so every cursor issued
-// before a deletion is reported invalid on the next pull, and the client
-// re-enqueues its timeline instead of silently skipping it (Req 13.13, 17.5).
-//
-// Client-side consequence: there is no purge date to count down to, so the paused
-// message under Requirement 13.5/13.10 says the cloud copy is retained rather than
-// naming a number of days.
+// The `epoch` in the Sync_Cursor is what Requirement 17.4 needs on its own:
+// `deleteAll` bumps it so every cursor issued before a deletion is reported
+// invalid on the next pull, and the client re-enqueues its timeline instead of
+// silently skipping it (Req 13.13, 17.5).
 // ---------------------------------------------------------------------------
 
 /**

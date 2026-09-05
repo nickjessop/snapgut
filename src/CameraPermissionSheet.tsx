@@ -24,9 +24,9 @@ export default function CameraPermissionSheet({ onClose }: { onClose: () => void
       >
         <div className="action-grip" />
 
-        <div className="paywall-head">
-          <div className="paywall-title">Stop the camera prompt</div>
-          <div className="paywall-sub">
+        <div className="sheet-head">
+          <div className="sheet-title">Stop the camera prompt</div>
+          <div className="sheet-sub">
             iOS asks again each launch while the camera is set to “Ask”. Switching it to
             “Allow” is remembered, and on most recent versions the installed app picks it
             up too.

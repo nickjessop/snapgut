@@ -30,8 +30,11 @@ describe("SQLite durability", () => {
   }
 
   let DatabaseSync: typeof import("node:sqlite").DatabaseSync;
+  // @ts-ignore -- untyped ESM JavaScript
   let createSqliteStore: typeof import("../server/sqlite/store.js").createSqliteStore;
+  // @ts-ignore -- untyped ESM JavaScript
   let createSqliteEventStore: typeof import("../server/sqlite/eventStore.js").createSqliteEventStore;
+  // @ts-ignore -- untyped ESM JavaScript
   let migrate: typeof import("../server/sqlite/schema.js").migrate;
   let available = false;
 
@@ -39,10 +42,13 @@ describe("SQLite durability", () => {
     try {
       const sqliteModule = await import("node:sqlite");
       DatabaseSync = sqliteModule.DatabaseSync;
+      // @ts-ignore -- untyped ESM JavaScript
       const storeModule = await import("../server/sqlite/store.js");
       createSqliteStore = storeModule.createSqliteStore;
+      // @ts-ignore -- untyped ESM JavaScript
       const eventStoreModule = await import("../server/sqlite/eventStore.js");
       createSqliteEventStore = eventStoreModule.createSqliteEventStore;
+      // @ts-ignore -- untyped ESM JavaScript
       const schemaModule = await import("../server/sqlite/schema.js");
       migrate = schemaModule.migrate;
       available = true;

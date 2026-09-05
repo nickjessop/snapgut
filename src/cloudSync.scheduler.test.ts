@@ -55,8 +55,6 @@ import {
   setDestinationEnabled,
 } from "./syncSettings";
 
-// Stub for removed entitlement function — tests will be cleaned up in task 1.8/1.9
-function applyEntitlement(_e: { pro: boolean; proUntil: number | null }): void {}
 import {
   TRIGGER_REASONS,
   arbTriggerSchedule,
@@ -68,7 +66,6 @@ import {
 type Restorable = { mockRestore: () => void };
 
 const PRO_ENTITLEMENT = { pro: true, proUntil: null };
-const NO_PRO_ENTITLEMENT = { pro: false, proUntil: null };
 
 /** Requirement 11.11's floor between successive automatic retries. */
 const AUTO_RETRY_FLOOR_MS = 60_000;

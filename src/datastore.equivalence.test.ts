@@ -20,7 +20,9 @@ import { tmpdir } from "node:os";
 // ---------------------------------------------------------------------------
 
 let DatabaseSync: typeof import("node:sqlite").DatabaseSync;
+// @ts-ignore -- untyped ESM JavaScript
 let createSqliteStore: typeof import("../server/sqlite/store.js").createSqliteStore;
+// @ts-ignore -- untyped ESM JavaScript
 let migrate: typeof import("../server/sqlite/schema.js").migrate;
 
 // The memory store is constructed inline (not exported by name), so we
@@ -356,8 +358,10 @@ describe("Datastore equivalence: SQLite vs Memory", () => {
     try {
       const sqliteModule = await import("node:sqlite");
       DatabaseSync = sqliteModule.DatabaseSync;
+      // @ts-ignore -- untyped ESM JavaScript
       const storeModule = await import("../server/sqlite/store.js");
       createSqliteStore = storeModule.createSqliteStore;
+      // @ts-ignore -- untyped ESM JavaScript
       const schemaModule = await import("../server/sqlite/schema.js");
       migrate = schemaModule.migrate;
       available = true;

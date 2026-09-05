@@ -60,10 +60,7 @@ vi.mock("./session", async (importOriginal) => {
   return {
     ...actual,
     getToken: () => h.token,
-    fetchMe: async () =>
-      h.token
-        ? { email: "a@b.c", pro: false, proUntil: null, freeAiUsed: 0, freeAiLimit: 5 }
-        : null,
+    fetchMe: async () => (h.token ? { email: "a@b.c" } : null),
     clearToken: () => {},
   };
 });

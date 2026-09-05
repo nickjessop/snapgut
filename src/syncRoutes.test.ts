@@ -83,7 +83,7 @@ describe("sync middleware chain", () => {
     expect(body).toEqual({ error: "payload_too_large" });
   });
 
-  it("answers 401 rather than 402 when the session fails for a user without Pro", async () => {
+  it("answers 401 when the Session_Token signature does not verify, real user or not", async () => {
     const app = syncApp();
     const { email } = await freeUser();
     const store = await userStore();

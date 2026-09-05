@@ -30,6 +30,7 @@ describe("SQLite schema migration", () => {
   }
 
   let DatabaseSync: typeof import("node:sqlite").DatabaseSync;
+  // @ts-ignore -- untyped ESM JavaScript
   let migrate: typeof import("../server/sqlite/schema.js").migrate;
   let available = false;
 
@@ -37,6 +38,7 @@ describe("SQLite schema migration", () => {
     try {
       const sqliteModule = await import("node:sqlite");
       DatabaseSync = sqliteModule.DatabaseSync;
+      // @ts-ignore -- untyped ESM JavaScript
       const schemaModule = await import("../server/sqlite/schema.js");
       migrate = schemaModule.migrate;
       available = true;

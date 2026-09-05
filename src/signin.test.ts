@@ -4,7 +4,7 @@
 // and the same error body, so an attacker cannot enumerate which part of the
 // credential check failed.
 //
-// Validates: Requirements 6.6, 6.7, 7.1, 7.2, 7.3, 13.3
+// Validates: Requirements 6.6, 6.7, 6.14, 7.1, 7.2, 7.3, 13.3
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -117,6 +117,71 @@ describe("POST /api/auth/signin", () => {
       expect(new Set(bodies).size).toBe(1);
       expect(JSON.parse(bodies[0])).toEqual(EXPECTED_BODY);
     });
+  });
+});
+
+describe("POST /api/auth/signin with a configured credential below the 12-char minimum (Req 6.14)", () => {
+  const TOO_SHORT = "short-pw";
+  let shortFetch: Fetch;
+
+  beforeAll(async () => {
+    const { ok, config } = loadConfig({
+      DATASTORE_BACKEND: "memory",
+      AI_PROVIDER: "mock",
+      BIND_HOST: "127.0.0.1",
+      AUTH_PASSWORD: TOO_SHORT,
+    });
+    // Loopback bind: boot still succeeds, but the credential is unusable.
+    expect(ok).toBe(true);
+    expect(config.auth.password).toBeNull();
+
+    const store = await getStore();
+    const eventStore = await getEventStore();
+    const ready = { value: true };
+    const ai = { name: "mock", model: "mock", generate: async () => "{}" };
+    const app = buildApp({ config, store, eventStore, secret: SECRET, ai, ready });
+    shortFetch = app.fetch.bind(app);
+  });
+
+  function shortSignin(body: unknown): Promise<Response> {
+    return Promise.resolve(
+      shortFetch(
+        new Request("http://localhost/api/auth/signin", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        })
+      )
+    );
+  }
+
+  it("submitting the too-short configured value is rejected like a mismatch", async () => {
+    const res = await shortSignin({ password: TOO_SHORT });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "signin_failed" });
+  });
+
+  it("is indistinguishable from mismatch, empty, oversize and missing", async () => {
+    const failures = await Promise.all([
+      shortSignin({ password: TOO_SHORT }),
+      shortSignin({ password: "wrong" }),
+      shortSignin({ password: "" }),
+      shortSignin({}),
+      shortSignin({ password: "x".repeat(300) }),
+    ]);
+
+    const statuses = failures.map((r) => r.status);
+    const bodies = await Promise.all(failures.map((r) => r.text()));
+
+    expect(new Set(statuses).size).toBe(1);
+    expect(statuses[0]).toBe(401);
+    expect(new Set(bodies).size).toBe(1);
+    expect(JSON.parse(bodies[0])).toEqual({ error: "signin_failed" });
+  });
+
+  it("no response body mentions the configured credential", async () => {
+    const res = await shortSignin({ password: TOO_SHORT });
+    expect(await res.text()).not.toContain(TOO_SHORT);
   });
 });
 

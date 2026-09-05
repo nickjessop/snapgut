@@ -81,8 +81,6 @@ function memoryStore() {
   };
 }
 
-// ---- Firestore backend removed (Decision D1) ----
-
 let storePromise = null;
 export function getStore() {
   if (!storePromise) {

@@ -11,6 +11,8 @@ import { createOllamaProvider } from "../server/ai/ollama.js";
 // @ts-ignore -- untyped ESM JavaScript
 import { createOpenaiProvider } from "../server/ai/openai.js";
 // @ts-ignore -- untyped ESM JavaScript
+import { createAnthropicProvider } from "../server/ai/anthropic.js";
+// @ts-ignore -- untyped ESM JavaScript
 import { createGeminiProvider } from "../server/ai/gemini.js";
 
 beforeEach(() => {
@@ -72,6 +74,41 @@ describe("AI provider timeout", () => {
         signal: AbortSignal.timeout(50),
       })
     ).rejects.toThrow();
+  });
+
+  it("anthropic: aborts when signal times out", async () => {
+    const provider = createAnthropicProvider({
+      baseUrl: "https://api.anthropic.com",
+      model: "claude-sonnet-4-5",
+      apiKey: "sk-ant-test",
+    });
+
+    await expect(
+      provider.generate({
+        prompt: "test",
+        json: true,
+        signal: AbortSignal.timeout(50),
+      })
+    ).rejects.toThrow();
+  });
+
+  it("anthropic: the thrown error has AbortError or TimeoutError name", async () => {
+    const provider = createAnthropicProvider({
+      baseUrl: "https://api.anthropic.com",
+      model: "claude-sonnet-4-5",
+      apiKey: "sk-ant-test",
+    });
+
+    try {
+      await provider.generate({
+        prompt: "test",
+        json: true,
+        signal: AbortSignal.timeout(50),
+      });
+      expect.fail("should have thrown");
+    } catch (err: any) {
+      expect(["AbortError", "TimeoutError"]).toContain(err.name);
+    }
   });
 
   it("gemini: aborts when signal times out", async () => {

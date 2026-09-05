@@ -26,11 +26,15 @@ list with comments.
 | **Purpose** | Network interface to bind to |
 | **Default** | `127.0.0.1` (loopback — accessible only from the local machine) |
 | **Valid values** | Any IP address or hostname. `0.0.0.0` exposes to all interfaces |
-| **Boot failure** | No |
+| **Boot failure** | Yes, if set to an exposed (non-loopback) address while `AUTH_PASSWORD` is unset, whitespace-only, or shorter than 12 characters |
 
-When set to an exposed (non-loopback) address, the server logs a warning at startup. If
-`AUTH_PASSWORD` is also unset, a stronger warning is emitted because the diary will be
-accessible without authentication.
+Loopback values are `127.0.0.1`, `::1` and `localhost` (case-insensitive). Anything else,
+including `0.0.0.0` and a LAN address such as `192.168.1.50`, counts as exposed.
+
+An exposed bind host requires a usable `AUTH_PASSWORD`. If one is not configured, the server
+logs an error naming `AUTH_PASSWORD` and the condition that failed, then exits with code 1
+before it accepts any connection — it will not publish an unauthenticated diary. The error
+never contains the credential value or its length.
 
 ### DATA_DIR
 
@@ -66,31 +70,65 @@ warning is logged if `memory` is selected with an exposed bind host.
 | --- | --- |
 | **Purpose** | Which AI adapter to use for meal recognition and insights |
 | **Default** | `ollama` (local model server) |
-| **Valid values** | `ollama`, `openai`, `gemini`, `mock` |
+| **Valid values** | `ollama`, `openai`, `openai-compatible`, `litellm`, `anthropic`, `gemini`, `mock` |
 | **Boot failure** | Yes, if set to an unrecognised value |
 
 | Provider | Requires API key | Data leaves host |
 | --- | --- | --- |
 | `ollama` | No | No (local network only) |
 | `openai` | Recommended (depends on server) | Yes |
+| `openai-compatible` | Optional (depends on server) | Depends on where `AI_BASE_URL` points |
+| `litellm` | Optional (depends on proxy) | Depends on the models the proxy routes to |
+| `anthropic` | Yes | Yes |
 | `gemini` | Yes | Yes |
 | `mock` | No | No (synthetic responses, no network) |
+
+`openai-compatible` speaks the OpenAI chat-completions API against any server: vLLM, LM
+Studio, llama.cpp's server, text-generation-webui, OpenRouter, Groq, Together, Fireworks,
+DeepSeek and Mistral. It has no default `AI_BASE_URL`, so you must set one. `litellm` is the
+same adapter pointed at a LiteLLM proxy on its default port.
 
 ### AI_BASE_URL
 
 | | |
 | --- | --- |
 | **Purpose** | Base URL of the AI model server |
-| **Default** | `http://127.0.0.1:11434` when provider is `ollama`; none otherwise |
+| **Default** | Per provider — see the table below |
+| **Boot failure** | Yes, if provider is `openai-compatible` and this is unset |
 | **Notes** | For Docker: use `http://host.docker.internal:11434` to reach Ollama on the host |
+
+| Provider | Default base URL |
+| --- | --- |
+| `ollama` | `http://127.0.0.1:11434` |
+| `openai` | `https://api.openai.com` |
+| `litellm` | `http://127.0.0.1:4000` |
+| `anthropic` | `https://api.anthropic.com` |
+| `gemini` | `https://generativelanguage.googleapis.com` |
+| `openai-compatible` | None — required |
+| `mock` | None — unused |
+
+Trailing slashes are stripped, and a base URL that already ends in `/v1` is not doubled when
+the OpenAI-style path is appended. All four of `http://host:4000`, `http://host:4000/`,
+`http://host:4000/v1` and `http://host:4000/v1/` resolve to
+`http://host:4000/v1/chat/completions`, which is what LiteLLM, vLLM and OpenRouter document.
 
 ### AI_MODEL
 
 | | |
 | --- | --- |
 | **Purpose** | Model identifier passed to the AI provider |
-| **Default** | Empty string (provider uses its own default) |
+| **Default** | None — required for every provider except `mock` |
+| **Boot failure** | Yes, if `AI_PROVIDER` is anything other than `mock` and this is unset or whitespace-only |
 | **Examples** | `llama3.2-vision` (Ollama), `gpt-4o-mini` (OpenAI), `gemini-2.5-flash` (Gemini) |
+
+There is no usable default. Every network adapter in `server/ai/` passes this value through
+verbatim, and an empty model is rejected by Ollama, all four OpenAI-shaped providers and
+Anthropic, and produces a 404 from Gemini's URL-based path — six of the seven providers fail
+outright. The server therefore refuses to boot with an error naming `AI_MODEL` rather than
+starting and answering `503 {"error":"ai_unavailable"}` the first time someone photographs a
+meal. `mock` never calls out, so it is the one provider that needs no model.
+
+The value is trimmed, so a whitespace-only value counts as unset.
 
 ### AI_API_KEY
 
@@ -98,7 +136,8 @@ warning is logged if `memory` is selected with an exposed bind host.
 | --- | --- |
 | **Purpose** | API key for the configured AI provider |
 | **Default** | None |
-| **Required** | Yes for `gemini`; optional for others depending on the model server's configuration |
+| **Required** | Yes for `gemini` and `anthropic`; optional for others depending on the model server's configuration |
+| **Boot failure** | Yes, if provider is `gemini` or `anthropic` and this is unset |
 | **Secret** | Yes — never logged |
 
 ### AI_TIMEOUT_MS
@@ -107,7 +146,51 @@ warning is logged if `memory` is selected with an exposed bind host.
 | --- | --- |
 | **Purpose** | Maximum time in milliseconds to wait for an AI response before aborting |
 | **Default** | `120000` (2 minutes) |
-| **Notes** | Set to `0` to disable the timeout. Large images or slow models may need a higher value |
+| **Valid range** | Any number greater than zero |
+| **Boot failure** | Yes, if set to `0`, a negative number, or anything non-numeric |
+
+**The timeout cannot be disabled.** The value goes straight to
+`AbortSignal.timeout(config.ai.timeoutMs)` at both AI call sites in `server/app.js`, and
+`AbortSignal.timeout(0)` fires on the next macrotask — so `0` aborts *every* AI request within a
+few milliseconds rather than waiting forever. Earlier versions of this document described `0` as
+disabling the timeout; it never did.
+
+`0` is rejected at boot for that reason, as are a negative value and a value that is not a
+number. Those are errors rather than a silent fallback to `120000`: an operator who typos a
+reliability-relevant timeout should be told at boot instead of running for months on a value
+they did not choose.
+
+If a slow local vision model needs longer, raise the number — `AI_TIMEOUT_MS=300000` for five
+minutes. Raise your reverse proxy's read timeout above it too, or the proxy gives up first and
+the browser sees a 504 instead of the server's own error.
+
+### AI_JSON_MODE
+
+| | |
+| --- | --- |
+| **Purpose** | Whether to send the provider's structured-output field when JSON is requested |
+| **Default** | `auto` |
+| **Valid values** | `auto`, `json_object`, `off` |
+| **Boot failure** | Yes, if set to an unrecognised value |
+
+`auto` sends each provider's native field: `format: "json"` for Ollama, `response_format` for
+the OpenAI-shaped providers, `responseMimeType` for Gemini. `json_object` is the same, named
+for the OpenAI field. `off` sends none of them — the escape hatch for gateway-proxied models
+that return 400 on `response_format`. The prompt asks for JSON regardless and both call sites
+already tolerate an unparseable reply, so `off` degrades safely. Anthropic has no
+structured-output field, so this setting does not change its requests.
+
+### AI_EXTRA_HEADERS
+
+| | |
+| --- | --- |
+| **Purpose** | Extra HTTP headers to add to every AI request, for gateways that expect attribution headers |
+| **Default** | None |
+| **Valid values** | A JSON object whose values are all strings, e.g. `{"HTTP-Referer":"https://example.com","X-Title":"SnapGut"}` |
+| **Boot failure** | Yes, if the value is not parseable JSON, is not an object, is an array, or has a non-string value |
+
+Headers the adapter sets itself (`Content-Type`, `Authorization`, `x-api-key`,
+`anthropic-version`) take precedence, so an entry here cannot accidentally break auth.
 
 ### FOOD_PACK_DIR
 
@@ -131,8 +214,20 @@ warning is logged if `memory` is selected with an exposed bind host.
 | --- | --- |
 | **Purpose** | Password required to sign in |
 | **Default** | None (unset) |
+| **Minimum length** | 12 characters, measured after surrounding whitespace is trimmed |
+| **Boot failure** | Yes, if `BIND_HOST` is an exposed (non-loopback) address and this is unset, whitespace-only, or shorter than 12 characters |
 | **Secret** | Yes — never logged |
-| **Notes** | When unset, sign-in is disabled and the diary is open to anyone who can reach it. A warning is logged if the bind host is exposed and this is unset |
+| **Notes** | A value that is unset, whitespace-only, or under 12 characters is treated as no credential at all: sign-in is disabled and every sign-in request is rejected with the same response as a wrong password |
+
+The value is trimmed before use, so leading and trailing whitespace does not count toward the
+12-character minimum.
+
+On an exposed bind host, an unusable value is a boot failure — see `BIND_HOST` above. On a
+loopback bind host, a value under 12 characters is only a warning, so local development is not
+blocked, but sign-in stays closed until the value is long enough.
+
+Neither the error nor the warning includes the credential value or its length, and no API
+response reveals them.
 
 ### SESSION_SECRET
 
@@ -176,11 +271,29 @@ or to share one across multiple instances.
 | **Valid values** | `none`, `xff`, `cloudflare` |
 | **Boot failure** | Yes, if set to an unrecognised value |
 
-| Value | Behaviour |
-| --- | --- |
-| `none` | Uses the rightmost `X-Forwarded-For` entry, or a shared key when no forwarding data is present |
-| `xff` | Trusts `X-Forwarded-For` (standard reverse proxy / Tailscale) |
-| `cloudflare` | Reads `CF-Connecting-IP` |
+| Value | Derived key, with a forwarding header | Derived key, with none | Intent |
+| --- | --- | --- | --- |
+| `none` | Rightmost `X-Forwarded-For` entry | `local` | No proxy is expected in front |
+| `xff` | Rightmost `X-Forwarded-For` entry | `local` | A reverse proxy or tunnel is expected in front |
+| `cloudflare` | `CF-Connecting-IP`, else the rightmost `X-Forwarded-For` entry | `local` | Cloudflare is in front |
+
+**`none` and `xff` behave identically today.** They are one derivation in
+`server/clientIp.js`, not two, and the value you pick changes nothing about the key. The
+distinction is documentation of intent for whoever reads your `.env` next; nothing in the server
+branches on it. If you need to tell them apart in code, read `config.trustedProxy`, not the
+derived key.
+
+That is deliberate rather than an oversight. The **rightmost** `X-Forwarded-For` entry is the
+address the closest proxy appended, which is the only entry in that header a client cannot
+forge — so it is the correct derivation both behind a single trusted reverse proxy (nginx with
+`$proxy_add_x_forwarded_for`, Caddy, Traefik, a Tailscale Funnel) and with no proxy at all,
+where there is no header to read. The leftmost entry is never used: trusting it would hand out a
+fresh rate-limit bucket per request.
+
+`local` is a literal shared key, so with nothing forwarding an address every direct client
+counts as one client for rate limiting. That is fine on loopback and wrong if you publish the
+port straight to a network — put a proxy in front, or accept that the sign-in throttle is
+global rather than per-client.
 
 An incorrect value results in either one shared rate-limit bucket for every client (too
 permissive) or a client-forgeable rate-limit bucket (bypassable). If you use a tunnel, set
@@ -190,10 +303,19 @@ this to match it and enable the tunnel's own authentication layer as defence in 
 
 - **Boot failure** — the server logs the error and exits with code 1 before listening.
   Triggered by: invalid `PORT`, unrecognised `DATASTORE_BACKEND`, unrecognised `AI_PROVIDER`,
-  `gemini` without `AI_API_KEY`, `SESSION_SECRET` under 32 characters, unrecognised
-  `TRUSTED_PROXY`.
-- **Warning** — the server starts but logs a warning. Triggered by: exposed bind with no
-  `AUTH_PASSWORD`, memory backend with exposed bind.
+  any provider other than `mock` with `AI_MODEL` unset or whitespace-only, `gemini` without
+  `AI_API_KEY`, `anthropic` without `AI_API_KEY`, `openai-compatible`
+  without `AI_BASE_URL`, unrecognised `AI_JSON_MODE`, malformed `AI_EXTRA_HEADERS`,
+  `AI_TIMEOUT_MS` that is not a number greater than zero (including `0`),
+  `SESSION_SECRET` under 32 characters, unrecognised `TRUSTED_PROXY`, exposed `BIND_HOST` with
+  an `AUTH_PASSWORD` that is unset, whitespace-only, or under 12 characters.
+
+  Errors accumulate, so one boot names every setting that failed. The one exception is
+  `AI_PROVIDER`: when it names something unrecognised, the per-provider requirements
+  (`AI_MODEL`, `AI_API_KEY`, `AI_BASE_URL`) are not also reported, because they would be the
+  requirements of a provider you never asked for.
+- **Warning** — the server starts but logs a warning. Triggered by: loopback bind with an
+  `AUTH_PASSWORD` under 12 characters (sign-in stays closed), memory backend with exposed bind.
 - **Default** — a documented fallback applies silently.
 
 ## Local development
@@ -204,6 +326,19 @@ No `.env` loader is needed — Node reads the file natively:
 node --env-file=.env server/main.js
 ```
 
-For local development, the defaults are usually sufficient: the server binds to localhost on
-port 8080, uses the SQLite backend, and talks to a local Ollama instance. Set `AI_PROVIDER=mock`
-to skip needing a model server entirely.
+For local development the defaults cover everything but one setting: the server binds to
+localhost on port 8080, uses the SQLite backend, and talks to a local Ollama instance. `AI_MODEL`
+is the exception — it has no default and the server will not boot without it. So the shortest
+working `.env` is either
+
+```dotenv
+AI_MODEL=<your-vision-model-tag>
+```
+
+or, to skip needing a model server entirely,
+
+```dotenv
+AI_PROVIDER=mock
+```
+
+`mock` is the one provider that needs no `AI_MODEL`.

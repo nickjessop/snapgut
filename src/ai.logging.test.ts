@@ -6,6 +6,7 @@
 // Validates: Requirements 4.13
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { MockInstance } from "vitest";
 
 // @ts-ignore -- untyped ESM JavaScript
 import { buildApp } from "../server/app.js";
@@ -22,7 +23,10 @@ type Fetch = (req: Request) => Response | Promise<Response>;
 
 let serverFetch: Fetch;
 let token: string;
-let logSpy: ReturnType<typeof vi.spyOn>;
+// Typed against `console.log` so `logSpy.mock.calls` keeps that method's
+// parameter types. A bare `ReturnType<typeof vi.spyOn>` erases them to
+// `unknown[]`, which makes every recorded argument unreadable.
+let logSpy: MockInstance<typeof console.log>;
 
 const SECRET = "test-secret-for-vitest-only-do-not-use-in-production-pad-32chars";
 

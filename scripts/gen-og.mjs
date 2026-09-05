@@ -22,6 +22,10 @@ const H = 630;
 
 const OUT = new URL("../public/og.png", import.meta.url);
 
+// The host printed on the card. Overridable so a fork can rebrand the card
+// without editing the generator; the default is the original deployment.
+const PUBLIC_HOST = process.env.PUBLIC_HOST || "snapgut.com";
+
 // The site palette, from marketing/marketing.css.
 const INK = "#14261f";
 const GREEN_900 = "#23453a";
@@ -86,7 +90,7 @@ const plate = () =>
 
        <text x="${PAD}" y="${H - 58}"
              font-family="${FONT_BODY}" font-size="28" font-weight="bold"
-             letter-spacing="1" fill="${CLAY}">snapgut.com</text>
+             letter-spacing="1" fill="${CLAY}">${PUBLIC_HOST}</text>
      </svg>`
   );
 

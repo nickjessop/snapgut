@@ -1016,8 +1016,6 @@ export type SyncState =
  * read from the clock, the network, or IndexedDB.
  *
  * - `hasSession` — a Session_Token is held on the device (Req 1.6).
- * - `pro` — the persisted Pro_Entitlement snapshot, which reads as false until a
- *   server response has ever supplied one (Req 1.9).
  * - `enabled` — the persisted enabled state of the Cloud_Destination, which
  *   reads as false when absent or unreadable (Req 3.6).
  * - `lastCycleFailed` / `succeededSinceFailure` — the most recent Sync_Cycle
@@ -1063,9 +1061,9 @@ const ERROR_MESSAGES: Record<"offline" | "service", string> = {
  * for every possible input, not just the reachable ones:
  *
  * - `off` whenever no Session_Token is held, regardless of every other field
- *   (Req 1.6, 12.8 step 1). A signed-out device makes no requests, so neither a
- *   stale entitlement snapshot nor a cycle flag left set by a sign-out mid-cycle
- *   can show it as syncing, paused, or broken.
+ *   (Req 1.6, 12.8 step 1). A signed-out device makes no requests, so a cycle
+ *   flag left set by a sign-out mid-cycle cannot show it as syncing, paused, or
+ *   broken.
  * - never `synced` while the Outbox is non-empty (Req 12.8 step 7), which is
  *   also what produces the `synced → idle` transition of Req 12.9.
  *
@@ -1265,8 +1263,8 @@ function remainingWait(now: number, until: number | null, fallbackMs: number): n
  * that moved backwards yields at most the full 60 seconds rather than an
  * unbounded wait; a device whose clock jumps cannot park retries forever.
  *
- * This gate does not consider connectivity, entitlement, or the enabled state:
- * Requirements 11.6 and 11.8 discard those triggers before a gate is consulted.
+ * This gate does not consider connectivity or the enabled state: Requirements
+ * 11.6 and 11.8 discard those triggers before a gate is consulted.
  */
 export function retryGate(input: {
   now: number;
@@ -1306,8 +1304,8 @@ export function retryGate(input: {
 //
 //   - **the transport** — one authenticated, timeout-bounded `fetch` wrapper that
 //     every sync request goes through, so the Bearer credential, the 30-second
-//     abort, the entitlement refresh, the 401 sign-out, and the 429 wait are
-//     properties of the module rather than habits of each call site;
+//     abort, the 401 sign-out, and the 429 wait are properties of the module
+//     rather than habits of each call site;
 //   - **the Sync_State store** — `getSyncState()` / `subscribe()` over the pure
 //     `deriveSyncState`, with the persisted `lastSyncAt` and `lastSkipped` mirrored
 //     in memory so the state is a synchronous read and survives a restart.
@@ -1454,8 +1452,6 @@ function transportFailure(err: unknown): SyncFailure {
  * - **A 30-second abort.** `fetchWithTimeout` cancels the in-flight request when
  *   the budget elapses, so a hung connection cannot hold a Sync_Cycle open
  *   (Req 6.8, 7.5).
- * - **Entitlement stays fresh.** Every response body's `entitlement` is applied
- *   before the status is interpreted (Req 1.7).
  * - **A 401 signs out.** `clearToken()` — the same sign-out the other
  *   authenticated endpoints apply — runs before the failure is returned, so
  *   Sync_State reads `off` from the absent token (Req 2.8, 1.6).
@@ -1566,9 +1562,9 @@ export async function syncRequest<T>(
 // exists.
 //
 // Everything else is either in-memory runtime state (whether a cycle is running,
-// how the last one ended) or read live from `syncSettings` (the Session_Token, the
-// Pro gate, the persisted enabled state), so a sign-out, a Pro lapse, or a toggle
-// changes the derived state without this module observing anything itself.
+// how the last one ended) or read live from `syncSettings` (the Session_Token and
+// the persisted enabled state), so a sign-out or a toggle changes the derived
+// state without this module observing anything itself.
 // ---------------------------------------------------------------------------
 
 /**
@@ -1623,9 +1619,9 @@ let hydratePromise: Promise<void> | null = null;
 let settingsUnsubscribe: (() => void) | null = null;
 
 /**
- * Republish on every `syncSettings` change, so a sign-out, a Pro lapse, an
- * entitlement refresh, or a toggle reaches this module's subscribers within the
- * 1-second bounds of Requirements 1.7, 3.8, and 13.1 — synchronously, in fact.
+ * Republish on every `syncSettings` change, so a sign-out or a toggle reaches
+ * this module's subscribers within the 1-second bounds of Requirements 1.7, 3.8,
+ * and 13.1 — synchronously, in fact.
  *
  * Installed lazily and idempotently rather than at module load: `syncSettings`
  * exposes a test reset that drops every listener, and re-installing on demand
@@ -1832,8 +1828,8 @@ export function markCycleFailed(at: number, kind: "offline" | "service"): void {
 }
 
 /**
- * A Sync_Cycle was abandoned rather than failed — the destination was disabled,
- * the session ended, or Pro lapsed mid-cycle (Req 13.11).
+ * A Sync_Cycle was abandoned rather than failed — the destination was disabled or
+ * the session ended mid-cycle (Req 13.11).
  *
  * Deliberately not a failure: the last-cycle-failed flag is untouched, so the
  * derived state comes from the condition that caused the abandonment
@@ -1863,7 +1859,7 @@ export function markCycleAbandoned(): void {
 // not yet managed to send, so the next cycle would push into a timeline that has
 // already moved on. Only `status: "complete"` licenses the pull phase.
 //
-// Three answers are ends of the cycle without being failures of it:
+// Two answers are ends of the cycle without being failures of it:
 //
 //   - **401** — `syncRequest` has already applied the existing sign-out, so
 //     Sync_State reads `off` from the absent Session_Token. The cycle is
@@ -1901,9 +1897,9 @@ interface PushResponseBody {
  *   the only status that licenses the pull phase (Req 6.8, 6.12).
  * - `failed` — a request failed, timed out, or answered about the payload.
  *   Sync_State has been set to `error` and the cycle is over.
- * - `abandoned` — the session ended (401) or Pro lapsed (402). The cycle is over
- *   and Sync_State derives from that condition rather than reading as broken
- *   (Req 2.7, 2.8, 13.11).
+ * - `abandoned` — the session ended (401), or the destination stopped being usable
+ *   mid-cycle. The cycle is over and Sync_State derives from that condition rather
+ *   than reading as broken (Req 2.7, 2.8, 13.11).
  */
 export type PhaseStatus = "complete" | "failed" | "abandoned";
 
@@ -2061,17 +2057,16 @@ async function applyPushResponse(
  * Sync_State the ending calls for, and report.
  *
  * `failure === null` is the completing case and touches no cycle state — the
- * cycle is still running, and the pull phase is what ends it. A 401 or a 402
- * *abandons* the cycle (Req 2.8): the sign-out has
- * already been applied by the transport, so `markCycleAbandoned` leaves
- * derivation to report `off` rather than `error`. Everything
- * else is a failed push request, which sets `error` (Req 6.8, 19.8, 19.11).
+ * cycle is still running, and the pull phase is what ends it. A 401 *abandons*
+ * the cycle (Req 2.8): the sign-out has already been applied by the transport, so
+ * `markCycleAbandoned` leaves derivation to report `off` rather than `error`.
+ * Everything else is a failed push request, which sets `error`
+ * (Req 6.8, 19.8, 19.11).
  *
- * `abandoned` is the third ending: the destination was disabled, the session
- * ended, or Pro lapsed between requests, which the scheduler's guard reports
- * (Req 11.10, 13.1, 13.11). Like a 401 or a 402 it is not a failure, so it
- * carries no `failure` value and leaves derivation to report the condition that
- * caused it.
+ * `abandoned` is the third ending: the destination was disabled or the session
+ * ended between requests, which the scheduler's guard reports (Req 11.10, 13.1,
+ * 13.11). Like a 401 it is not a failure, so it carries no `failure` value and
+ * leaves derivation to report the condition that caused it.
  */
 async function endPush(
   tally: PushTally,
@@ -2112,7 +2107,7 @@ async function endPush(
  * Run the push phase of one Sync_Cycle.
  *
  * The caller has already established eligibility and called `markCycleStarted`;
- * this function does not gate on the enabled state, Pro, or connectivity
+ * this function does not gate on the enabled state or connectivity
  * (Req 11.6, 11.8 discard those triggers before a cycle begins). It runs to one
  * of three endings, and only `complete` licenses the pull phase:
  *
@@ -2158,9 +2153,9 @@ export async function runPushPhase(): Promise<PushPhaseResult> {
   tally.removed += tally.dropped;
 
   for (const batch of plan.batches) {
-    // Req 11.10, 13.1, 13.11 — a destination disabled, a session ended, or Pro
-    // lapsed since the previous request stops the cycle before the next one
-    // leaves. Every unsettled id stays queued.
+    // Req 11.10, 13.1, 13.11 — a destination disabled or a session ended since
+    // the previous request stops the cycle before the next one leaves. Every
+    // unsettled id stays queued.
     if (cycleMustStop()) return endPush(tally, null, true);
 
     const sentIds = batch.map((record) => record.id);
@@ -2458,8 +2453,8 @@ export async function runPullPhase(): Promise<PullPhaseResult> {
     }
 
     // Req 13.11 — a page fetched but not yet merged is discarded rather than
-    // merged when Pro lapses mid-cycle, so the cursor and the Local_Store stay
-    // exactly as the last fully merged page left them.
+    // merged when the destination stops being usable mid-cycle, so the cursor and
+    // the Local_Store stay exactly as the last fully merged page left them.
     if (cycleMustStop()) return endPull(tally, null, false, true);
 
     let result: MergePageResult;
@@ -2508,8 +2503,8 @@ export async function runPullPhase(): Promise<PullPhaseResult> {
 // The gate sits **outside** the single-flight, which is the part that is easy to
 // get backwards. Requirements 11.6 and 11.8 do not say "queue it and skip it
 // later", they say an ineligible trigger queues *zero* Sync_Cycles: while the
-// destination is disabled, Pro is false, no Session_Token is held, the device
-// reports no connectivity, or a retry window is still open, the trigger is
+// destination is disabled, no Session_Token is held, the device reports no
+// connectivity, or a retry window is still open, the trigger is
 // **discarded**. Were the gate inside the single-flight, such a trigger would
 // still become the one queued rerun and a cycle would start the moment the
 // in-flight one ended — exactly the behavior those criteria rule out.
@@ -2525,15 +2520,15 @@ export async function runPullPhase(): Promise<PullPhaseResult> {
 // Two things happen at the boundaries of a cycle rather than inside a phase:
 //
 //   - **The queued rerun is re-gated.** Requirement 11.10 discards it when the
-//     destination was disabled or Pro lapsed while the earlier cycle ran, so the
-//     cycle body re-checks eligibility instead of trusting the trigger that
+//     destination was disabled or the session ended while the earlier cycle ran,
+//     so the cycle body re-checks eligibility instead of trusting the trigger that
 //     queued it.
 //   - **An in-flight cycle is abandoned, not failed.** While a cycle runs through
 //     here, the push and pull phases consult `cycleMustStop()` before every
-//     request and before merging any fetched page, so a disable, a sign-out, or a
-//     Pro_Lapse stops the cycle within one request of the entitlement being
-//     applied (Req 13.1) while the Outbox, the Sync_Cursor, and the Local_Store
-//     are left exactly as they were (Req 11.10, 13.2, 13.11).
+//     request and before merging any fetched page, so a disable or a sign-out
+//     stops the cycle within one request of that change becoming visible
+//     (Req 13.1) while the Outbox, the Sync_Cursor, and the Local_Store are left
+//     exactly as they were (Req 11.10, 13.2, 13.11).
 // ---------------------------------------------------------------------------
 
 /** Requirement 11.9's background interval before a foreground return syncs. */
@@ -2555,12 +2550,12 @@ let triggerTeardown: (() => void) | null = null;
 let cycleScheduler: (() => Promise<void>) | null = null;
 
 /**
- * The three conditions a Sync_Cycle needs to exist at all: the destination is
- * enabled, Pro_Entitlement is true, and a Session_Token is held (Req 11.6, 1.6).
+ * The two conditions a Sync_Cycle needs to exist at all: the destination is
+ * enabled and a Session_Token is held (Req 11.6, 1.6).
  *
- * Read live from `syncSettings` on every call, never cached, so a toggle, a
- * sign-out, or an entitlement refresh is visible to the very next check — which
- * is what lets the mid-cycle guard react within the 1 second of Requirement 13.1.
+ * Read live from `syncSettings` on every call, never cached, so a toggle or a
+ * sign-out is visible to the very next check — which is what lets the mid-cycle
+ * guard react within the 1 second of Requirement 13.1.
  */
 function destinationUsable(): boolean {
   return isDestinationEnabled("cloud") && getSyncSettingsSnapshot().hasSession;
@@ -2583,8 +2578,8 @@ function cycleMustStop(): boolean {
  * Sync_Cursor the Sync_Service reported as no longer valid.
  *
  * `push` runs before `pull`, which is the whole point: the re-enqueued timeline
- * has to reach the Sync_Service *before* the cursor advances again, or a
- * re-subscribing user's local history would be skipped rather than re-uploaded.
+ * has to reach the Sync_Service *before* the cursor advances again, or the
+ * device's local history would be skipped rather than re-uploaded.
  */
 export interface CycleRecovery {
   /** How the recovery ended; `complete` only when the re-pull completed too. */
@@ -2637,8 +2632,8 @@ export interface CycleResult {
  *   invalidating.
  */
 async function recoverFromCursorReset(): Promise<CycleRecovery> {
-  // Req 11.10, 13.11 — a disable, a sign-out, or a Pro_Lapse during the pull
-  // stops the recovery before it writes to the Outbox.
+  // Req 11.10, 13.11 — a disable or a sign-out during the pull stops the recovery
+  // before it writes to the Outbox.
   if (cycleMustStop()) {
     markCycleAbandoned();
     return { status: "abandoned", enqueued: 0, push: null, pull: null, failure: null };
@@ -2677,8 +2672,8 @@ async function recoverFromCursorReset(): Promise<CycleRecovery> {
  * That ordering is the durability argument of the whole cycle. Pulling after a
  * failed push would advance the Sync_Cursor past records the device has not
  * managed to send, so the next cycle would push into a timeline that has already
- * moved on. A push phase that failed, was abandoned, or ended on a 401 or a 402
- * therefore ends the cycle where it stands, with the Outbox intact.
+ * moved on. A push phase that failed, was abandoned, or ended on a 401 therefore
+ * ends the cycle where it stands, with the Outbox intact.
  *
  * The eligibility gate has already run and `markCycleStarted` is called here, so
  * Sync_State reads `syncing` for the whole cycle (Req 12.3). Whatever the ending,
@@ -2697,7 +2692,7 @@ export async function runSyncCycle(): Promise<CycleResult> {
       return { status: push.status, push, pull: null, cursorReset: false, recovery: null };
     }
 
-    // Req 11.10, 13.11 — a disable or a Pro_Lapse during the push phase stops the
+    // Req 11.10, 13.11 — a disable or a sign-out during the push phase stops the
     // cycle before a single page is pulled.
     if (cycleMustStop()) {
       markCycleAbandoned();
@@ -2730,8 +2725,8 @@ export async function runSyncCycle(): Promise<CycleResult> {
  *
  * The re-check at the top is Requirement 11.10's "discard the queued
  * Sync_Cycle": a rerun queued by an eligible trigger must not run if the
- * destination was disabled, the session ended, or Pro lapsed while the earlier
- * cycle was still going. Connectivity is re-checked for the same reason — a
+ * destination was disabled or the session ended while the earlier cycle was still
+ * going. Connectivity is re-checked for the same reason — a
  * rerun queued before the device dropped offline would otherwise issue requests
  * Requirement 11.8 bars.
  *
@@ -3005,12 +3000,10 @@ export interface DeleteCloudCopyResult {
  * Delete the cloud copy while keeping the account (Req 17.4), then apply the
  * local consequences of a success (Req 17.5).
  *
- * `DELETE /api/sync/data` is the one sync route that sits behind authentication
- * but *not* behind the Pro gate, so a lapsed user can still remove what the
- * Sync_Service holds. On a success the Sync_Service has deleted every stored
- * Event_Record and Tombstone for the user and bumped the purge generation, which
- * is what makes this device's old cursor report invalid rather than silently
- * matching nothing.
+ * `DELETE /api/sync/data` needs nothing but a valid Session_Token. On a success
+ * the Sync_Service has deleted every stored Event_Record and Tombstone for the
+ * user and bumped the purge generation, which is what makes this device's old
+ * cursor report invalid rather than silently matching nothing.
  *
  * The local half, in this order and for this reason:
  *
@@ -3027,8 +3020,8 @@ export interface DeleteCloudCopyResult {
  *
  * What is deliberately *not* touched: the `events` store. Every Log_Event, every
  * Tombstone, and every Photo stays exactly as it was (Req 17.5) — this function
- * never opens that store. The Session_Token and the Pro_Entitlement are likewise
- * untouched, which is the difference between this and account deletion.
+ * never opens that store. The Session_Token is likewise untouched, which is the
+ * difference between this and account deletion.
  *
  * On a failure nothing local changes at all: the destination stays enabled, the
  * Outbox keeps every id, and the cursor stays where it was, so the Settings row

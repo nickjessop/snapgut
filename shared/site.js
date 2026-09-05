@@ -27,7 +27,7 @@ export const MARKETING_PAGES = [
     file: "privacy.html",
     title: "Privacy — SnapGut",
     description:
-      "What SnapGut keeps on your device, the little we keep on our servers, what leaves your device to identify a meal, and how to export or delete everything.",
+      "What SnapGut keeps in your browser, what the server you run keeps, what leaves your machine to identify a meal, and how to export or delete everything.",
   },
   {
     path: "/terms",

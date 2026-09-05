@@ -15,7 +15,11 @@ import { getStore } from "../server/store.js";
 import { getEventStore } from "../server/eventStore.js";
 
 function makeApp(readyValue: boolean) {
-  const { config } = loadConfig({ DATASTORE_BACKEND: "memory", AUTH_PASSWORD: "test-pass-1234" });
+  const { config } = loadConfig({
+    DATASTORE_BACKEND: "memory",
+    AI_PROVIDER: "mock",
+    AUTH_PASSWORD: "test-pass-1234",
+  });
   const store = getStore();
   const eventStore = getEventStore();
   const ready = { value: readyValue };

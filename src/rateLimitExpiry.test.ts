@@ -31,7 +31,9 @@ beforeAll(async () => {
   const dbPath = join(tmpDir, "test.db");
   db = new DatabaseSync(dbPath);
 
+  // @ts-ignore -- untyped ESM JavaScript
   const { migrate } = await import("../server/sqlite/schema.js");
+  // @ts-ignore -- untyped ESM JavaScript
   const { createSqliteStore } = await import("../server/sqlite/store.js");
   migrate(db);
   store = createSqliteStore(db);
@@ -47,13 +49,6 @@ afterAll(() => {
 });
 
 describe("SQLite rate-limit piggybacked expiry sweep (Requirement 2.12)", () => {
-  // Helper: count rows in rate_limits table
-  function countRateLimitRows(): number {
-    if (!db) return 0;
-    const row = db.prepare("SELECT COUNT(*) as cnt FROM rate_limits").get();
-    return Number(row.cnt);
-  }
-
   // Helper: get all rate limit rows for inspection
   function getAllRateLimitRows(): Array<{ key: string; bucket: number; count: number; expires_at: number }> {
     if (!db) return [];

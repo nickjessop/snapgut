@@ -5,23 +5,33 @@
 // DATASTORE_BACKEND known, AI_PROVIDER known + required settings, SESSION_SECRET length,
 // derived exposedBind, and all defaults.
 //
-// _Requirements: 2.11, 4.14, 7.4, 7.14, 8.1, 9.4_
+// _Requirements: 2.11, 4.14, 6.14, 6.16, 7.4, 7.14, 8.1, 9.4_
 
 import { describe, expect, it } from "vitest";
 // @ts-ignore — untyped ESM JavaScript
 import { loadConfig } from "../server/config.js";
 
-/** Minimal env that produces a valid config with no warnings. */
+/**
+ * Minimal env that produces a valid config with no warnings.
+ *
+ * `AI_MODEL` is here because it is required for every provider except `mock`, so
+ * there is no such thing as a valid config that omits it while the default
+ * `ollama` provider is in play.
+ */
 function validEnv(overrides: Record<string, string | undefined> = {}): Record<string, string | undefined> {
   return {
     AUTH_PASSWORD: "a-secure-password-12",
+    AI_MODEL: "a-test-model",
     ...overrides,
   };
 }
 
+/** The one setting with no usable default, so "defaults" still means everything else. */
+const MODEL_ONLY = { AI_MODEL: "a-test-model" };
+
 describe("loadConfig defaults", () => {
-  it("returns ok=true with all defaults when env is empty", () => {
-    const result = loadConfig({});
+  it("returns ok=true with all defaults when only AI_MODEL is supplied", () => {
+    const result = loadConfig({ ...MODEL_ONLY });
     // Exposed bind warning fires because default bind is 127.0.0.1 — no warning
     expect(result.ok).toBe(true);
     expect(result.errors).toEqual([]);
@@ -38,11 +48,14 @@ describe("loadConfig defaults", () => {
     expect(c.foodPackDir).toBe("./food-pack");
     expect(c.ai.provider).toBe("ollama");
     expect(c.ai.baseUrl).toBe("http://127.0.0.1:11434");
-    expect(c.ai.model).toBe("");
+    expect(c.ai.model).toBe("a-test-model");
     expect(c.ai.apiKey).toBeNull();
     expect(c.ai.timeoutMs).toBe(120000);
+    expect(c.ai.jsonMode).toBe("auto");
+    expect(c.ai.extraHeaders).toBeNull();
     expect(c.auth.email).toBe("admin@localhost");
     expect(c.auth.password).toBeNull();
+    expect(c.auth.credentialRejected).toBe(false);
     expect(c.sessionSecret).toBeNull();
   });
 
@@ -127,29 +140,190 @@ describe("BIND_HOST and exposedBind (Req 7.4)", () => {
   });
 });
 
-describe("exposed bind + no credential warning (Req 7.4)", () => {
-  it("warns when bind is exposed and no AUTH_PASSWORD", () => {
-    const { ok, warnings } = loadConfig({ BIND_HOST: "0.0.0.0" });
+describe("exposed bind + unusable credential is a boot failure (Req 7.4)", () => {
+  it("errors when bind is exposed and AUTH_PASSWORD is unset", () => {
+    const { ok, config, errors } = loadConfig({ ...MODEL_ONLY, BIND_HOST: "0.0.0.0" });
+    expect(ok).toBe(false);
+    expect(config).toBeNull();
+    const credErrors = errors.filter((e: string) => e.includes("AUTH_PASSWORD"));
+    expect(credErrors.length).toBeGreaterThan(0);
+    expect(credErrors[0]).toContain("exposed");
+  });
+
+  it("errors when bind is exposed and AUTH_PASSWORD is whitespace-only", () => {
+    const { ok, config, errors } = loadConfig({
+      ...MODEL_ONLY,
+      BIND_HOST: "0.0.0.0",
+      AUTH_PASSWORD: "     ",
+    });
+    expect(ok).toBe(false);
+    expect(config).toBeNull();
+    const credErrors = errors.filter((e: string) => e.includes("AUTH_PASSWORD"));
+    expect(credErrors.length).toBeGreaterThan(0);
+  });
+
+  it("errors when bind is exposed and AUTH_PASSWORD is 11 characters", () => {
+    const eleven = "abcdefghijk";
+    expect(eleven.length).toBe(11);
+    const { ok, config, errors } = loadConfig({
+      ...MODEL_ONLY,
+      BIND_HOST: "0.0.0.0",
+      AUTH_PASSWORD: eleven,
+    });
+    expect(ok).toBe(false);
+    expect(config).toBeNull();
+    const credErrors = errors.filter((e: string) => e.includes("AUTH_PASSWORD"));
+    expect(credErrors.length).toBeGreaterThan(0);
+    expect(credErrors[0]).toContain("12");
+    expect(credErrors[0]).toContain("minimum");
+  });
+
+  it("errors when bind is a LAN address and AUTH_PASSWORD is unset", () => {
+    const { ok, config, errors } = loadConfig({ ...MODEL_ONLY, BIND_HOST: "192.168.1.50" });
+    expect(ok).toBe(false);
+    expect(config).toBeNull();
+    expect(errors.some((e: string) => e.includes("AUTH_PASSWORD"))).toBe(true);
+  });
+
+  it("accepts a 12-character AUTH_PASSWORD on an exposed bind (boundary)", () => {
+    const twelve = "abcdefghijkl";
+    expect(twelve.length).toBe(12);
+    const { ok, config, errors } = loadConfig({
+      ...MODEL_ONLY,
+      BIND_HOST: "0.0.0.0",
+      AUTH_PASSWORD: twelve,
+    });
     expect(ok).toBe(true);
-    expect(warnings.length).toBeGreaterThan(0);
-    expect(warnings[0]).toContain("AUTH_PASSWORD");
-    expect(warnings[0]).toContain("exposed");
+    expect(errors).toEqual([]);
+    expect(config!.auth.password).toBe(twelve);
+    expect(config!.auth.credentialRejected).toBe(false);
   });
 
-  it("no warning when bind is loopback and no AUTH_PASSWORD", () => {
-    const { warnings } = loadConfig({ BIND_HOST: "127.0.0.1" });
-    expect(warnings).toEqual([]);
-  });
-
-  it("no warning when bind is exposed and AUTH_PASSWORD is set", () => {
-    const { warnings } = loadConfig({
+  it("no credential error or warning when bind is exposed and AUTH_PASSWORD is long enough", () => {
+    const { ok, errors, warnings } = loadConfig({
+      ...MODEL_ONLY,
       BIND_HOST: "0.0.0.0",
       AUTH_PASSWORD: "my-secret-pass-123",
     });
-    // May have memory warning but not the credential warning
+    expect(ok).toBe(true);
+    // May have a memory warning but not a credential error or warning
+    expect(errors).toEqual([]);
     const credWarnings = warnings.filter((w: string) => w.includes("AUTH_PASSWORD"));
     expect(credWarnings).toEqual([]);
   });
+});
+
+describe("loopback bind + unusable credential is a warning, not a failure (Req 6.14)", () => {
+  it("warns but boots when bind is loopback and AUTH_PASSWORD is 11 characters", () => {
+    const eleven = "abcdefghijk";
+    const { ok, config, errors, warnings } = loadConfig({
+      ...MODEL_ONLY,
+      BIND_HOST: "127.0.0.1",
+      AUTH_PASSWORD: eleven,
+    });
+    expect(ok).toBe(true);
+    expect(errors).toEqual([]);
+    expect(config!.auth.password).toBeNull();
+    const credWarnings = warnings.filter((w: string) => w.includes("AUTH_PASSWORD"));
+    expect(credWarnings.length).toBeGreaterThan(0);
+    expect(credWarnings[0]).toContain("12");
+  });
+
+  it("no warning when bind is loopback and no AUTH_PASSWORD (unchanged)", () => {
+    const { ok, warnings } = loadConfig({ ...MODEL_ONLY, BIND_HOST: "127.0.0.1" });
+    expect(ok).toBe(true);
+    expect(warnings).toEqual([]);
+  });
+
+  it("resolves a too-short credential to null so sign-in has one rejection path", () => {
+    const { config } = loadConfig({ ...MODEL_ONLY, AUTH_PASSWORD: "short" });
+    expect(config!.auth.password).toBeNull();
+  });
+
+  it("auth.password is the trimmed value when valid", () => {
+    const { config } = loadConfig({ ...MODEL_ONLY, AUTH_PASSWORD: "  a-valid-credential  " });
+    expect(config!.auth.password).toBe("a-valid-credential");
+  });
+
+  it("a value that is only 12 characters after trimming is rejected", () => {
+    const { config } = loadConfig({ ...MODEL_ONLY, AUTH_PASSWORD: "   abcdefghij   " });
+    expect(config!.auth.password).toBeNull();
+  });
+
+  it("auth stays frozen with exactly { email, password, credentialRejected }", () => {
+    const { config } = loadConfig(validEnv());
+    expect(Object.isFrozen(config!.auth)).toBe(true);
+    expect(Object.keys(config!.auth).sort()).toEqual([
+      "credentialRejected",
+      "email",
+      "password",
+    ]);
+  });
+});
+
+// The boot summary in `server/main.js` has to tell "nothing configured" apart
+// from "configured but unusable", because they read as opposite things to an
+// operator: the first is a deliberately open loopback instance, the second is a
+// misconfiguration. `password` alone is null for both, so this flag carries it.
+describe("auth.credentialRejected distinguishes unset from unusable (Req 6.14)", () => {
+  it("is false when no credential was supplied at all", () => {
+    const { config } = loadConfig({ ...MODEL_ONLY });
+    expect(config!.auth.password).toBeNull();
+    expect(config!.auth.credentialRejected).toBe(false);
+  });
+
+  it("is false when a whitespace-only value was supplied — nothing was configured", () => {
+    const { config } = loadConfig({ ...MODEL_ONLY, AUTH_PASSWORD: "     " });
+    expect(config!.auth.password).toBeNull();
+    expect(config!.auth.credentialRejected).toBe(false);
+  });
+
+  it("is true when a credential was supplied but is under 12 characters", () => {
+    const { config } = loadConfig({ ...MODEL_ONLY, AUTH_PASSWORD: "abcdefghijk" });
+    expect(config!.auth.password).toBeNull();
+    expect(config!.auth.credentialRejected).toBe(true);
+  });
+
+  it("is false when the credential is usable", () => {
+    const { config } = loadConfig(validEnv());
+    expect(config!.auth.password).not.toBeNull();
+    expect(config!.auth.credentialRejected).toBe(false);
+  });
+});
+
+describe("credential value never appears in diagnostics (Req 6.16)", () => {
+  const cases: Array<[string, Record<string, string>]> = [
+    [
+      "exposed bind, too short",
+      { ...MODEL_ONLY, BIND_HOST: "0.0.0.0", AUTH_PASSWORD: "hunter2-abc" },
+    ],
+    [
+      "loopback bind, too short",
+      { ...MODEL_ONLY, BIND_HOST: "127.0.0.1", AUTH_PASSWORD: "hunter2-abc" },
+    ],
+    [
+      "exposed bind, whitespace-only",
+      { ...MODEL_ONLY, BIND_HOST: "0.0.0.0", AUTH_PASSWORD: "   " },
+    ],
+    ["exposed bind, unset", { ...MODEL_ONLY, BIND_HOST: "0.0.0.0" }],
+  ];
+
+  for (const [label, env] of cases) {
+    it(`no message leaks the credential or its length — ${label}`, () => {
+      const { errors, warnings } = loadConfig(env);
+      const messages = [...errors, ...warnings];
+      expect(messages.length).toBeGreaterThan(0);
+
+      const credential = (env.AUTH_PASSWORD ?? "").trim();
+      for (const message of messages) {
+        if (credential.length > 0) {
+          expect(message).not.toContain(credential);
+          // The actual length must never be reported; only the 12-char minimum.
+          expect(message).not.toMatch(new RegExp(`\\b${credential.length}\\b`));
+        }
+      }
+    });
+  }
 });
 
 describe("DATASTORE_BACKEND validation (Req 2.11)", () => {
@@ -182,9 +356,18 @@ describe("DATASTORE_BACKEND validation (Req 2.11)", () => {
 
 describe("AI_PROVIDER validation (Req 4.14)", () => {
   it("accepts all valid providers", () => {
-    for (const p of ["ollama", "openai", "gemini", "mock"]) {
+    for (const p of [
+      "ollama",
+      "openai",
+      "openai-compatible",
+      "litellm",
+      "anthropic",
+      "gemini",
+      "mock",
+    ]) {
       const env: Record<string, string> = { ...validEnv(), AI_PROVIDER: p };
-      if (p === "gemini") env.AI_API_KEY = "test-key-value";
+      if (p === "gemini" || p === "anthropic") env.AI_API_KEY = "test-key-value";
+      if (p === "openai-compatible") env.AI_BASE_URL = "http://127.0.0.1:8000/v1";
       const { ok, config } = loadConfig(env);
       expect(ok).toBe(true);
       expect(config!.ai.provider).toBe(p);
@@ -224,10 +407,158 @@ describe("AI_PROVIDER validation (Req 4.14)", () => {
     expect(config!.ai.baseUrl).toBe("http://127.0.0.1:11434");
   });
 
-  it("openai base URL is null when AI_BASE_URL unset", () => {
+  it("openai gets the api.openai.com default base URL", () => {
     const { ok, config } = loadConfig(validEnv({ AI_PROVIDER: "openai" }));
     expect(ok).toBe(true);
+    expect(config!.ai.baseUrl).toBe("https://api.openai.com");
+  });
+
+  it("litellm gets the proxy default base URL", () => {
+    const { config } = loadConfig(validEnv({ AI_PROVIDER: "litellm" }));
+    expect(config!.ai.baseUrl).toBe("http://127.0.0.1:4000");
+  });
+
+  it("anthropic gets the api.anthropic.com default base URL", () => {
+    const { config } = loadConfig(
+      validEnv({ AI_PROVIDER: "anthropic", AI_API_KEY: "sk-ant-key" })
+    );
+    expect(config!.ai.baseUrl).toBe("https://api.anthropic.com");
+  });
+
+  it("gemini gets the generativelanguage default base URL", () => {
+    const { config } = loadConfig(validEnv({ AI_PROVIDER: "gemini", AI_API_KEY: "key" }));
+    expect(config!.ai.baseUrl).toBe("https://generativelanguage.googleapis.com");
+  });
+
+  it("mock base URL is null when AI_BASE_URL unset", () => {
+    const { ok, config } = loadConfig(validEnv({ AI_PROVIDER: "mock" }));
+    expect(ok).toBe(true);
     expect(config!.ai.baseUrl).toBeNull();
+  });
+
+  it("AI_BASE_URL overrides the per-provider default", () => {
+    const { config } = loadConfig(
+      validEnv({ AI_PROVIDER: "openai", AI_BASE_URL: "http://my-gateway:4000/v1" })
+    );
+    expect(config!.ai.baseUrl).toBe("http://my-gateway:4000/v1");
+  });
+
+  it("anthropic without API key is an error", () => {
+    const { ok, errors } = loadConfig(validEnv({ AI_PROVIDER: "anthropic" }));
+    expect(ok).toBe(false);
+    expect(errors[0]).toContain("anthropic");
+    expect(errors[0]).toContain("AI_API_KEY");
+  });
+
+  it("openai-compatible without base URL is an error", () => {
+    const { ok, errors } = loadConfig(validEnv({ AI_PROVIDER: "openai-compatible" }));
+    expect(ok).toBe(false);
+    expect(errors[0]).toContain("openai-compatible");
+    expect(errors[0]).toContain("AI_BASE_URL");
+  });
+
+  it("openai-compatible with base URL is valid", () => {
+    const { ok, config } = loadConfig(
+      validEnv({ AI_PROVIDER: "openai-compatible", AI_BASE_URL: "http://127.0.0.1:8000/v1" })
+    );
+    expect(ok).toBe(true);
+    expect(config!.ai.baseUrl).toBe("http://127.0.0.1:8000/v1");
+  });
+});
+
+describe("AI_JSON_MODE validation (Req 4.14)", () => {
+  it("defaults to auto when unset", () => {
+    const { ok, config } = loadConfig(validEnv());
+    expect(ok).toBe(true);
+    expect(config!.ai.jsonMode).toBe("auto");
+  });
+
+  it("accepts all valid modes", () => {
+    for (const mode of ["auto", "json_object", "off"]) {
+      const { ok, config } = loadConfig(validEnv({ AI_JSON_MODE: mode }));
+      expect(ok).toBe(true);
+      expect(config!.ai.jsonMode).toBe(mode);
+    }
+  });
+
+  it("trims and lowercases the value", () => {
+    const { ok, config } = loadConfig(validEnv({ AI_JSON_MODE: "  OFF  " }));
+    expect(ok).toBe(true);
+    expect(config!.ai.jsonMode).toBe("off");
+  });
+
+  it("rejects an unrecognised mode", () => {
+    const { ok, errors } = loadConfig(validEnv({ AI_JSON_MODE: "schema" }));
+    expect(ok).toBe(false);
+    expect(errors[0]).toContain("AI_JSON_MODE");
+    expect(errors[0]).toContain("schema");
+    expect(errors[0]).toContain("auto");
+    expect(errors[0]).toContain("json_object");
+    expect(errors[0]).toContain("off");
+  });
+
+  it("empty string falls back to auto", () => {
+    const { ok, config } = loadConfig(validEnv({ AI_JSON_MODE: "" }));
+    expect(ok).toBe(true);
+    expect(config!.ai.jsonMode).toBe("auto");
+  });
+});
+
+describe("AI_EXTRA_HEADERS validation (Req 4.14)", () => {
+  it("defaults to null when unset", () => {
+    const { ok, config } = loadConfig(validEnv());
+    expect(ok).toBe(true);
+    expect(config!.ai.extraHeaders).toBeNull();
+  });
+
+  it("parses a JSON object of string values", () => {
+    const { ok, config } = loadConfig(
+      validEnv({
+        AI_EXTRA_HEADERS: '{"HTTP-Referer":"https://example.com","X-Title":"SnapGut"}',
+      })
+    );
+    expect(ok).toBe(true);
+    expect(config!.ai.extraHeaders).toEqual({
+      "HTTP-Referer": "https://example.com",
+      "X-Title": "SnapGut",
+    });
+  });
+
+  it("the parsed object is frozen", () => {
+    const { config } = loadConfig(validEnv({ AI_EXTRA_HEADERS: '{"X-Title":"SnapGut"}' }));
+    expect(Object.isFrozen(config!.ai.extraHeaders)).toBe(true);
+  });
+
+  it("rejects malformed JSON", () => {
+    const { ok, errors } = loadConfig(validEnv({ AI_EXTRA_HEADERS: "{not json" }));
+    expect(ok).toBe(false);
+    expect(errors[0]).toContain("AI_EXTRA_HEADERS");
+  });
+
+  it("rejects a JSON array", () => {
+    const { ok, errors } = loadConfig(validEnv({ AI_EXTRA_HEADERS: '["X-Title"]' }));
+    expect(ok).toBe(false);
+    expect(errors[0]).toContain("AI_EXTRA_HEADERS");
+    expect(errors[0]).toContain("array");
+  });
+
+  it("rejects a JSON scalar", () => {
+    const { ok, errors } = loadConfig(validEnv({ AI_EXTRA_HEADERS: '"X-Title"' }));
+    expect(ok).toBe(false);
+    expect(errors[0]).toContain("AI_EXTRA_HEADERS");
+  });
+
+  it("rejects non-string values", () => {
+    const { ok, errors } = loadConfig(validEnv({ AI_EXTRA_HEADERS: '{"X-Retries":3}' }));
+    expect(ok).toBe(false);
+    expect(errors[0]).toContain("AI_EXTRA_HEADERS");
+    expect(errors[0]).toContain("X-Retries");
+  });
+
+  it("empty string leaves it null", () => {
+    const { ok, config } = loadConfig(validEnv({ AI_EXTRA_HEADERS: "" }));
+    expect(ok).toBe(true);
+    expect(config!.ai.extraHeaders).toBeNull();
   });
 });
 
@@ -262,6 +593,7 @@ describe("SESSION_SECRET validation (Req 7.14)", () => {
 describe("memory + exposed bind warning", () => {
   it("warns when memory backend and exposed bind", () => {
     const { warnings } = loadConfig({
+      ...MODEL_ONLY,
       BIND_HOST: "0.0.0.0",
       DATASTORE_BACKEND: "memory",
       AUTH_PASSWORD: "my-secure-pw-123",
@@ -273,6 +605,7 @@ describe("memory + exposed bind warning", () => {
 
   it("no warning when memory backend and loopback bind", () => {
     const { warnings } = loadConfig({
+      ...MODEL_ONLY,
       BIND_HOST: "127.0.0.1",
       DATASTORE_BACKEND: "memory",
     });
@@ -349,6 +682,11 @@ describe("DB_PATH resolution", () => {
   });
 });
 
+// The value is handed straight to `AbortSignal.timeout()` in `server/app.js`, and
+// `AbortSignal.timeout(0)` fires on the next macrotask — so 0 aborts every AI
+// request rather than disabling the timeout. An unusable value is a boot error
+// rather than a silent reset to 120000, so a typo is reported instead of quietly
+// ignored.
 describe("AI_TIMEOUT_MS", () => {
   it("defaults to 120000", () => {
     const { config } = loadConfig(validEnv());
@@ -360,9 +698,117 @@ describe("AI_TIMEOUT_MS", () => {
     expect(config!.ai.timeoutMs).toBe(30000);
   });
 
-  it("falls back to default for invalid value", () => {
-    const { config } = loadConfig(validEnv({ AI_TIMEOUT_MS: "abc" }));
+  it("treats an empty value as unset and uses the default", () => {
+    const { ok, config } = loadConfig(validEnv({ AI_TIMEOUT_MS: "" }));
+    expect(ok).toBe(true);
     expect(config!.ai.timeoutMs).toBe(120000);
+  });
+
+  it("accepts 1 ms — the smallest usable value (boundary)", () => {
+    const { ok, config } = loadConfig(validEnv({ AI_TIMEOUT_MS: "1" }));
+    expect(ok).toBe(true);
+    expect(config!.ai.timeoutMs).toBe(1);
+  });
+
+  it("rejects 0 — it aborts every AI request rather than disabling the timeout", () => {
+    const { ok, config, errors } = loadConfig(validEnv({ AI_TIMEOUT_MS: "0" }));
+    expect(ok).toBe(false);
+    expect(config).toBeNull();
+    const timeoutErrors = errors.filter((e: string) => e.includes("AI_TIMEOUT_MS"));
+    expect(timeoutErrors.length).toBe(1);
+    expect(timeoutErrors[0]).toContain("greater than zero");
+  });
+
+  it("rejects a negative value", () => {
+    const { ok, errors } = loadConfig(validEnv({ AI_TIMEOUT_MS: "-1" }));
+    expect(ok).toBe(false);
+    expect(errors.some((e: string) => e.includes("AI_TIMEOUT_MS"))).toBe(true);
+  });
+
+  it("rejects a non-numeric value instead of silently substituting the default", () => {
+    const { ok, config, errors } = loadConfig(validEnv({ AI_TIMEOUT_MS: "abc" }));
+    expect(ok).toBe(false);
+    expect(config).toBeNull();
+    const timeoutErrors = errors.filter((e: string) => e.includes("AI_TIMEOUT_MS"));
+    expect(timeoutErrors.length).toBe(1);
+    expect(timeoutErrors[0]).toContain("abc");
+  });
+});
+
+// Every adapter in `server/ai/` passes `model` through verbatim, and an empty
+// model is rejected by six of the seven providers. Enforcing it at boot turns a
+// guaranteed `503 ai_unavailable` at first use into a named config error.
+describe("AI_MODEL is required for every provider except mock", () => {
+  const networkProviders: Array<[string, Record<string, string>]> = [
+    ["ollama", {}],
+    ["openai", {}],
+    ["openai-compatible", { AI_BASE_URL: "http://127.0.0.1:8000/v1" }],
+    ["litellm", {}],
+    ["anthropic", { AI_API_KEY: "sk-ant-key" }],
+    ["gemini", { AI_API_KEY: "gemini-key" }],
+  ];
+
+  for (const [provider, extra] of networkProviders) {
+    it(`errors when provider is ${provider} and AI_MODEL is unset`, () => {
+      const { ok, config, errors } = loadConfig({
+        AUTH_PASSWORD: "a-secure-password-12",
+        AI_PROVIDER: provider,
+        ...extra,
+      });
+      expect(ok).toBe(false);
+      expect(config).toBeNull();
+      const modelErrors = errors.filter((e: string) => e.includes("AI_MODEL"));
+      expect(modelErrors.length).toBe(1);
+      expect(modelErrors[0]).toContain(provider);
+    });
+
+    it(`accepts ${provider} once AI_MODEL is set`, () => {
+      const { ok, config } = loadConfig({
+        AUTH_PASSWORD: "a-secure-password-12",
+        AI_PROVIDER: provider,
+        AI_MODEL: "a-test-model",
+        ...extra,
+      });
+      expect(ok).toBe(true);
+      expect(config!.ai.model).toBe("a-test-model");
+    });
+  }
+
+  it("errors for the default provider when AI_MODEL is unset", () => {
+    const { ok, errors } = loadConfig({ AUTH_PASSWORD: "a-secure-password-12" });
+    expect(ok).toBe(false);
+    expect(errors.some((e: string) => e.includes("AI_MODEL"))).toBe(true);
+  });
+
+  it("treats a whitespace-only AI_MODEL as empty", () => {
+    const { ok, errors } = loadConfig(validEnv({ AI_MODEL: "   " }));
+    expect(ok).toBe(false);
+    expect(errors.some((e: string) => e.includes("AI_MODEL"))).toBe(true);
+  });
+
+  it("trims the value", () => {
+    const { config } = loadConfig(validEnv({ AI_MODEL: "  llama3.2-vision  " }));
+    expect(config!.ai.model).toBe("llama3.2-vision");
+  });
+
+  it("mock needs no model — it never calls out", () => {
+    const { ok, config, errors } = loadConfig({
+      AUTH_PASSWORD: "a-secure-password-12",
+      AI_PROVIDER: "mock",
+    });
+    expect(ok).toBe(true);
+    expect(errors).toEqual([]);
+    expect(config!.ai.model).toBe("");
+  });
+
+  it("does not pile an AI_MODEL error on top of an unrecognised AI_PROVIDER", () => {
+    const { ok, errors } = loadConfig({
+      AUTH_PASSWORD: "a-secure-password-12",
+      AI_PROVIDER: "vertex",
+    });
+    expect(ok).toBe(false);
+    expect(errors.filter((e: string) => e.includes("AI_PROVIDER")).length).toBe(1);
+    expect(errors.filter((e: string) => e.includes("AI_MODEL"))).toEqual([]);
   });
 });
 

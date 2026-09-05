@@ -1,5 +1,15 @@
 #!/usr/bin/env node
 /**
+ * PROVENANCE SCRIPT — not part of the build.
+ *
+ * This is the script that generated the assets this project ships, kept so the
+ * process is documented and reproducible rather than because anything runs it.
+ * It needs Google Cloud credentials and Vertex AI access, and its dependencies
+ * (`@google-cloud/vertexai`, `google-auth-library`) are not installed by
+ * default, so it will not run against a plain checkout. No npm script invokes
+ * it, and nothing in the app imports it.
+ */
+/**
  * Expand scripts/food-list.txt with a Gemini *text* model (cents, not dollars —
  * this generates NAMES only, no images).
  *

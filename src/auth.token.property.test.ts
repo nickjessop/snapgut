@@ -9,6 +9,7 @@
 
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+// @ts-ignore -- untyped ESM JavaScript
 import { signToken, verifyToken } from "../server/auth.js";
 
 // --- Generators ---

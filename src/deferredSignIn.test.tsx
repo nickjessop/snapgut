@@ -10,7 +10,7 @@
 // This file covers the call sites and the counters.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, cleanup, waitFor, act, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, act, fireEvent } from "@testing-library/react";
 import { ONBOARDED_KEY } from "./Intro";
 import { DEFAULT_APP_PATH } from "../shared/site.js";
 

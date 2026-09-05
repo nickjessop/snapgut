@@ -1,10 +1,21 @@
 // Ollama AI provider adapter — calls POST {baseUrl}/api/generate.
 
+import { normalizeBaseUrl, mergeHeaders } from "./url.js";
+
 /**
- * @param {{ baseUrl: string, model: string }} opts
+ * @param {{ baseUrl: string, model: string,
+ *           jsonMode?: "auto"|"json_object"|"off",
+ *           extraHeaders?: Record<string, string>|null }} opts
  * @returns {import("./index.js").AiProvider}
  */
-export function createOllamaProvider({ baseUrl, model }) {
+export function createOllamaProvider({
+  baseUrl,
+  model,
+  jsonMode = "auto",
+  extraHeaders = null,
+}) {
+  const url = `${normalizeBaseUrl(baseUrl)}/api/generate`;
+
   return {
     name: "ollama",
     model,
@@ -24,15 +35,18 @@ export function createOllamaProvider({ baseUrl, model }) {
         body.images = [image.data];
       }
 
-      if (json) {
+      if (json && jsonMode !== "off") {
         body.format = "json";
       }
 
-      const url = `${baseUrl}/api/generate`;
+      const headers = mergeHeaders(
+        { "Content-Type": "application/json" },
+        extraHeaders
+      );
 
       const res = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(body),
         signal,
       });
@@ -45,7 +59,13 @@ export function createOllamaProvider({ baseUrl, model }) {
       }
 
       const data = await res.json();
-      return data.response;
+
+      const content = data.response;
+      if (content == null) {
+        throw new Error("Ollama response missing content at response");
+      }
+
+      return content;
     },
   };
 }

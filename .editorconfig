@@ -1,0 +1,24 @@
+# Editor defaults, matching the conventions already in the tree: two-space
+# indentation, LF endings, UTF-8, a final newline, no trailing whitespace.
+# There is no linter or formatter in this repo yet, so this file is the only
+# thing keeping an editor from reformatting a diff on save.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Two trailing spaces are a hard line break in Markdown, so trimming them
+# silently rewrites the rendered output. No tracked `.md` relies on that today;
+# the override keeps it available rather than a trap.
+[*.md]
+trim_trailing_whitespace = false
+
+# Lockfiles and generated JSON are written by their tools, not by hand.
+[package-lock.json]
+indent_size = 2
+insert_final_newline = true

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, cleanup, waitFor, act, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, act, fireEvent } from "@testing-library/react";
 import type { DraftEvent } from "./db";
 
 // UI wiring tests for the Cloud sync integration and backup nudge.
@@ -39,11 +39,7 @@ vi.mock("./session", async (importOriginal) => {
 import SettingsView from "./SettingsView";
 import LogsView from "./LogsView";
 import { setToken } from "./session";
-import {
-  CLOUD_DATA_PATH,
-  getSyncState,
-  resetCloudSyncForTests,
-} from "./cloudSync";
+import { CLOUD_DATA_PATH, resetCloudSyncForTests } from "./cloudSync";
 import {
   ackDisclosure,
   clearPersistedSyncSettingsForTests,
@@ -81,13 +77,6 @@ function renderSettings() {
 /** The Cloud destination toggle. */
 function cloudToggle(): HTMLElement {
   return screen.getByRole("switch", { name: /Sync with SnapGut Cloud/i });
-}
-
-/** The Cloud destination's status line. */
-function cloudStatus(): HTMLElement {
-  const el = document.querySelector(".cloud-status");
-  if (!el) throw new Error("no Cloud status line rendered");
-  return el as HTMLElement;
 }
 
 /** The action sheet currently on screen, if any. */

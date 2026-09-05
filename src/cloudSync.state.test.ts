@@ -245,7 +245,6 @@ describe("Property 15: Sync_State derivation is total and single-valued", () => 
 describe("deriveSyncState: error attribution", () => {
   const failing = (failureKind: "offline" | "service" | null): SyncStateInputLike => ({
     hasSession: true,
-    pro: true,
     enabled: true,
     cycleInProgress: false,
     lastCycleFailed: true,
@@ -255,7 +254,6 @@ describe("deriveSyncState: error attribution", () => {
     lastSyncAt: 1_700_000_000_000,
     skipped: 0,
     restoreMerged: null,
-    daysUntilPurge: null,
   });
 
   it("distinguishes an offline failure from a Sync_Service failure", () => {

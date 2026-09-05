@@ -340,14 +340,19 @@ describe("the JSON-LD hash merge (now simplified: single CSP for all)", () => {
 // ---- the whole server: security headers and /api/* ----
 // Uses buildApp from server/app.js with a minimal deps object.
 
+// @ts-ignore -- untyped ESM JavaScript (server/ is not TypeScript)
 import { buildApp } from "../server/app.js";
+// @ts-ignore -- untyped ESM JavaScript (server/ is not TypeScript)
 import { getStore } from "../server/store.js";
+// @ts-ignore -- untyped ESM JavaScript (server/ is not TypeScript)
 import { getEventStore } from "../server/eventStore.js";
+// @ts-ignore -- untyped ESM JavaScript (server/ is not TypeScript)
 import { loadConfig } from "../server/config.js";
 
 function createTestApp(overrides: Record<string, string> = {}) {
   const { config } = loadConfig({
     DATASTORE_BACKEND: "memory",
+    AI_PROVIDER: "mock",
     AUTH_PASSWORD: "test-password-12345",
     ...overrides,
   });

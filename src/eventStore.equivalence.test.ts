@@ -16,20 +16,40 @@ import { describe, expect, it, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import {
-  createMemoryEventStore,
-  storableId,
-  INITIAL_SEQ,
-  INITIAL_EPOCH,
-} from "../server/eventStore.js";
+// @ts-ignore -- untyped ESM JavaScript
+import { createMemoryEventStore, INITIAL_SEQ } from "../server/eventStore.js";
 
 // ---------------------------------------------------------------------------
 // Lazy imports — node:sqlite is Node 24 only.
 // ---------------------------------------------------------------------------
 
 let DatabaseSync: any;
+// @ts-ignore -- untyped ESM JavaScript
 let createSqliteEventStore: typeof import("../server/sqlite/eventStore.js").createSqliteEventStore;
+// @ts-ignore -- untyped ESM JavaScript
 let migrate: typeof import("../server/sqlite/schema.js").migrate;
+
+// ---------------------------------------------------------------------------
+// Local typing of the untyped event store modules
+// ---------------------------------------------------------------------------
+
+/** One page of a `pull`, as both event stores return it. */
+interface PullPage {
+  cursorInvalid: boolean;
+  records: Record<string, unknown>[];
+  cursor: string | null;
+  hasMore: boolean;
+}
+
+/** The slice of an event store the pagination helper drives. */
+interface PullableEventStore {
+  pull(
+    email: string,
+    cursor: string | null,
+    limit: number,
+    now: number
+  ): Promise<PullPage>;
+}
 
 // ---------------------------------------------------------------------------
 // Test harness constants (Property 12: 200 runs, 30s timeout)
@@ -323,8 +343,10 @@ describe("Event store equivalence (Properties 2–5, 7–9, 12)", () => {
     try {
       const sqliteModule = await import("node:sqlite");
       DatabaseSync = sqliteModule.DatabaseSync;
+      // @ts-ignore -- untyped ESM JavaScript
       const esModule = await import("../server/sqlite/eventStore.js");
       createSqliteEventStore = esModule.createSqliteEventStore;
+      // @ts-ignore -- untyped ESM JavaScript
       const schemaModule = await import("../server/sqlite/schema.js");
       migrate = schemaModule.migrate;
       available = true;
@@ -466,8 +488,13 @@ describe("Event store equivalence (Properties 2–5, 7–9, 12)", () => {
             sqlStore.push(account, records, now),
           ]);
 
-          // Paginate through both stores and collect all pages
-          async function paginate(store: ReturnType<typeof createMemoryEventStore>) {
+          // Paginate through both stores and collect all pages.
+          //
+          // `store` carries a local structural shape rather than
+          // `ReturnType<typeof createMemoryEventStore>`: the event store modules
+          // are untyped ESM, so that alias resolves to an implicit `any` and
+          // leaves `result` below with no inferable type.
+          async function paginate(store: PullableEventStore) {
             const pages: Array<Record<string, unknown>[]> = [];
             let cursor: string | null = null;
             let hasMore = true;

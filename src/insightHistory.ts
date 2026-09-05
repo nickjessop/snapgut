@@ -85,9 +85,10 @@ export async function listInsights(): Promise<PastInsight[]> {
  * Record a newly generated insight. Returns the resulting list so the caller can
  * render without a second read.
  *
- * Deduplicated on a short window: Pro auto-generates on entering the tab, and React
- * effects can run twice, so the same narrative arriving twice within a minute is a
- * repeat rather than a new observation.
+ * Deduplicated on a short window: the Patterns tab regenerates on entry whenever
+ * the stored insight has gone stale, and React effects can run twice, so the same
+ * narrative arriving twice within a minute is a repeat rather than a new
+ * observation.
  */
 export async function recordInsight(
   insight: Omit<PastInsight, "at">,

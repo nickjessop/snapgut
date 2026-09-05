@@ -47,7 +47,13 @@
 //
 // The `/api/*` and third-party checks look only at positions that cause a
 // fetch — URL-bearing attributes, and the text of the same-origin scripts and
-// stylesheets the pages pull in. The privacy and terms pages both name `/api/*`
+// stylesheets the pages pull in. An `<a href>` is the one exception: following it
+// is a navigation the reader chooses, not a subresource the page loads, so an
+// off-origin anchor does not put a third party in the page's rendering path.
+// R11.6 therefore does not reach anchors — but they are not simply waved
+// through: the off-origin destinations they may name are pinned to a list below,
+// so adding one is an edit here. Today that list holds the repository link the
+// footer carries, which is the source offer AGPL section 13 expects. The privacy and terms pages both name `/api/*`
 // paths in HTML source comments that cite where a claim comes from, and the
 // privacy copy describes what is transmitted; prose and comments issue no
 // request, so they are out of scope for R1.6. Comment-stripped markup is
@@ -59,11 +65,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 // @ts-ignore -- untyped ESM JavaScript (shared/ is not TypeScript)
-import {
-  GENERATED_FILES,
-  MARKETING_PAGES,
-  NOT_FOUND_FILE,
-} from "../shared/site.js";
+import { MARKETING_PAGES, NOT_FOUND_FILE } from "../shared/site.js";
 // @ts-ignore -- untyped ESM JavaScript (vite/ is not TypeScript)
 import { APP_SHELL_DOCUMENT } from "../vite/pwa.js";
 
@@ -321,10 +323,34 @@ describe("Marketing_Pages carry no inline script beyond hashed JSON-LD (R11.3)",
 // Requirement 11.6 — nothing from a third-party origin
 // ---------------------------------------------------------------------------
 
+/**
+ * An `<a href>` (or `<area href>`) the reader may follow. It issues no request
+ * while the page renders, so R11.6 does not reach it — see the note at the top
+ * of this file. Every other URL-bearing attribute is a load.
+ */
+const isNavigation = ({ el, name }: { el: Element; name: string }) =>
+  name === "href" && (el.tagName === "A" || el.tagName === "AREA");
+
+/**
+ * The off-origin destinations a Marketing_Page is allowed to link to, pinned so
+ * a new one is a deliberate edit here rather than a silent addition. The source
+ * link the footer carries is what AGPL section 13 expects a network user to be
+ * offered, and it has to point at the upstream repository to serve that purpose.
+ */
+const ALLOWED_LINK_ORIGINS = ["https://github.com/nickjessop/snap-gut"];
+
 describe("Marketing_Pages load nothing from a third-party origin (R11.6)", () => {
   it.each(DOCUMENTS)("%s fetches only same-origin URLs", (file) => {
     const offenders = fetchedUrls(file)
-      .filter(({ value }) => !sameOrigin(value))
+      .filter((ref) => !sameOrigin(ref.value) && !isNavigation(ref))
+      .map(({ where, value }) => `${where} ${value}`);
+    expect(offenders).toEqual([]);
+  });
+
+  it.each(DOCUMENTS)("%s links off-origin only to a pinned destination", (file) => {
+    const offenders = fetchedUrls(file)
+      .filter((ref) => isNavigation(ref) && !sameOrigin(ref.value))
+      .filter(({ value }) => !ALLOWED_LINK_ORIGINS.some((allowed) => value.startsWith(allowed)))
       .map(({ where, value }) => `${where} ${value}`);
     expect(offenders).toEqual([]);
   });

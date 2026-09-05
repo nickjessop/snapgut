@@ -104,13 +104,6 @@ function statusRegion(): HTMLElement {
   return el as HTMLElement;
 }
 
-/** The settings row whose title is `title`, as the clickable element itself. */
-function row(title: string): HTMLElement {
-  const el = screen.getByText(title).closest("button");
-  if (!el) throw new Error(`no settings row titled "${title}"`);
-  return el as HTMLElement;
-}
-
 /** The sheet currently on screen, if any. */
 function sheet(): HTMLElement | null {
   return document.querySelector(".action-sheet");

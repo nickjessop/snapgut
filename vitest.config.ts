@@ -25,7 +25,10 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
-    passWithNoTests: true,
+    // A collected-nothing run must fail. Left at `true`, a broken `include`
+    // glob would turn the CI gate green while asserting nothing at all — the
+    // one failure the gate exists to catch.
+    passWithNoTests: false,
     env: {
       DATASTORE_BACKEND: "memory",
     },

@@ -15,7 +15,6 @@ import {
   CaretLeft,
   CaretRight,
   GearSix,
-  CreditCard,
   UploadSimple,
   DownloadSimple,
   FileText,
@@ -72,7 +71,6 @@ export const CloseIcon = (p: IconProps) => <X {...base} {...p} />;
 export const BackIcon = (p: IconProps) => <CaretLeft weight="bold" {...p} />;
 export const ChevronIcon = (p: IconProps) => <CaretRight {...base} {...p} />;
 export const SettingsIcon = (p: IconProps) => <GearSix {...base} {...p} />;
-export const BillingIcon = (p: IconProps) => <CreditCard {...base} {...p} />;
 export const BackupIcon = (p: IconProps) => <UploadSimple {...base} {...p} />;
 export const RestoreIcon = (p: IconProps) => <DownloadSimple {...base} {...p} />;
 export const CsvIcon = (p: IconProps) => <FileText {...base} {...p} />;

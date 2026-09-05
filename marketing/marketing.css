@@ -430,20 +430,6 @@ main:focus {
   font-weight: 700;
 }
 
-.price {
-  font-family: var(--font-display);
-  font-size: 34px;
-  font-weight: 800;
-  color: var(--heading);
-  letter-spacing: -0.02em;
-}
-.price-per {
-  color: var(--muted);
-  font-family: var(--font-body);
-  font-size: 15px;
-  font-weight: 600;
-}
-
 .checklist {
   margin: 0 0 1em;
   padding: 0;
@@ -580,48 +566,6 @@ main:focus {
 }
 .step p {
   margin-bottom: 0;
-}
-
-/* ----------------------------------------------------------- Store buttons
-
-   Inert by design: there is nothing to link to until the native apps ship, and a
-   focusable control that goes nowhere is worse than a label. These are list
-   items, not links or buttons, so they are not in the tab order at all — the
-   badge carries the whole message. The dashed border is the visual echo of that:
-   a shape that reads as "not yet" rather than as a control that failed. */
-
-.store-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin: 0 0 1.2em;
-  padding: 0;
-  list-style: none;
-}
-
-/* No card around these: the badges are already self-contained artwork with their
-   own shape, and boxing them added a second border for no information. */
-.store-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  min-width: 0;
-}
-
-/* The badges are supplied artwork and must not be recoloured or restyled, so
-   this only sets the height both share. `width: auto` lets each keep its own
-   aspect ratio — Apple's badge is 2.99:1, Google's 3.36:1. */
-.store-badge {
-  display: block;
-  height: 40px;
-  width: auto;
-}
-
-.badge-soon {
-  align-self: flex-start;
-  background: var(--terracotta-100);
-  color: var(--terracotta-600);
 }
 
 /* Tables reflow by scrolling their own container, never the page. */

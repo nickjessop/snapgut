@@ -15,7 +15,9 @@
     "brand": "node scripts/gen-brand.mjs",
     "start": "node server/main.js",
     "preview": "npm run build && node server/main.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "ci": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
