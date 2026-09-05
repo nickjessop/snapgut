@@ -14,9 +14,9 @@ document is blocked on them.
 
 | | Before | After |
 | --- | --- | --- |
-| Tests | 82 files / 1048 passing | **82 files / 1161 passing** |
-| `tsc --noEmit` | 55 errors | **0 errors** |
-| CI | none | **GitHub Actions: typecheck, test, build, docker** |
+| Tests | 82 files / 1048 passing (on Node 20, below the project's own floor) | **82 files / 1161 passing on Node 24, 25 and 26** |
+| `tsc --noEmit` | 55 errors locally, 132 on a clean install | **0 errors** |
+| CI | none | **GitHub Actions green: typecheck → build → test on Node 24 + 26, plus a docker build** |
 | Tracked files | 343 | **259** |
 | AI providers | 4 | **7** |
 | Community health files | none | LICENSE (full AGPL), CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, CHANGELOG, COPYRIGHT, issue + PR templates |
@@ -274,6 +274,64 @@ each was a place where the code, a doc, or both were wrong.
       provider. Note the consequence: `cp .env.example .env && docker compose up` now fails until
       you set `AI_MODEL`, so the README quickstart names both required values and offers
       `AI_PROVIDER=mock` as the zero-setup path.
+
+---
+
+## 7b. What the first CI run found
+
+Standing up CI immediately paid for itself: it surfaced three failures that no local run could
+have caught, because the local runs were on **Node 20 — below this project's own
+`engines.node: ">=24"` floor** — against a `node_modules` still holding packages removed months
+earlier. Worth recording, because it means the suite had never actually been verified on a
+runtime the project supports.
+
+- [x] **7b.1 `@types/node` was never a declared dependency.** 132 typecheck errors across 26
+      files in CI (`TS2307` on every `node:*` import, `TS2591` on `process`, plus `TS2304` and
+      `TS7006`). It had only ever reached `node_modules` two ways: as an *optional peer* of
+      vite/vitest, and transitively via an `@types/request` left behind when the Google Cloud
+      packages were removed. npm 11 — which CI uses — skips undeclared optional peers, so CI had
+      no Node types at all. Compounding it, `tsconfig.json` sets an explicit `types` array, which
+      switches off automatic `@types` discovery, so the types were only ever resolving through
+      vitest's own type references. Now a real devDependency pinned to `^24` to match the Node
+      floor (so a Node 26-only API cannot slip past it), with `"node"` listed explicitly.
+      Regenerating the lockfile also dropped the stale `@types/request` tree.
+- [x] **7b.2 The test suite was broken on every Node the project supports.** Node 22.4 added the
+      Web Storage API. Unlike `sessionStorage`, `localStorage` is file-backed, and its behaviour
+      without `--localstorage-file` has already changed twice: **Node 22–25** install the global
+      as a stub whose methods are all `undefined`, *shadowing* the one vitest's jsdom environment
+      would provide; **Node 26** omits the global entirely and warns instead. That is 173 failures
+      across 19 files plus 101 silently skipped tests on 24/25, and a different failure on 26.
+      Invisible on Node 20, which has no such global.
+
+      `src/test/webStorageSetup.ts` repairs it by **probing capability rather than matching a
+      version's symptoms** — writing a key and reading it back, and substituting a real jsdom
+      `Storage` only when that fails. My first attempt tested for the 22–25 symptom specifically
+      and so did nothing on 26; the second lesson was to validate the replacement before
+      installing it, since assigning an absent `window.localStorage` turned a diagnosable
+      condition into a `TypeError` far from its cause.
+
+      A Map-backed shim would not have worked: `SettingsView.tsx:379` sweeps keys with
+      `Object.keys(localStorage)` and `syncSettings.persistence.test.ts` walks them with
+      `localStorage.key(i)`, both of which need `Storage`'s exotic own-property behaviour. The
+      matching `Storage` constructor is published alongside the instances, because that test stubs
+      quota errors via `vi.spyOn(Storage.prototype, "setItem")` and the replacements come from a
+      second jsdom realm. Chosen over `--no-experimental-webstorage`: that flag has already been
+      renamed once (Node 25 lists it as `--webstorage`), and Node exits on an unknown flag, so
+      pinning CI to a spelling would fail the suite closed on some future major.
+- [x] **7b.3 Tests ran before the build.** `dist/` is gitignored, and `marketing.isolation`,
+      `pwa.offline` and `marketing.budget` assert against built output — module graphs, the
+      service-worker precache manifest, asset sizes. On a fresh checkout seven failed for want of
+      an artifact rather than a bug. This was queued behind the typecheck failure and would have
+      surfaced the moment it was fixed. Order is now typecheck → build → test in the workflow and
+      in `npm run ci`, with the reason recorded at each site.
+
+Verified from a clean `npm ci` off a source archive, running the full gate on **Node 24.20.0
+(npm 11.19)**, **25.9.0 (npm 10.8)** and **26.8.1 (npm 11.19)** — 0 typecheck errors, 82 files /
+1161 tests, build clean, `npm run ci` exit 0 on each. CI is green on all three jobs.
+
+`CONTRIBUTING.md` now documents the build-before-test ordering and why a local run needs Node 24+
+to mean anything: below it `node:sqlite` is absent and the storage repair never engages, so the
+suite quietly tests less than CI does.
 
 ---
 
