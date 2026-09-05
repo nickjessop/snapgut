@@ -1,0 +1,29 @@
+services:
+  snapgut:
+    build: .
+    ports:
+      - "127.0.0.1:${PORT:-8080}:8080"
+    volumes:
+      - ./data:/data
+    env_file: .env
+    environment:
+      - BIND_HOST=0.0.0.0
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      # The X-Forwarded-Proto header is required, not decoration. With
+      # REQUIRE_HTTPS=1 the global guard in server/app.js derives the request
+      # scheme from that header alone and answers 403 https_required to anything
+      # else — so without it this check fails and the container is reported
+      # unhealthy while the app is serving normally.
+      #
+      # Sending it here is safe because the request originates inside the
+      # container against its own loopback interface, never from a client, so it
+      # cannot be used to bypass the guard. With REQUIRE_HTTPS unset the header is
+      # simply ignored, which is why one command covers both configurations.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8080/api/health', { headers: { 'X-Forwarded-Proto': 'https' } }).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped

@@ -1,0 +1,146 @@
+// @vitest-environment node
+//
+// Offline behavior of the built Service_Worker.
+//
+// Validates: Requirements 5.4, 5.5
+//
+// This runs the real `dist/sw.js` — the worker the build actually ships,
+// including its Precache_Manifest and its `NavigationRoute` denylist — inside a
+// simulated `ServiceWorkerGlobalScope` (`src/test/serviceWorkerHarness.ts`).
+// The worker is installed against a network backed by `dist/`, activated, then
+// the network is cut and Navigation_Requests are dispatched at it.
+//
+// What that proves: the worker's own routing decision for a given navigation,
+// taken by Workbox's code rather than by an assertion re-stating the config.
+//
+// What it does not prove: the browser half of the exchange. A worker that
+// declines to respond hands the navigation back to the browser, which then goes
+// to the network — that step is the platform's, not the worker's, so here it is
+// observed as "the worker called no respondWith". Real-device confirmation of a
+// Legacy_Install upgrade stays on the manual checklist (task 8).
+//
+// That browser half was confirmed once by hand, against `dist/` served over
+// localhost in Chromium with the network cut at the browser (2026-07-30): the
+// worker installed at scope `/` with `/app/index.html` precached and no
+// marketing document; an offline navigation to `/app/logs` rendered the
+// App_Shell while a non-precached `fetch` in the same page failed; an offline
+// navigation to `/pricing` failed at the network rather than being substituted;
+// and an edit to the origin's home document was visible on the next load of `/`
+// from the controlled client. It is recorded here rather than automated because
+// the repo has no browser test runner and adding one for this is out of
+// proportion to what it would add over the assertions below.
+
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import path from "node:path";
+import { beforeAll, describe, expect, it } from "vitest";
+// @ts-ignore -- untyped ESM JavaScript (shared/ is not TypeScript)
+import { APP_VIEWS, MARKETING_PAGES, NOT_FOUND_FILE } from "../shared/site.js";
+// @ts-ignore -- untyped ESM JavaScript (vite/ is not TypeScript)
+import { APP_SHELL_DOCUMENT } from "../vite/pwa.js";
+import { bootServiceWorker, type ServiceWorkerHarness } from "./test/serviceWorkerHarness";
+
+const repoRoot = path.resolve(__dirname, "..");
+const distDir = path.join(repoRoot, "dist");
+const swPath = path.join(distDir, "sw.js");
+
+/** Everything the emitted worker's path sets are derived from. */
+const CONFIG_SOURCES = ["vite.config.ts", "vite/pwa.js", "vite/marketing.js", "shared/site.js"];
+
+/**
+ * Build only when the emitted worker is missing or older than the config it is
+ * derived from, so the assertions below never run against a stale worker and a
+ * normal `npm test` after a build pays nothing.
+ */
+const buildIfStale = () => {
+  const swAge = existsSync(swPath) ? statSync(swPath).mtimeMs : 0;
+  const newestSource = Math.max(
+    ...CONFIG_SOURCES.map((file) => statSync(path.join(repoRoot, file)).mtimeMs),
+  );
+  if (swAge > newestSource) return;
+  execFileSync("npm", ["run", "build"], { cwd: repoRoot, stdio: "pipe" });
+};
+
+const marketingPagePaths = (MARKETING_PAGES as readonly { path: string; file: string }[]).map(
+  (page) => page.path,
+);
+const marketingDocuments = [
+  ...(MARKETING_PAGES as readonly { file: string }[]).map((page) => page.file),
+  NOT_FOUND_FILE as string,
+];
+const appRoutes = (APP_VIEWS as readonly { path: string }[]).map((view) => view.path);
+
+let appShell = "";
+let offlineWorker: ServiceWorkerHarness;
+let onlineWorker: ServiceWorkerHarness;
+
+beforeAll(async () => {
+  buildIfStale();
+  appShell = readFileSync(path.join(distDir, APP_SHELL_DOCUMENT as string), "utf8");
+
+  // Two controlled clients: one whose device lost the network after install,
+  // one still online. The routing decision must not depend on which.
+  offlineWorker = await bootServiceWorker(distDir);
+  offlineWorker.goOffline();
+  onlineWorker = await bootServiceWorker(distDir);
+}, 60_000);
+
+describe("the built Service_Worker precaches the App_Shell and no Marketing_Page", () => {
+  it("holds the App_Shell after install", () => {
+    expect(offlineWorker.precachedUrls()).toContain(`/${APP_SHELL_DOCUMENT}`);
+  });
+
+  it("holds no Marketing_Site document", () => {
+    const precached = offlineWorker.precachedUrls();
+    for (const file of marketingDocuments) {
+      expect(precached).not.toContain(`/${file}`);
+    }
+  });
+});
+
+describe("an App_Route navigation offline resolves to the Navigation_Fallback (R5.5)", () => {
+  it.each([...appRoutes, "/app/logs?filter=today", "/app/unknown-subview"])(
+    "%s is answered from the precached App_Shell with no network",
+    async (route) => {
+      const outcome = await offlineWorker.navigate(route);
+      expect(outcome.handledByWorker).toBe(true);
+      expect(outcome.response?.status).toBe(200);
+      expect(outcome.body).toBe(appShell);
+    },
+  );
+
+  it("answers without reaching the network", async () => {
+    const before = offlineWorker.networkLog.length;
+    const outcome = await offlineWorker.navigate("/app/insights");
+    expect(outcome.body).toBe(appShell);
+    expect(offlineWorker.networkLog.slice(before)).toEqual([]);
+  });
+});
+
+describe("a Marketing_Page navigation is not answered from precache (R5.4)", () => {
+  it.each(marketingPagePaths)("%s is left to the Origin_Server while online", async (route) => {
+    const outcome = await onlineWorker.navigate(route);
+    expect(outcome.handledByWorker).toBe(false);
+  });
+
+  it.each(marketingPagePaths)("%s is left to the network while offline", async (route) => {
+    // Offline the navigation fails at the network rather than being substituted
+    // with the App_Shell — no offline Marketing_Site is the accepted trade-off.
+    const outcome = await offlineWorker.navigate(route);
+    expect(outcome.handledByWorker).toBe(false);
+  });
+
+  it("caches no Marketing_Page document as a side effect of a navigation", async () => {
+    for (const route of marketingPagePaths) await onlineWorker.navigate(route);
+    const cached = onlineWorker.precachedUrls();
+    for (const file of marketingDocuments) {
+      expect(cached).not.toContain(`/${file}`);
+    }
+    expect(cached).not.toContain("/");
+  });
+
+  it("leaves a trailing-slash Marketing_Page path to the Origin_Server's redirect", async () => {
+    const outcome = await onlineWorker.navigate("/privacy/");
+    expect(outcome.handledByWorker).toBe(false);
+  });
+});

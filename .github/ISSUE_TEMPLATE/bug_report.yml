@@ -1,0 +1,109 @@
+name: Bug report
+description: Something in SnapGut does not behave the way it is documented to behave.
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do not report security vulnerabilities here. Issues are public. See
+        [SECURITY.md](https://github.com/nickjessop/snap-gut/blob/main/SECURITY.md) for the
+        private reporting channel.
+
+        Before filing, check that you are on the latest release — only the latest release
+        receives fixes.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you observed, in enough detail that someone else can recognise it.
+      placeholder: The insights screen stays on the loading spinner and never renders.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps starting from a state someone else can reach.
+      placeholder: |
+        1. Sign in.
+        2. Log a meal with a photo.
+        3. Open the insights screen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What you expected instead, and where that expectation came from if it is documented.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: How you are running it
+      options:
+        - Docker Compose
+        - Docker (without Compose)
+        - npm start from source
+        - Other (describe below)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: SnapGut version or commit
+      description: The release tag, or the output of `git rev-parse --short HEAD`.
+      placeholder: 0.1.0 or a1b2c3d
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ai-provider
+    attributes:
+      label: AI_PROVIDER value
+      options:
+        - ollama
+        - openai
+        - openai-compatible
+        - litellm
+        - anthropic
+        - gemini
+        - mock
+        - not relevant
+    validations:
+      required: true
+
+  - type: input
+    id: host
+    attributes:
+      label: Host OS and architecture
+      description: ARM versus x86-64 matters for native modules and container images, so include it.
+      placeholder: Debian 12, x86-64 / macOS 15, arm64 (Apple silicon)
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node version
+      description: Only if running from source. Output of `node --version`.
+      placeholder: v24.4.0
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        Server or browser console output around the failure. Redact `AUTH_PASSWORD`, `AI_API_KEY`,
+        `SESSION_SECRET`, and any personal diary content before pasting.
+      render: shell
+    validations:
+      required: false

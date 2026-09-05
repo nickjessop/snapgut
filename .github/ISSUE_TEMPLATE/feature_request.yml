@@ -1,0 +1,46 @@
+name: Feature request
+description: Suggest a change to what SnapGut does.
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the problem before the solution. A clear problem statement often has a simpler
+        answer than the feature that prompted it.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem this would solve
+      description: What are you trying to do today, and where does SnapGut get in the way?
+      placeholder: I log the same breakfast most mornings and re-entering it takes several taps.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What you would like SnapGut to do. Rough sketches are fine.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you thought about, including doing nothing or handling it outside the app.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: >
+            I understand SnapGut is self-hosted and single-user oriented, so features that require
+            a hosted multi-tenant service, an account system, or a payment processor are out of
+            scope.
+          required: true

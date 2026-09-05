@@ -1,0 +1,24 @@
+<!-- Skip control and site header, shared by every Marketing_Page (Req 7.2).
+     The skip link is the first focusable element and is moved off-screen rather
+     than hidden, so it stays in the tab order and appears on focus (Req 10.1).
+     Its target carries id="main" tabindex="-1" so focus lands there, not just
+     the scroll position. header + nav are two of the four landmarks (Req 10.2).
+     The brand link's contents — the symbol and the wordmark beside it, with
+     their intrinsic dimensions and their accessibility treatment — are
+     generated into partials/brand.html by scripts/gen-brand.mjs. -->
+<a class="skip-link" href="#main">Skip to main content</a>
+
+<header class="site-header">
+  <nav class="site-nav" aria-label="Main">
+    <a class="brand" href="/">
+      <!--#include brand-->
+    </a>
+
+    <ul class="nav-links">
+      <li><a href="/privacy">Privacy</a></li>
+      <li><a href="/terms">Terms</a></li>
+    </ul>
+
+    <a class="btn btn-primary nav-cta" href="/login">Open the app</a>
+  </nav>
+</header>

@@ -1,0 +1,38 @@
+# Dependencies and build output
+node_modules
+dist
+dev-dist
+coverage/
+*.tsbuildinfo
+
+# Logs and OS cruft
+*.log
+.DS_Store
+
+# Editor and tooling state
+.idea/
+.vscode/
+.playwright-mcp
+
+# Local configuration. `.env.example` is the tracked template and stays in.
+.env
+.env.*
+!.env.example
+
+# Self-hosted runtime data: the SQLite database and anything else the server
+# writes. docker-compose.yml mounts ./data into the container, so this keeps a
+# host's own health log out of the repository.
+data/
+
+# Food illustration pack — a separate release artifact, not part of the repo.
+# Fetch it with scripts/fetch-food-pack.mjs
+food-pack/
+
+# Agent workspace: local MCP settings, and planning specs that are working notes
+# rather than published documentation. `.kiro/specs/self-hosted-open-source/`
+# documents the current architecture and IS tracked.
+.kiro/settings/
+.kiro/specs/marketing-site-and-routing/
+.kiro/specs/cloud-sync/
+.kiro/specs/google-sheets-integration/
+.kiro/specs/native-app-store-launch/

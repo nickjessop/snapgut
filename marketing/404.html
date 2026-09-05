@@ -1,0 +1,56 @@
+<!doctype html>
+<!--
+  The not-found document (Requirements 2.5, 7.8).
+
+  It uses `head-notfound` rather than `head`: this one document answers every
+  unknown path, so it has no canonical URL and no og:url of its own, and it
+  declares noindex. Its title and description come from NOT_FOUND_META in
+  `vite/partials.js`, not from the Route_Table — there is no Route_Table entry
+  for a path that does not exist.
+
+  The build flattens it to the fixed `dist/404.html` the Origin_Server returns
+  with status 404 from its terminal handler, replacing today's soft 404 that
+  serves the App_Shell with status 200.
+
+  No standalone-launch script here: that belongs to the home page only, since a
+  Legacy_Install launches at `/` (Requirement 6.5).
+-->
+<html lang="en">
+  <head>
+    <!--#include head-notfound-->
+  </head>
+  <body>
+    <!--#include header-->
+
+    <main id="main" tabindex="-1">
+      <section class="section">
+        <div class="wrap prose">
+          <p class="eyebrow">Error 404</p>
+
+          <h1>That page isn&rsquo;t here</h1>
+
+          <p class="lede">
+            The address may have a typo, or the link that brought you here may point at
+            something we have since moved. Nothing is wrong on your end.
+          </p>
+
+          <p class="btn-row">
+            <a class="btn btn-primary" href="/">Go to the home page</a>
+            <a class="btn btn-secondary" href="/login">Open the app</a>
+          </p>
+
+          <h2>Or try one of these</h2>
+
+          <ul class="checklist">
+            <li><a href="/">What SnapGut does</a> &mdash; snap a meal, log how you feel</li>
+            <li><a href="/privacy">Privacy</a> &mdash; what is on your device, what is on our server</li>
+            <li><a href="/terms">Terms</a></li>
+            <li><a href="/login">Open the app</a> &mdash; sign in with your email</li>
+          </ul>
+        </div>
+      </section>
+    </main>
+
+    <!--#include footer-->
+  </body>
+</html>

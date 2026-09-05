@@ -1,0 +1,3070 @@
+# SnapGut food illustration pack — one food per line.
+# Lines starting with # and blank lines are ignored.
+# Slug = lowercase, non-alphanumerics -> "-" (e.g. "Greek yogurt" -> greek-yogurt.png)
+#
+# Curated toward FODMAP/IBS relevance: common triggers, staples, and safe foods.
+
+# --- grains & starches ---
+Wheat bread
+Sourdough bread
+White rice
+Brown rice
+Oats
+Pasta
+Wheat noodles
+Rice noodles
+Quinoa
+Corn tortilla
+Potato
+Sweet potato
+Couscous
+Barley
+Rye bread
+
+# --- alliums & high-FODMAP vegetables ---
+Onion
+Red onion
+Garlic
+Leek
+Shallot
+Spring onion
+Cauliflower
+Broccoli
+Cabbage
+Brussels sprouts
+Asparagus
+Artichoke
+Mushroom
+Snow peas
+Beetroot
+Celery
+Sweetcorn
+
+# --- low-FODMAP vegetables ---
+Carrot
+Zucchini
+Cucumber
+Bell pepper
+Spinach
+Kale
+Lettuce
+Tomato
+Eggplant
+Green beans
+Bok choy
+Radish
+Pumpkin
+Parsnip
+Turnip
+
+# --- fruit ---
+Apple
+Pear
+Banana
+Ripe banana
+Watermelon
+Mango
+Cherries
+Peach
+Nectarine
+Plum
+Apricot
+Blueberries
+Strawberries
+Raspberries
+Blackberries
+Orange
+Mandarin
+Lemon
+Lime
+Grapes
+Kiwi
+Pineapple
+Cantaloupe
+Avocado
+Dried apricots
+Raisins
+Dates
+Prunes
+Figs
+
+# --- dairy & alternatives ---
+Milk
+Skim milk
+Lactose-free milk
+Cream
+Butter
+Cheddar cheese
+Parmesan cheese
+Feta cheese
+Mozzarella
+Ricotta
+Cottage cheese
+Cream cheese
+Greek yogurt
+Yogurt
+Ice cream
+Almond milk
+Oat milk
+Soy milk
+Coconut milk
+Kefir
+
+# --- protein ---
+Egg
+Chicken
+Grilled chicken
+Beef
+Beef patty
+Pork
+Bacon
+Ham
+Sausage
+Salami
+Turkey
+Lamb
+Salmon
+Tuna
+Shrimp
+Cod
+Tofu
+Tempeh
+Chickpeas
+Black beans
+Kidney beans
+Lentils
+Baked beans
+Peanuts
+Almonds
+Cashews
+Walnuts
+Pistachios
+Pecans
+Hazelnuts
+Peanut butter
+Sunflower seeds
+Pumpkin seeds
+Chia seeds
+Flaxseed
+
+# --- fats, condiments & seasonings ---
+Olive oil
+Vegetable oil
+Coconut oil
+Palm oil
+Sesame oil
+Soy sauce
+Fish sauce
+Ketchup
+Mustard
+Mayonnaise
+Vinegar
+Balsamic vinegar
+Hot sauce
+Chili flakes
+Black pepper
+Salt
+Ginger
+Turmeric
+Cumin
+Cinnamon
+Basil
+Parsley
+Cilantro
+Mint
+Rosemary
+Thyme
+Oregano
+Bay leaf
+Paprika
+Curry powder
+MSG
+Tahini
+Hummus
+Pesto
+Salsa
+
+# --- sweeteners ---
+Sugar
+Honey
+Maple syrup
+High-fructose corn syrup
+Agave syrup
+Sorbitol
+Xylitol
+Mannitol
+Stevia
+Artificial sweetener
+Molasses
+
+# --- drinks ---
+Coffee
+Espresso
+Black tea
+Green tea
+Peppermint tea
+Chamomile tea
+Beer
+Wine
+Red wine
+White wine
+Whiskey
+Vodka
+Cider
+Kombucha
+Soda
+Diet soda
+Energy drink
+Orange juice
+Apple juice
+Sparkling water
+
+# --- fermented & aged (histamine-relevant) ---
+Sauerkraut
+Kimchi
+Miso
+Pickles
+Aged cheese
+Cured meat
+Anchovies
+Olives
+Vinegar pickles
+
+# --- prepared / composite dishes ---
+Pizza
+Burger
+Fries
+Sandwich
+Ramen
+Instant ramen
+Sushi
+Curry
+Stir fry
+Salad
+Soup
+Omelette
+Pancakes
+Cereal
+Granola
+Muesli
+Toast
+Bagel
+Croissant
+Muffin
+Cookie
+Cake
+Chocolate
+Dark chocolate
+Milk chocolate
+Chips
+Popcorn
+Pretzels
+Protein bar
+Smoothie
+Scrambled eggs
+Poached egg
+Fried rice
+Mac and cheese
+Lasagna
+Tacos
+Burrito
+Pad thai
+Pho
+Dumplings
+Spring rolls
+
+# ---------------------------------------------------------------
+# Auto-expanded by scripts/gen-food-list.mjs (2026-07-29)
+# ---------------------------------------------------------------
+Fuji apple
+Gala apple
+Honeycrisp apple
+Granny Smith apple
+Red Delicious apple
+Pink Lady apple
+McIntosh apple
+Braeburn apple
+Golden Delicious apple
+Envy apple
+Navel orange
+Valencia orange
+Clementine
+Mandarin orange
+Tangerine
+Grapefruit
+Ruby grapefruit
+Key lime
+Pomelo
+Blood orange
+Ugli fruit
+Strawberry
+Blueberry
+Raspberry
+Blackberry
+Cranberry
+Boysenberry
+Lingonberry
+Goji berry
+Acai berry
+Mulberry
+Elderberry
+Cherry
+Date
+Lychee
+Dragon fruit
+Mangosteen
+Rambutan
+Jackfruit
+Durian
+Guava
+Passion fruit
+Papaya
+Star fruit
+Soursop
+Cherimoya
+Fig
+Kiwano
+Feijoa
+Longan
+Cactus pear
+Persimmon
+Kumquat
+Plantain
+Salak
+Jabuticaba
+Ackee
+Miracle fruit
+Ice cream bean
+Black sapote
+White sapote
+Mamey sapote
+Noni
+Cupuaçu
+Marang
+Santol
+Sugar apple
+Breadfruit
+Imbe
+Pawpaw
+Pulasan
+Camu camu
+Abiu
+Finger lime
+Monstera deliciosa
+Babaco
+Tamarind
+Chico fruit
+Calamansi
+Redcurrant
+Blackcurrant
+Whitecurrant
+Gooseberry
+Huckleberry
+Saskatoon berry
+Bilberry
+Dewberry
+Cloudberry
+Salmonberry
+Thimbleberry
+Tayberry
+Loganberry
+Marionberry
+Youngberry
+Wineberry
+Chokeberry
+Buffaloberry
+Crowberry
+Bearberry
+Juniper berry
+Hackberry
+Partridgeberry
+Oregon grape
+Schisandra berry
+Sea buckthorn
+Barberry
+Bayberry
+Haskap berry
+Caper berry
+Hawthorn berry
+Coffee berry
+Sugarberry
+Amla berry
+Mayapple
+American beautyberry
+Sloe berry
+Stone berry
+Wintergreen berry
+Black haw
+Nectarberry
+Olallieberry
+Tummelberry
+Silvanberry
+Nessberry
+Raisin
+Prune
+Apple slice
+Coconut flake
+Banana chip
+Currant
+Orange slice
+Lemon slice
+Lime slice
+Quince
+Honeydew
+Pomegranate aril
+Sun-dried tomato
+Physalis
+Jujube
+Romaine lettuce
+Butter lettuce
+Iceberg lettuce
+Green leaf lettuce
+Red leaf lettuce
+Boston lettuce
+Frisée lettuce
+Endive
+Belgian endive
+Escarole
+Radicchio
+Curly kale
+Lacinato kale
+Red kale
+Tuscan kale
+Arugula
+Watercress
+Mustard green
+Collard green
+Swiss chard
+Red chard
+Rainbow chard
+Beet green
+Turnip green
+Dandelion green
+Green cabbage
+Red cabbage
+Napa cabbage
+Savoy cabbage
+Baby bok choy
+Tatsoi
+Sorrel
+Mâche
+Mizuna
+Rapini
+Chicory
+Garden cress
+Shiso leaf
+Edible chrysanthemum
+Komatsuna
+Purslane
+Miner's lettuce
+Lamb's quarters
+Yam
+Beet
+Rutabaga
+Ginger root
+Turmeric root
+Daikon radish
+Horseradish
+Celeriac
+Jicama
+Taro
+Yucca
+Jerusalem artichoke
+Water chestnut
+Arrowroot
+Burdock root
+Lotus root
+Eddo
+Malanga
+Oca
+Ulluco
+Yacon
+Arracacha
+Mashua
+Maca root
+Wasabi root
+Galangal root
+Tigernut
+Salsify
+Black salsify
+Skirret
+Purple potato
+Red potato
+White potato
+Yukon Gold potato
+Fingerling potato
+Japanese sweet potato
+Purple carrot
+Watermelon radish
+Chioggia beet
+Brussels sprout
+Kohlrabi
+Romanesco
+Broccolini
+Chinese broccoli
+Choy sum
+Sea kale
+Mustard seed
+Broccoli sprout
+Cauliflower sprout
+Radish sprout
+Kohlrabi leaf
+Broccoli leaf
+Cauliflower leaf
+Radish leaf
+Black radish
+Red radish
+Green radish
+Pink radish
+Purple radish
+White mustard greens
+Red Russian kale
+Siberian kale
+Chinese flowering cabbage
+Mustard flower
+Radish pod
+Broccoli stem
+Cauliflower stem
+Kohlrabi stem
+Broccoli floret
+Cauliflower floret
+Shepherd's purse
+Pennycress
+Wasabi leaf
+Indian mustard greens
+Acorn squash
+Butternut squash
+Spaghetti squash
+Delicata squash
+Kabocha squash
+Buttercup squash
+Hubbard squash
+Turban squash
+Pattypan squash
+Yellow squash
+Crookneck squash
+Straightneck squash
+Chayote
+Calabaza
+Cinderella pumpkin
+Pie pumpkin
+Sugar pumpkin
+White pumpkin
+Blue Hubbard squash
+Red Kuri squash
+Sweet dumpling squash
+Carnival squash
+Gold Nugget squash
+Gem squash
+Black Futsu squash
+Tromboncino squash
+Calabash gourd
+Bottle gourd
+Luffa gourd
+Bitter gourd
+Snake gourd
+Wax gourd
+Horned melon
+Cucuzza
+Boston marrow squash
+Cushaw squash
+Banana squash
+Red Warty Thing
+Fairytale pumpkin
+Jarrahdale pumpkin
+Queensland Blue pumpkin
+Triamble squash
+Eight Ball zucchini
+Zephyr squash
+Chive
+White onion
+Yellow onion
+Sweet onion
+Green onion
+Pearl onion
+Cipollini onion
+Welsh onion
+Elephant garlic
+Black garlic
+Wild garlic
+Garlic scape
+Chive blossom
+Onion greens
+Leek greens
+Shallot greens
+Ramp
+Garlic clove
+Pickled onion
+Caramelized onion
+Roasted garlic
+Roasted onion
+Dried onion
+Dried garlic
+Fried garlic
+Garlic confit
+Multiplier onion
+Tree onion
+Wild chive
+Rosy garlic
+Crow garlic
+Sand leek
+Kurrat
+Frizzled onion
+Toasted garlic
+Candied garlic
+Pickled garlic
+Blanched leek
+Fried onion
+Jalapeño
+Serrano pepper
+Poblano pepper
+Anaheim pepper
+Habanero pepper
+Scotch bonnet
+Cayenne pepper
+Thai chili
+Bird's eye chili
+Chipotle pepper
+Ancho pepper
+Guajillo pepper
+Pasilla pepper
+Carolina Reaper
+Ghost pepper
+Tabasco pepper
+Pimiento pepper
+Shishito pepper
+Padrón pepper
+Fresno pepper
+Hungarian wax pepper
+Banana pepper
+Cherry pepper
+Sport pepper
+Datil pepper
+Rocoto pepper
+Aji Amarillo
+Pequin pepper
+Malagueta pepper
+Fatalii pepper
+Naga chili
+Scorpion pepper
+Calabrian chili
+Facing Heaven chili
+Chili de Arbol
+Hatch chili
+Santa Fe Grande
+Alma pepper
+Ají dulce
+Jimmy Nardello pepper
+Fish pepper
+Peter pepper
+Cubanelle pepper
+Sweet mini pepper
+Button mushroom
+Cremini mushroom
+Portobello mushroom
+Shiitake mushroom
+Oyster mushroom
+Enoki mushroom
+Chanterelle
+Morel mushroom
+Black truffle
+White truffle
+Porcini mushroom
+Maitake mushroom
+Lion's mane mushroom
+King oyster mushroom
+Shimeji mushroom
+Wood ear mushroom
+Straw mushroom
+Matsutake mushroom
+Reishi mushroom
+Turkey tail mushroom
+Puffball mushroom
+Parasol mushroom
+Honey mushroom
+Hedgehog mushroom
+Cauliflower mushroom
+Black trumpet
+Chicken mushroom
+Lobster mushroom
+Blewit mushroom
+Slippery jack
+Candy cap mushroom
+Velvet shank mushroom
+Golden oyster mushroom
+Pearl oyster mushroom
+Pink oyster mushroom
+Elm oyster mushroom
+Wine cap mushroom
+Pioppino mushroom
+Chestnut mushroom
+Shaggy mane mushroom
+Dryad's saddle
+Comb tooth mushroom
+Giant puffball
+Yellowfoot mushroom
+Fairy ring mushroom
+Agar agar
+Arame
+Badderlocks
+Bladderwrack
+Brown algae
+Bull kelp
+Carrageenan
+Chlorella
+Dulse
+Dead man's fingers
+Feather boa kelp
+Giant kelp
+Gracilaria
+Green algae
+Gutweed
+Hijiki
+Irish moss
+Kelp
+Kombu
+Laver
+Makonbu
+Mozuku
+Nori
+Ogonori
+Oarweed
+Red algae
+Rausu kombu
+Rishiri kombu
+Rockweed
+Sargassum
+Sea grape
+Sea lettuce
+Sea moss
+Sea palm
+Sea sac
+Sea spaghetti
+Spirulina
+Sugar kelp
+Thongweed
+Wakame
+Wakame stem
+Winged kelp
+Atlantic dulse
+Pacific dulse
+Bladder kelp
+Kidney bean
+Black bean
+Pinto bean
+Navy bean
+Cannellini bean
+Chickpea
+Lima bean
+Fava bean
+Soybean
+Mung bean
+Adzuki bean
+Black-eyed pea
+Edamame
+Green pea
+Snow pea
+Snap pea
+Split pea
+Green lentil
+Red lentil
+Brown lentil
+Black lentil
+Peanut
+Great northern bean
+Butter bean
+Cranberry bean
+Green bean
+Runner bean
+Hyacinth bean
+Anasazi bean
+Dragon tongue bean
+Flageolet bean
+Tepary bean
+Yellow split pea
+Puy lentil
+Beluga lentil
+Lupini bean
+Broad bean
+White bean
+Moth bean
+Pigeon pea
+Guar bean
+Winged bean
+Yardlong bean
+Cowpea
+Pea pod
+Wheat
+Rice
+Corn
+Oat
+Rye
+Millet
+Sorghum
+Amaranth
+Buckwheat
+Teff
+Spelt
+Khorasan wheat
+Einkorn
+Farro
+Fonio
+Wild rice
+Basmati rice
+Jasmine rice
+Arborio rice
+Black rice
+Red rice
+Glutinous rice
+Oat groat
+Steel cut oat
+Rolled oat
+Oat bran
+Wheat berry
+Wheat germ
+Wheat bran
+Cornmeal
+Polenta
+Grits
+Semolina
+Bulgur
+Freekeh
+Durum wheat
+Pearl barley
+Hulled barley
+Buckwheat groat
+Kasha
+Baguette
+Biscuit
+Breadstick
+Brioche
+Brownie
+Bun
+Challah
+Ciabatta
+Cobbler
+Cornbread
+Cracker
+Crepe
+Crouton
+Crumpet
+Cupcake
+Danish
+Dinner roll
+Doughnut
+Eclair
+Flatbread
+Focaccia
+Galette
+Gingerbread
+Hand pie
+Lavash
+Macaron
+Madeleine
+Naan
+Pancake
+Pastry
+Pie
+Pita
+Popover
+Pound cake
+Pretzel
+Rusk
+Scone
+Shortbread
+Strudel
+Tart
+Spaghetti
+Linguine
+Fettuccine
+Penne
+Rigatoni
+Ziti
+Macaroni
+Fusilli
+Rotini
+Farfalle
+Orecchiette
+Conchiglie
+Ditalini
+Cavatappi
+Gnocchi
+Manicotti
+Cannelloni
+Vermicelli
+Orzo
+Acini di pepe
+Anelli
+Campanelle
+Casarecce
+Gemelli
+Mafalda
+Paccheri
+Radiatore
+Ruote
+Stelline
+Trottole
+Quadrefiore
+Riccioli
+Pappardelle
+Ravioli
+Tortellini
+Tortelloni
+Cappelletti
+Egg noodle
+Ramen noodle
+Soba noodle
+Udon noodle
+Rice noodle
+Glass noodle
+Shirataki noodle
+Sticky rice
+Sushi rice
+Parboiled rice
+Short grain rice
+Medium grain rice
+Long grain rice
+Rice pudding
+Risotto
+Paella
+Congee
+Biryani
+Pilaf
+Jambalaya
+Arancino
+Onigiri
+Nasi goreng
+Dirty rice
+Rice pilaf
+Rice bowl
+Rice cake
+Gallo pinto
+Jollof rice
+Rice porridge
+Kedgeree
+Arroz con pollo
+Arroz con leche
+Kimchi fried rice
+Spanish rice
+Coconut rice
+Yellow rice
+Mango sticky rice
+Hainanese chicken rice
+Mochi
+Tahdig
+Oatmeal
+Cream of Wheat
+Semolina porridge
+Millet porridge
+Quinoa porridge
+Buckwheat porridge
+Spelt porridge
+Rye porridge
+Amaranth porridge
+Cornmeal porridge
+Farina
+Corn flake
+Wheat flake
+Bran flake
+Rice puff
+Wheat puff
+Corn puff
+Oat puff
+Shredded wheat
+Wheat biscuit
+Malted wheat
+Chocolate cereal
+Cinnamon cereal
+Whole grain flake
+Multigrain flake
+Toasted oat
+Toasted corn
+Sweetened puff
+Nut cluster
+Toasted rice
+Puffed barley
+Puffed quinoa
+Puffed millet
+Shredded oat
+Shredded corn
+Wheat square
+Oat square
+Rice square
+Corn square
+Flaked oat
+Crispy rice
+Sugared flake
+Whole milk
+Buttermilk
+Condensed milk
+Evaporated milk
+Powdered milk
+Heavy cream
+Light cream
+Sour cream
+Half and half
+Plain yogurt
+Labneh
+Ghee
+Mozzarella cheese
+Swiss cheese
+Gouda cheese
+Brie cheese
+Camembert cheese
+Blue cheese
+Ricotta cheese
+Provolone cheese
+Colby cheese
+Monterey jack
+Havarti cheese
+Edam cheese
+Muenster cheese
+Gruyère cheese
+Emmental cheese
+Mascarpone cheese
+Paneer
+Halloumi
+String cheese
+American cheese
+Vanilla ice cream
+Chocolate ice cream
+Frozen yogurt
+Custard
+Whipped cream
+Cheddar
+Parmesan
+Feta
+Goat cheese
+Asiago
+Fontina
+Manchego
+Stilton
+Limburger
+Roquefort
+Neufchâtel
+Wensleydale
+Derby
+Port Salut
+Fromage blanc
+Cotija
+Pecorino Romano
+Gorgonzola
+Taleggio
+Appenzeller
+Comté
+Burrata
+Scamorza
+Fior di latte
+Kasseri
+Kefalotyri
+Reblochon
+Epoisses
+Pont-l'Évêque
+Saint-André
+Saint-Agur
+Beaufort
+Tomme de Savoie
+Maroilles
+Livarot
+Cabrales
+Queso fresco
+Queso blanco
+Mahón
+Ossau-Iraty
+Tête de Moine
+Délice de Bourgogne
+Raclette
+Teleme
+Skyr
+Crème fraîche
+Quark
+Cultured butter
+Ayran
+Doogh
+Matsoni
+Drinkable yogurt
+Whole milk yogurt
+Low fat yogurt
+Nonfat yogurt
+Fruit yogurt
+Stirred yogurt
+Set yogurt
+Sheep milk yogurt
+Goat milk yogurt
+A2 milk yogurt
+Probiotic yogurt
+Sweetened yogurt
+Unsweetened yogurt
+Lactose free yogurt
+Cultured cream
+Soured milk
+Filmjölk
+Viili
+Piimä
+Kefir milk
+Buttermilk powder
+Farmer cheese
+Dahi
+Dadiah
+Amasi
+Rayeb
+Gioddu
+Leben
+Ymer
+Rice milk
+Cashew milk
+Hemp milk
+Pea milk
+Macadamia milk
+Flax milk
+Quinoa milk
+Pistachio milk
+Walnut milk
+Hazelnut milk
+Spelt milk
+Sesame milk
+Potato milk
+Vegan cheddar
+Vegan mozzarella
+Vegan parmesan
+Vegan cream cheese
+Vegan feta
+Vegan provolone
+Vegan gouda
+Vegan swiss cheese
+Vegan blue cheese
+Vegan ricotta
+Vegan cottage cheese
+Cashew cheese
+Almond cheese
+Soy cheese
+Coconut yogurt
+Almond yogurt
+Soy yogurt
+Oat yogurt
+Cashew yogurt
+Vegan butter
+Coconut cream
+Oat cream
+Soy cream
+Cashew cream
+Vegan whipped cream
+Vegan sour cream
+Vegan heavy cream
+Vegan ice cream
+Egg white
+Egg yolk
+Boiled egg
+Fried egg
+Scrambled egg
+Omelet
+Frittata
+Quiche
+Deviled egg
+Egg drop soup
+Baked egg
+Shirred egg
+Steamed egg
+Coddled egg
+Pickled egg
+Salted egg
+Century egg
+Tea egg
+Egg salad
+Egg foo young
+Egg bhurji
+Cloud egg
+Shakshuka
+Huevos rancheros
+Eggs Benedict
+Scotch egg
+Egg sandwich
+Egg burrito
+Egg taco
+Soufflé
+Meringue
+Chawanmushi
+Balut
+Migas
+Spanish omelet
+Strata
+Hollandaise sauce
+Aïoli
+Lemon curd
+French toast
+Egg muffin
+Chicken breast
+Chicken thigh
+Chicken wing
+Chicken drumstick
+Chicken fillet
+Chicken tender
+Chicken liver
+Chicken heart
+Chicken gizzard
+Ground chicken
+Whole chicken
+Turkey breast
+Turkey leg
+Ground turkey
+Duck breast
+Duck leg
+Goose breast
+Goose leg
+Quail meat
+Pheasant meat
+Roasted chicken
+Fried chicken
+Chicken stew
+Chicken curry
+Chicken soup
+Chicken salad
+Chicken sandwich
+Chicken stir-fry
+Chicken pot pie
+Chicken nugget
+Chicken finger
+Chicken patty
+Chicken dumpling
+Chicken skewer
+Chicken taco
+Chicken quesadilla
+Chicken enchilada
+Chicken lasagna
+Chicken pasta
+Chicken pie
+Chicken kiev
+Chicken cordon bleu
+Chicken parmigiana
+Chicken marsala
+Sirloin steak
+Ribeye steak
+T-bone steak
+Porterhouse steak
+Filet mignon
+Tenderloin roast
+Rump roast
+Chuck roast
+Brisket flat
+Brisket point
+Skirt steak
+Flank steak
+Hanger steak
+Tri-tip roast
+Top round steak
+Bottom round roast
+Eye of round
+Short rib
+Cross-cut shank
+Ground beef
+Beef stew meat
+Oxtail
+Beef shank
+Flat iron steak
+Bavette steak
+Denver steak
+Chuck eye steak
+Coulotte steak
+New York strip
+Rib roast
+Prime rib
+Back rib
+Bone marrow
+Beef liver
+Beef tongue
+Beef kidney
+Beef heart
+Beef cheek
+Beef neck
+Veal chop
+Veal cutlet
+Veal scallopini
+Veal shank
+Veal loin
+Ground veal
+Pork chop
+Pork loin
+Pork belly
+Pork shoulder
+Pork tenderloin
+Pork butt
+Pork rib
+Pork hock
+Pork jowl
+Pork shank
+Pork neck bone
+Pork cheek
+Pork sirloin
+Pork liver
+Pork kidney
+Pork heart
+Pork skin
+Pork trotter
+Ground pork
+Pork cutlet
+Pork steak
+Ham slice
+Pork sausage
+Hot dog
+Salami slice
+Pepperoni slice
+Prosciutto
+Pancetta
+Pork chorizo
+Capicola
+Mortadella
+Andouille sausage
+Blood sausage
+Pork bratwurst
+Pork frankfurter
+Kielbasa
+Linguiça
+Sopressata
+Guanciale
+Head cheese
+Pork rind
+Canadian bacon
+Breakfast link
+Pork bologna
+Lamb chop
+Lamb loin
+Lamb shank
+Lamb leg
+Lamb rack
+Lamb sirloin
+Ground lamb
+Lamb stew meat
+Lamb shoulder
+Lamb breast
+Lamb liver
+Lamb kidney
+Lamb heart
+Lamb tongue
+Lamb sausage
+Goat meat
+Goat chop
+Goat stew meat
+Ground goat
+Goat leg
+Goat shoulder
+Goat loin
+Goat liver
+Goat kidney
+Goat sausage
+Venison steak
+Venison loin
+Venison chop
+Ground venison
+Venison roast
+Elk steak
+Elk chop
+Ground elk
+Bison steak
+Ground bison
+Wild boar chop
+Wild boar loin
+Ground wild boar
+Rabbit meat
+Goose meat
+Ostrich steak
+Alligator meat
+Pepperoni
+Corned beef
+Pastrami
+Summer sausage
+Liverwurst
+Braunschweiger
+Beef jerky
+Turkey jerky
+Smoked ham
+Country ham
+Tasso ham
+Smoked sausage
+Beef sausage
+Chicken sausage
+Turkey sausage
+Italian sausage
+Breakfast patty
+Scrapple
+Goetta
+Vienna sausage
+Pâté
+Corn dog
+Dry-cured ham
+Cooked ham
+Canned ham
+White pudding
+Salami stick
+Landjäger
+Mettwurst
+Rillettes
+Terrine
+Bresaola
+Speck
+Lardons
+Salt pork
+Smoked turkey
+Smoked chicken
+Bologna
+Cervelat
+Bierwurst
+Genoa salami
+Salmon fillet
+Cod fillet
+Tuna steak
+Tilapia fillet
+Trout fillet
+Mahi fillet
+Swordfish steak
+Halibut fillet
+Snapper fillet
+Catfish fillet
+Haddock fillet
+Flounder fillet
+Sole fillet
+Perch fillet
+Sea bass fillet
+Mackerel fillet
+Whole sardine
+Whole herring
+Whole anchovy
+Grouper fillet
+Monkfish fillet
+Pollock fillet
+Carp fillet
+Pike fillet
+Walleye fillet
+Whiting fillet
+Sablefish fillet
+Barramundi fillet
+Arctic char fillet
+Eel fillet
+Wahoo fillet
+Orange roughy fillet
+Skate wing
+Turbot fillet
+Plaice fillet
+Dory fillet
+Lingcod fillet
+Amberjack fillet
+Bluefish fillet
+Ocean perch fillet
+Mullet fillet
+Sturgeon fillet
+Opah fillet
+Red snapper fillet
+Yellowfin tuna
+Prawn
+Lobster
+Crab
+Oyster
+Mussel
+Clam
+Scallop
+Abalone
+Squid
+Octopus
+Cuttlefish
+Conch
+Crayfish
+Langostino
+Goose barnacle
+Winkle
+Periwinkle
+Cockle
+Razor clam
+Sea urchin
+King crab
+Snow crab
+Dungeness crab
+Blue crab
+Soft shell crab
+Slipper lobster
+Spiny lobster
+Rock lobster
+Geoduck
+Pipi
+Caviar
+Fish roe
+Seaweed
+Sea cucumber
+Jellyfish
+Scampi
+Monkfish liver
+Bottarga
+Limpet
+Krill
+Seitan
+Lentil
+Almond
+Cashew
+Walnut
+Pistachio
+Hazelnut
+Pecan
+Brazil nut
+Macadamia nut
+Chestnut
+Sunflower seed
+Pumpkin seed
+Chia seed
+Flax seed
+Hemp seed
+Nutritional yeast
+Textured vegetable protein
+Veggie patty
+Vegan sausage
+Pine nut
+Ginkgo nut
+Tiger nut
+Beechnut
+Hickory nut
+Acorn
+Lychee nut
+Cola nut
+Areca nut
+Candle nut
+Shea nut
+Pili nut
+Mongongo nut
+Sacha inchi
+Barau nut
+Breadnut
+Bambara groundnut
+Souari nut
+Malabar chestnut
+Nangai nut
+Otaheite nut
+Butternut
+Paradise nut
+Pine nut butter
+Tiger nut butter
+Beechnut butter
+Hickory nut butter
+Acorn butter
+Shea nut butter
+Pili nut butter
+Mongongo nut butter
+Sacha inchi butter
+Barau nut butter
+Breadnut butter
+Bambara groundnut butter
+Souari nut butter
+Malabar chestnut butter
+Nangai nut butter
+Otaheite nut butter
+Butternut butter
+Paradise nut butter
+Peanut flour
+Poppy seed
+Sesame seed
+Cumin seed
+Coriander seed
+Fennel seed
+Caraway seed
+Dill seed
+Celery seed
+Anise seed
+Nigella seed
+Fenugreek seed
+Cardamom seed
+Amaranth seed
+Millet seed
+Psyllium seed
+Basil seed
+Pomegranate seed
+Grape seed
+Cocoa bean
+Coffee bean
+Safflower seed
+Teff seed
+Sorghum seed
+Soy bean
+Sunflower oil
+Canola oil
+Corn oil
+Soybean oil
+Peanut oil
+Grapeseed oil
+Avocado oil
+Red palm oil
+Lard
+Tallow
+Margarine
+Shortening
+Walnut oil
+Almond oil
+Hazelnut oil
+Macadamia oil
+Pecan oil
+Pistachio oil
+Flaxseed oil
+Hemp seed oil
+Pumpkin seed oil
+Rice bran oil
+Cottonseed oil
+Mustard oil
+Rapeseed oil
+Duck fat
+Chicken fat
+Bacon fat
+Goose fat
+Cocoa butter
+Clarified butter
+Coconut butter
+Poppyseed oil
+Argan oil
+Cashew oil
+Lamb fat
+Suet
+Bear fat
+Apple cider vinegar
+Red wine vinegar
+White wine vinegar
+Distilled white vinegar
+Rice vinegar
+Sherry vinegar
+Champagne vinegar
+Malt vinegar
+Coconut vinegar
+Cane vinegar
+Date vinegar
+Plum vinegar
+Pear vinegar
+Persimmon vinegar
+Garlic vinegar
+Raspberry vinegar
+Strawberry vinegar
+Blueberry vinegar
+Fig vinegar
+Quince vinegar
+Kombucha vinegar
+Pineapple vinegar
+Palm vinegar
+Blackcurrant vinegar
+Elderflower vinegar
+Rosemary vinegar
+Thyme vinegar
+Basil vinegar
+Tarragon vinegar
+Chive vinegar
+Oregano vinegar
+Mint vinegar
+Lemon vinegar
+Lime vinegar
+Orange vinegar
+Passion fruit vinegar
+Ginger vinegar
+Chili vinegar
+Grape vinegar
+Honey vinegar
+Beetroot vinegar
+Cranberry vinegar
+Apricot vinegar
+Cherry vinegar
+Worcestershire sauce
+Barbecue sauce
+Tartar sauce
+Ranch dressing
+Blue cheese dressing
+Thousand Island dressing
+Honey mustard
+Hoisin sauce
+Oyster sauce
+Teriyaki sauce
+Sweet chili sauce
+Plum sauce
+Duck sauce
+Marinara sauce
+Alfredo sauce
+Bolognese sauce
+Cheese sauce
+Bearnaise sauce
+Pico de gallo
+Guacamole
+Relish
+Chutney
+Caramel sauce
+Chocolate sauce
+Agave nectar
+Jam
+Jelly
+Preserve
+Gochujang
+Miso paste
+Curry sauce
+Garlic salt
+Onion salt
+Celery salt
+Smoked paprika
+Chili powder
+Garam masala
+Cajun seasoning
+Italian seasoning
+Herbes de Provence
+Za'atar
+Ras el hanout
+Adobo seasoning
+Fajita seasoning
+Taco seasoning
+Poultry seasoning
+Pumpkin pie spice
+Apple pie spice
+Steak seasoning
+Lemon pepper
+Everything bagel spice
+Berbere
+Chaat masala
+Five spice powder
+Shichimi togarashi
+Seasoned salt
+Creole seasoning
+Pickling spice
+Baharat
+Jerk seasoning
+Tandoori masala
+Harissa spice blend
+Dukkah
+Grill seasoning
+Blackening seasoning
+BBQ rub
+Chili lime seasoning
+Garlic herb seasoning
+Rosemary garlic blend
+Fines herbes
+Ranch seasoning
+Sazon seasoning
+Tuscan seasoning
+Piri piri seasoning
+White pepper
+Nutmeg
+Clove
+Allspice
+Coriander
+Cardamom
+Fenugreek
+Marjoram
+Sage
+Dill weed
+Tarragon
+Chili flake
+Saffron
+Star anise
+Asafoetida
+Sichuan peppercorn
+Grains of paradise
+Annatto seed
+Sumac
+Kaffir lime leaf
+Mace
+Lemongrass
+Lavender
+Lemon balm
+Lovage
+Anise hyssop
+Borage
+Chamomile
+Chervil
+Curry leaf
+Epazote
+Fennel frond
+Hyssop
+Lemon verbena
+Perilla
+Stevia leaf
+Chicory leaf
+Lamb's quarter
+Mallow leaf
+Nettle leaf
+Peppermint
+Spearmint
+Savory
+Bergamot
+Vietnamese coriander
+Shiso
+Papalo
+Culantro
+Hoja santa
+Galangal
+Dill
+White sugar
+Brown sugar
+Powdered sugar
+Granulated sugar
+Raw sugar
+Turbinado sugar
+Demerara sugar
+Muscovado sugar
+Cane sugar
+Coconut sugar
+Date sugar
+Maple sugar
+Palm sugar
+Rock sugar
+Beet sugar
+Corn syrup
+Rice syrup
+Malt syrup
+Golden syrup
+Sorghum syrup
+Date syrup
+Yacon syrup
+Barley malt syrup
+Glucose syrup
+Fructose
+Dextrose
+Sucrose
+Lactose
+Maltose
+Erythritol
+Isomalt
+Monk fruit
+Aspartame
+Saccharin
+Sucralose
+Allulose
+Trehalose
+Lactitol
+Maltitol
+Glycerol
+Arabitol
+Ribitol
+Iditol
+Threitol
+Polydextrose
+Galactitol
+Volemitol
+Neotame
+Advantame
+Acesulfame K
+Cyclamate
+Tagatose
+Neohesperidin
+Glycyrrhizin
+Brazzein
+Curculin
+Thaumatin
+Monellin
+Alitame
+Aspartame-acesulfame salt
+Polyglycitol
+Allitol
+Fucitol
+Perseitol
+Sodium cyclamate
+Mabinlin
+Pentadin
+Yanhonin
+Mannoheptitol
+Glucoheptitol
+Maltotritol
+Maltotetraitol
+Naringin dihydrochalcone
+Calcium cyclamate
+Ammonium glycyrrhizin
+Neoculin
+Hydrogenated glucose syrup
+Hydrogenated starch syrup
+Mesotetritol
+Cacao nib
+Cocoa powder
+Dutch cocoa powder
+Chocolate liquor
+Unsweetened chocolate
+White chocolate
+Semisweet chocolate
+Bittersweet chocolate
+Chocolate chip
+Chocolate syrup
+Chocolate spread
+Hot cocoa mix
+Chocolate truffle
+Chocolate praline
+Chocolate coating
+Chocolate fudge
+Chocolate ganache
+Chocolate glaze
+Chocolate shaving
+Chocolate couverture
+Ruby chocolate
+Compound chocolate
+Sweetened chocolate powder
+Chocolate block
+Chocolate drop
+Chocolate sprinkle
+Cocoa shell
+Cocoa pod
+Chocolate filling
+Chocolate square
+Chocolate bar
+Chocolate flake
+Chocolate extract
+Chocolate bark
+Chocolate cream
+Cacao pulp
+Chocolate pearl
+Chocolate stick
+Chocolate disc
+Cocoa concentrate
+Cinnamon roll
+Macaroon
+Biscotti
+Meringue cookie
+Shortbread cookie
+Sugar cookie
+Oatmeal cookie
+Peanut butter cookie
+Gingerbread cookie
+Snickerdoodle cookie
+Butter cookie
+Spritz cookie
+Molasses cookie
+Anzac cookie
+Fortune cookie
+Financier
+Cannoli
+Churro
+Stroopwafel
+Waffle
+Marshmallow
+Caramel candy
+Toffee
+Fudge
+Nougat
+Praline
+Turkish delight
+Baklava
+Danish pastry
+Blondie
+Digestive biscuit
+Rich Tea biscuit
+Custard cream
+Jaffa cake
+Cheesecake
+Sponge cake
+Fruit cake
+Layer cake
+Coffee cake
+Sheet cake
+Red velvet cake
+Black forest cake
+Angel food cake
+Chiffon cake
+Bundt cake
+Birthday cake
+Carrot cake
+Lava cake
+Upside down cake
+Apple pie
+Key lime pie
+Pecan pie
+Pumpkin pie
+Lemon meringue pie
+Cherry pie
+Fruit tart
+Custard tart
+Éclair
+Cream puff
+Turnover
+Bear claw
+Kouign amann
+Crème brûlée
+Gelato
+Sorbet
+Panna cotta
+Trifle
+Popsicle
+Fudge pop
+Orange cream bar
+Sherbet
+Ice cream sandwich
+Ice cream cone
+Ice cream bar
+Frozen custard
+Milkshake
+Semifreddo
+Spumoni
+Kulfi
+Granita
+Shaved ice
+Snow cone
+Frozen mousse
+Frozen soufflé
+Icebox cake
+Baked Alaska
+Arctic roll
+Ice cream cake
+Frozen banana
+Ice cream sundae
+Banana split
+Affogato
+Paleta
+Mochi ice cream
+Ice cream float
+Soft serve
+Frozen fruit bar
+Yogurt pop
+Ice cream roll
+Frozen smoothie bowl
+Italian ice
+Frozen yogurt bark
+Chocolate dipped banana
+Ice cream bonbon
+Ice cream bite
+Ice cream pie
+Fried ice cream
+Cassata
+Ice cream bombe
+Potato chip
+Tortilla chip
+Corn chip
+Cheese puff
+Pretzel stick
+Pretzel twist
+Vegetable crisp
+Kale chip
+Seaweed snack
+Wasabi pea
+Roasted chickpea
+Roasted peanut
+Cashew nut
+Almond nut
+Pistachio nut
+Edamame pod
+Marinated olive
+Dried tomato
+Cheese straw
+Sesame stick
+Onion ring
+Mini sausage roll
+Cheese scone
+Rice cracker
+Shrimp cracker
+Fish cracker
+Vegetable stick
+Pita chip
+Plantain chip
+Sweet potato chip
+Mini quiche
+Jalapeno popper
+Mozzarella stick
+Fried pickle
+Pig in blanket
+Crostini
+Latte
+Cappuccino
+Macchiato
+Americano
+Mocha
+Flat white
+Cold brew
+Drip coffee
+French press
+Turkish coffee
+Irish coffee
+Cortado
+Ristretto
+Lungo
+Pour over
+Iced coffee
+Frappe
+Vienna coffee
+Ground coffee
+Instant coffee
+Coffee cherry
+Coffee liqueur
+Coffee cube
+Coffee syrup
+Coffee concentrate
+Coffee extract
+Coffee powder
+Coffee blossom
+Coffee jelly
+Coffee candy
+Coffee pudding
+Coffee smoothie
+Coffee mousse
+Coffee rub
+Coffee granola
+Coffee cookie
+Coffee caramel
+Coffee frosting
+Coffee glaze
+Coffee milk
+Espresso shot
+Cold foam
+White tea
+Oolong tea
+Pu-erh tea
+Matcha powder
+Yellow tea
+Genmaicha tea
+Sencha tea
+Hojicha tea
+Gyokuro tea
+Assam tea
+Darjeeling tea
+Earl Grey tea
+English breakfast tea
+Ceylon tea
+Lapsang souchong tea
+Keemun tea
+Jasmine green tea
+Ginger tea
+Hibiscus tea
+Rooibos tea
+Honeybush tea
+Lemongrass tea
+Rosehip tea
+Lavender tea
+Echinacea tea
+Dandelion tea
+Nettle tea
+Fennel tea
+Spearmint tea
+Raspberry leaf tea
+Lemon verbena tea
+Valerian root tea
+Holy basil tea
+Moringa leaf tea
+Star anise tea
+Aniseed tea
+Licorice root tea
+Sage tea
+Thyme tea
+Elderflower tea
+Linden flower tea
+Cola
+Lemonade
+Orange soda
+Root beer
+Ginger ale
+Cream soda
+Grape soda
+Cherry soda
+Lime soda
+Tonic water
+Club soda
+Seltzer
+Diet cola
+Grape juice
+Cranberry juice
+Pineapple juice
+Tomato juice
+Carrot juice
+Grapefruit juice
+Pomegranate juice
+Cherry juice
+Berry juice
+Lemon juice
+Lime juice
+Pear juice
+Peach juice
+Apricot juice
+Mango juice
+Passion fruit juice
+Guava juice
+Vegetable juice
+Prune juice
+Acai juice
+Aloe vera juice
+Wheatgrass juice
+Beetroot juice
+Elderflower cordial
+Blackcurrant cordial
+Raspberry cordial
+Lime cordial
+Orange cordial
+Strawberry cordial
+Ale
+Lager
+Stout
+Pilsner
+Porter
+IPA
+Wheat Beer
+Sake
+Rosé Wine
+Sparkling Wine
+Prosecco
+Merlot
+Chardonnay
+Pinot Noir
+Port Wine
+Sherry
+Vermouth
+Gin
+Rum
+Brandy
+Tequila
+Mezcal
+Absinthe
+Soju
+Cognac
+Bourbon
+Scotch
+Liqueur
+Amaretto
+Triple Sec
+Crème de Cassis
+Schnapps
+Sambuca
+Margarita
+Mojito
+Martini
+Old Fashioned
+Cosmopolitan
+Daiquiri
+Natto
+Dill pickle
+Pickled radish
+Pickled carrot
+Pickled beet
+Pickled ginger
+Pickled pepper
+Pickled asparagus
+Pickled green bean
+Pickled okra
+Pickled mushroom
+Pickled tomato
+Pickled daikon
+Pickled turnip
+Pickled cabbage
+Cornichon
+Gherkin
+Doubanjiang
+Chicken Noodle Soup
+Tomato Soup
+Vegetable Soup
+Mushroom Soup
+Lentil Soup
+Minestrone
+Clam Chowder
+Broccoli Cheddar Soup
+French Onion Soup
+Split Pea Soup
+Potato Leek Soup
+Gazpacho
+Tortilla Soup
+Beef Stew
+Chili
+Goulash
+Bouillabaisse
+Bisque
+Consomme
+Broth
+Stock
+Bone Broth
+Miso Soup
+Wonton Soup
+Curry Laksa
+Tom Yum
+Tom Kha
+Mulligatawny
+Borscht
+Cream of Mushroom
+Cream of Chicken
+Lobster Bisque
+Seafood Chowder
+Corn Chowder
+White Bean Soup
+Black Bean Soup
+Butternut Squash Soup
+Pumpkin Soup
+Fish Stew
+Lamb Stew
+Irish Stew
+Beef Barley Soup
+Garden Salad
+Green Salad
+Side Salad
+House Salad
+Mixed Greens Salad
+Caesar Salad
+Cobb Salad
+Chef Salad
+Wedge Salad
+Spinach Salad
+Arugula Salad
+Kale Salad
+Romaine Salad
+Tuna Salad
+Potato Salad
+Macaroni Salad
+Coleslaw
+Fruit Salad
+Pasta Salad
+Quinoa Salad
+Bean Salad
+Lentil Salad
+Chickpea Salad
+Caprese Salad
+Greek Salad
+Waldorf Salad
+Nicoise Salad
+Taco Salad
+Fattoush Salad
+Tabouleh Salad
+Orzo Salad
+Rice Salad
+Beet Salad
+Carrot Salad
+Cucumber Salad
+Tomato Salad
+Watercress Salad
+Endive Salad
+Frisee Salad
+Ambrosia Salad
+Broccoli Salad
+Corn Salad
+Black Bean Salad
+Grilled Cheese
+BLT Sandwich
+Club Sandwich
+Reuben Sandwich
+Pulled Pork Sandwich
+Fried Chicken Sandwich
+Steak Sandwich
+Fish Sandwich
+Turkey Sandwich
+Ham Sandwich
+Roast Beef Sandwich
+Pastrami Sandwich
+Italian Sandwich
+Veggie Sandwich
+Peanut Butter Sandwich
+Sloppy Joe
+Falafel Sandwich
+Pork Roll Sandwich
+Philly Cheesesteak
+Monte Cristo
+Chicken Wrap
+Beef Wrap
+Veggie Wrap
+Falafel Wrap
+Turkey Wrap
+Breakfast Wrap
+Hummus Wrap
+Fish Wrap
+Shrimp Wrap
+Beef Burger
+Cheeseburger
+Veggie Burger
+Chicken Burger
+Turkey Burger
+Lamb Burger
+Bison Burger
+Pork Burger
+Mushroom Burger
+Tuna Melt
+French Dip
+Croque Monsieur
+Meatball Sub
+Grilled Chicken Sandwich
+Pepperoni Pizza
+Margherita Pizza
+Hawaiian Pizza
+Neapolitan Pizza
+Sicilian Pizza
+Detroit Pizza
+Chicago Pizza
+New York Pizza
+California Pizza
+White Pizza
+BBQ Chicken Pizza
+Buffalo Chicken Pizza
+Veggie Pizza
+Meat Lover Pizza
+Supreme Pizza
+Four Cheese Pizza
+Seafood Pizza
+Breakfast Pizza
+Taco Pizza
+Dessert Pizza
+Provolone
+Anchovy
+Green Pepper
+Black Olive
+Jalapeno
+Artichoke Heart
+Red Pepper
+Spaghetti Bolognese
+Fettuccine Alfredo
+Pesto Pasta
+Carbonara
+Orzo Pasta
+Penne Arrabiata
+Macaroni Gratin
+Cacio e Pepe
+Mushroom Risotto
+Saffron Risotto
+Seafood Risotto
+Chicken Parmesan
+Veal Piccata
+Osso Buco
+Saltimbocca
+Porchetta
+Minestrone Soup
+Zuppa Toscana
+Brodetto
+Cioppino
+Bruschetta
+Arancini
+Antipasto
+Fried Calamari
+Tiramisu
+Zabaglione
+Sfogliatella
+Agnolotti
+Linguine Vongole
+Taco
+Enchilada
+Quesadilla
+Fajita
+Tamale
+Arepa
+Empanada
+Ceviche
+Pupusa
+Pozole
+Menudo
+Carnitas
+Barbacoa
+Chorizo
+Chile Relleno
+Elote
+Horchata
+Flan
+Atole
+Sopaipilla
+Dulce de leche
+Tres Leches Cake
+Mofongo
+Ropa Vieja
+Pastel de Choclo
+Chimichanga
+Birria
+Gordita
+Tostada
+Huarache
+Mole
+Churrasco
+Sope
+Pastelito
+Yuca Frita
+Frijol Refrito
+Cochinita Pibil
+Dumpling
+Spring Roll
+Egg Roll
+Chow Mein
+Lo Mein
+Kung Pao Chicken
+Sweet Sour Pork
+Mapo Tofu
+Peking Duck
+Bao Bun
+Potsticker
+Char Siu
+Hot Sour Soup
+General Tso Chicken
+Orange Chicken
+Sesame Chicken
+Beef Broccoli
+Mu Shu Pork
+Dan Dan Noodle
+Scallion Pancake
+Shrimp Dumpling
+Pork Shumai
+Shrimp Toast
+Crab Rangoon
+Peking Rib
+Black Bean Chicken
+Salt Pepper Shrimp
+Sweet Sour Chicken
+Beef Chow Fun
+Honey Walnut Shrimp
+Wonton
+Almond Cookie
+Claypot Rice
+Turnip Cake
+Steamed Fish
+Braised Beef
+Roast Duck
+Fried Wonton
+Pan Fried Noodle
+Hot Pot
+Nigiri
+Sashimi
+Maki Roll
+Temaki
+Udon
+Soba
+Tempura
+Yakitori
+Tonkatsu
+Katsudon
+Oyakodon
+Gyudon
+Unadon
+Okonomiyaki
+Takoyaki
+Sukiyaki
+Shabu Shabu
+Karaage
+Teriyaki Chicken
+Donburi
+Curry Rice
+Agedashi Tofu
+Tamagoyaki
+Korokke
+Katsu Curry
+Omurice
+Yakisoba
+Zaru Soba
+Hiyashi Chuka
+Tsukemen
+Buta Kakuni
+Niku Jyaga
+Dango
+Taiyaki
+Dorayaki
+Yakiniku
+Chirashi
+Inari Sushi
+Bibimbap
+Bulgogi
+Japchae
+Tteokbokki
+Kimchi Stew
+Army Stew
+Seafood Pancake
+Korean Fried Chicken
+Galbi
+Bibim Guksu
+Mandu
+Kimbap
+Soft Tofu Stew
+Pork Bone Soup
+Soy Crab
+Spicy Chicken Stir-fry
+Cold Soy Noodle
+Black Bean Noodle
+Spicy Seafood Noodle
+Short Rib Soup
+Ginseng Chicken Soup
+Kimchi Pancake
+Fish Cake Soup
+Soybean Paste Stew
+Cold Noodle Soup
+Spicy Beef Soup
+Pork Wrap
+Rice Soup
+Instant Noodle
+Pumpkin Porridge
+Rice Ball
+Bulgogi Rice Bowl
+Mini Kimbap
+Sweet Pancake
+Fish Cake Skewer
+Rolled Omelette
+Egg Bread
+Spicy Cold Noodle
+Kimchi Dumpling
+Green Curry
+Red Curry
+Tom Yum Soup
+Tom Kha Gai
+Massaman Curry
+Panang Curry
+Pad See Ew
+Drunken Noodle
+Papaya Salad
+Chicken Satay
+Thai Fried Rice
+Basil Chicken
+Glass Noodle Stir-fry
+Boat Noodle
+Yellow Curry
+Pineapple Fried Rice
+Pork Skewer
+Garlic Chicken
+Fried Pork Belly
+Chicken Larb
+Khao Soi
+Curry Paste Stir-fry
+Fish Curry
+Banh Mi
+Fresh Spring Roll
+Fried Spring Roll
+Bun Cha
+Grilled Pork Vermicelli
+Savory Pancake
+Broken Rice Plate
+Sour Soup
+Caramelized Fish
+Shaking Beef
+Hoi An Noodle
+Turmeric Noodle
+Steamed Rice Roll
+Sweet Dessert Soup
+Vietnamese Coffee
+Egg Coffee
+Clear Noodle Soup
+Butter Chicken
+Chicken Tikka Masala
+Lamb Rogan Josh
+Palak Paneer
+Chole Bhature
+Naan Bread
+Garlic Naan
+Tandoori Chicken
+Chicken Biryani
+Dal Makhani
+Aloo Gobi
+Samosa
+Pakora
+Onion Bhaji
+Pani Puri
+Dosa
+Idli
+Vada
+Uttapam
+Gulab Jamun
+Rasmalai
+Jalebi
+Mango Lassi
+Chai Tea
+Roti Bread
+Paratha Bread
+Aloo Paratha
+Puri Bread
+Masala Dosa
+Pav Bhaji
+Vada Pav
+Dhokla
+Rajma Masala
+Chana Masala
+Mutter Paneer
+Dal Tadka
+Kadai Paneer
+Malai Kofta
+Saag Paneer
+Vegetable Korma
+Papadum
+Raita
+Kheer
+Falafel
+Shawarma
+Kebab
+Tabouleh
+Baba Ghanoush
+Tagine
+Dolma
+Manakish
+Moussaka
+Fattoush
+Kofta
+Foul Medames
+Bastilla
+Harira Soup
+Mujadara
+Kibbeh
+Mahshi
+Kunefe
+Zalabia
+Umm Ali
+Malfouf
+Sfiha
+Sambousek
+Arayes
+Qatayef
+Ghraybeh
+Maamoul
+Chorba
+Borek
+Merguez
+Pastirma
+Zaatar Bread
+Koshary
+Mulukhiyah
+Mechoui
+Loubia
+Moutabal
+Harissa
+Gyro
+Souvlaki
+Tzatziki
+Spanakopita
+Tiropita
+Saganaki
+Kalamata Olive
+Taramosalata
+Melitzanosalata
+Skordalia
+Pastitsio
+Galaktoboureko
+Loukoumades
+Fasolada
+Avgolemono Soup
+Octopus Grilled
+Calamari Fried
+Halloumi Cheese
+Patatas Bravas
+Gambas Ajillo
+Jamon Serrano
+Manchego Cheese
+Pesto Sauce
+Pizza Margherita
+Quiche Lorraine
+Coq au Vin
+Boeuf Bourguignon
+Escargot
+Foie Gras
+Confit de Canard
+Ratatouille
+Creme Brulee
+Pain au Chocolat
+Tarte Tatin
+Steak Frites
+Moules Frites
+Souffle
+Cassoulet
+Gougère
+Profiterole
+Millefeuille
+Creme Caramel
+Pate
+Rillette
+Blanquette de Veau
+Pot au Feu
+Salad Nicoise
+Roquefort Cheese
+Bouchée
+Gratin Dauphinois
+Tarte Flambee
+Clafoutis
+Petit Four
+Vol-au-vent
+Sole Meuniere
+Pain Perdu
+Shepherd's Pie
+Bangers and Mash
+Full English Breakfast
+Roast Beef
+Yorkshire Pudding
+Cornish Pasty
+Haggis
+Black Pudding
+Victoria Sponge
+Sticky Toffee Pudding
+Eton Mess
+Welsh Rarebit
+Bubble and Squeak
+Apple Crumble
+Bakewell Tart
+Eccles Cake
+Chelsea Bun
+Spotted Dick
+Mince Pie
+Christmas Pudding
+Pork Pie
+Jellied Eel
+Faggot
+Pie and Mash
+Ploughman's Lunch
+Stargazy Pie
+Sausage Roll
+Chip Butty
+Mushy Peas
+Beef Wellington
+Hot Cross Bun
+Colcannon
+Boxty
+Coddle
+Soda Bread
+Champ
+Barmbrack
+Hamburger
+Hash brown
+Macaroni and cheese
+Meatloaf
+Mashed potato
+Chocolate cake
+Sundae
+Root beer float
+BLT
+Pot roast
+Tater tot
+Jerk chicken
+Ackee saltfish
+Callaloo soup
+Rice and peas
+Curry goat
+Pattie
+Escovitch fish
+Doubles
+Roti
+Pelau
+Cou-cou
+Fungee
+Pepperpot
+Johnnycake
+Fritter
+Bammy
+Festival
+Run-down
+Stew peas
+Stamp and go
+Fried dumpling
+Conkie
+Bake and shark
+Fufu
+Egusi soup
+Banku
+Kenkey
+Waakye
+Injera
+Doro wat
+Bobotie
+Suya
+Sadza
+Pap
+Ugali
+Matoke
+Ndole
+Thieboudienne
+Maafe
+Eba
+Gari
+Sukuma wiki
+Kachumbari
+Pilau rice
+Bunny chow
+Chakalaka
+Sosatie
+Schnitzel
+Pierogi
+Bratwurst
+Pelmeni
+Blini
+Sauerbraten
+Knödel
+Spätzle
+Bigos
+Cabbage roll
+Rye soup
+Polish donut
+Poppy seed roll
+Sernik
+Lángos
+Ćevapi
+Ajvar
+Halva
+Stuffed cabbage
+Paprikash
+Plov
+Shashlik
+Medovik
+Okroshka
+Solyanka
+Khachapuri
+Burek
+Potato dumpling
+Romanian soup
+Mititei
+Currywurst
+Roulade
+Eisbein
+Maultaschen
+Cheese spätzle
+Spanish tortilla
+Croquette
+Garlic shrimp
+Galician octopus
+Serrano ham
+Fried anchovy
+Meatball
+Fideuá
+Bean stew
+Salmorejo
+Cod fish
+Fried milk
+Catalan cream
+Turrón
+Skewer
+Tripe stew
+Garlic soup
+Escalivada
+Pisto
+Tomato bread
+Fresh cheese
+Bunuelo
+Bocadillo
+King cake
+Madrid stew
+Duck rice
+Feijoada
+Portuguese stew
+Green soup
+Piri-piri chicken
+Cataplana
+Francesinha
+Cod fritter
+Syrup
+Tea
+Crêpe
+English muffin
+Breakfast burrito
+Breakfast sandwich
+Porridge
+Baked bean
+Gyoza
+Satay
+Bánh mì
+Curry puff
+Fish and chips
+Pizza slice
+Poutine
+Chivito
+Dabeli
+Aloo tikki
+Donut
+Gobi Manchurian
+Simit
+Doner
+BBQ pork rib
+Grilled steak
+Grilled sausage
+Grilled burger
+Pulled pork
+Beef brisket
+BBQ beef
+Grilled lamb
+Grilled pork belly
+Grilled bacon
+Grilled salmon
+Grilled shrimp
+Grilled tuna
+Grilled sardine
+Grilled scallop
+Grilled swordfish
+Grilled mahi-mahi
+Grilled halibut
+Grilled octopus
+Chicken tikka
+Grilled corn
+Grilled potato
+Grilled asparagus
+Grilled zucchini
+Grilled pepper
+Grilled onion
+Grilled mushroom
+Grilled eggplant
+Grilled tomato
+Grilled pineapple
+Grilled peach
+Grilled halloumi
+Grilled bread
+Baked potato
+Tuna casserole
+Chicken casserole
+Beef casserole
+Vegetable casserole
+Breakfast casserole
+Eggplant parmesan
+Cottage pie
+Enchilada casserole
+Green bean casserole
+Sweet potato casserole
+Zucchini gratin
+Potato gratin
+Scalloped potato
+Tamale pie
+Chili mac
+Tater tot casserole
+Cornbread dressing
+Broccoli casserole
+Rice casserole
+Baked ziti
+Stuffed pepper
+Stratum
+Turkey pot pie
+Fish pie
+Baked oatmeal
+Baked pasta
+Baked chicken
+Baked salmon
+Baked cod
+Baked halibut
+Baked tilapia
+Baked trout
+Baked shrimp
+Brown rice bowl
+White rice bowl
+Quinoa bowl
+Farro bowl
+Couscous bowl
+Barley bowl
+Bulgur bowl
+Wild rice bowl
+Black rice bowl
+Chicken teriyaki bowl
+Beef bulgogi bowl
+Tofu scramble bowl
+Tempeh grain bowl
+Falafel grain bowl
+Egg rice bowl
+Lentil rice bowl
+Black bean bowl
+Chickpea grain bowl
+Edamame rice bowl
+Steak rice bowl
+Pork adobo bowl
+Kimchi rice bowl
+Avocado grain bowl
+Poke bowl
+Bibimbap bowl
+Burrito bowl
+Buddha bowl
+Gyro rice bowl
+Shawarma bowl
+
+# --- additives, thickeners, fibres, stocks (gut-health relevant, added 2026-07) ---
+Monosodium glutamate
+Yeast extract
+Dashi
+Bouillon cube
+Chicken stock
+Beef stock
+Vegetable stock
+Bonito flakes
+Inulin
+Chicory root
+Psyllium husk
+Xanthan gum
+Guar gum
+Pectin
+Gelatin
+Citric acid
+Maltodextrin
+Modified food starch
+Cornstarch
+Tapioca starch
+Potato starch
+Resistant starch
+Baking powder
+Baking soda
+Soy lecithin
+Whey protein
+Casein
+Food coloring
+Gluten
+Malt extract
+Invert sugar
+Sourdough starter
+Flour
+Whole wheat flour
+Almond flour
+Rice flour
+Baking mix

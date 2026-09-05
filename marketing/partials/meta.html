@@ -1,0 +1,41 @@
+<!-- Shared metadata: title, description, icons, and the full OG + Twitter set.
+     Included by head.html and head-notfound.html.
+     og:image is root-relative so it works at any origin. -->
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<title>{{title}}</title>
+<meta name="description" content="{{description}}" />
+<meta name="theme-color" content="#fdfcf6" />
+
+<!-- The SVG wins wherever it is supported and scales per-DPI; the .ico and the
+     PNGs cover Safari and older browsers. Every one of them carries the basil
+     tile behind the mark so the icon holds its shape in a tab strip. -->
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+<link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="SnapGut" />
+<meta property="og:locale" content="en_US" />
+<meta property="og:title" content="{{title}}" />
+<meta property="og:description" content="{{description}}" />
+<meta property="og:image" content="/og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="SnapGut — know what your gut is telling you" />
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="{{title}}" />
+<meta name="twitter:description" content="{{description}}" />
+<meta name="twitter:image" content="/og.png" />
+
+<!-- Root-relative, so Vite emits it content-hashed (Req 7.3) *and* the href
+     resolves the same way in dev as in the build. It cannot be document-relative:
+     this partial is included by pages that the dev server rewrites to
+     internally, so the browser's URL stays `/privacy` while the document is
+     `marketing/privacy.html`, and `./marketing.css` would resolve against the
+     wrong directory and 404. The site's only stylesheet (Req 7.7). -->
+<link rel="stylesheet" href="/marketing/marketing.css" />

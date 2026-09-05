@@ -1,0 +1,200 @@
+<!doctype html>
+<!--
+  The plain-language privacy page for the self-hosted deployment.
+
+  Every statement here describes the actual behaviour of the software: all diary
+  data stays in the browser's local storage and in the SQLite file on the
+  operator's own machine. AI requests go to whatever provider is configured
+  (local by default). No cloud analytics, no third-party tracking, no
+  advertising.
+
+  Two lines to hold on to when editing:
+
+    - Photos ARE transmitted for recognition when an AI provider is configured,
+      so "your data never leaves the device" is avoided. The correct framing:
+      your log stays on your device, photos are sent only to identify a meal to
+      a model server you configure, and nothing else leaves.
+
+    - Describe behaviour, not internals. This page deliberately does not name
+      field names, schema details, or specific model servers.
+-->
+<html lang="en">
+  <head>
+    <!--#include head-->
+  </head>
+  <body>
+    <!--#include header-->
+
+    <main id="main" tabindex="-1">
+      <section class="section">
+        <div class="wrap prose">
+          <h1>Privacy</h1>
+          <p class="lede">
+            SnapGut is self-hosted software. Your diary lives on hardware you
+            control — your computer, your server, your rules. This page spells
+            out exactly what that means.
+          </p>
+
+          <h2>The short version</h2>
+          <ul class="checklist">
+            <li>Your meals, symptoms, and photos live in your browser's own storage on your device.</li>
+            <li>The server stores accounts and sync data in a SQLite file on your machine.</li>
+            <li>AI recognition requests go to a model server you configure — local by default, so nothing leaves your network.</li>
+            <li>No cloud analytics, no third-party tracking, no advertising, no cookies beyond a session token.</li>
+            <li>You can export everything and delete everything at any time.</li>
+          </ul>
+
+          <h2>What stays in your browser</h2>
+          <p>
+            The app keeps your timeline in your browser's own on-device database.
+            That is the source of truth: everything you see in the app is read from
+            there, and every statistic is calculated there.
+          </p>
+          <ul>
+            <li>Meals — the dish name, the ingredients and how confident the recognition was, and any note you write.</li>
+            <li>Meal photos, as image files. Photos are only ever stored on your device.</li>
+            <li>Symptoms and their severities, Bristol stool scores, and stress and sleep check-ins.</li>
+            <li>Your session token and your settings.</li>
+          </ul>
+          <p>
+            Deleting the app's data in your browser, or removing the app from your
+            device, removes all of it. Browser storage can be evicted when a device
+            runs short of space, so keep a backup wherever you like — the export
+            below is how.
+          </p>
+
+          <h2>What the server stores</h2>
+          <p>
+            Your server — the one you run on your own hardware — stores data in a
+            single SQLite file. That file contains:
+          </p>
+          <ul>
+            <li>
+              <strong>Your account record</strong> — an email address and a creation
+              timestamp.
+            </li>
+            <li>
+              <strong>Sync data</strong> — if you use cloud sync between devices,
+              your meal entries and symptom entries are stored so other devices can
+              pull them. Photos are not included and stay on-device.
+            </li>
+            <li>
+              <strong>Rate-limit counters</strong> — short-lived entries that prevent
+              brute-force attacks. They expire automatically.
+            </li>
+          </ul>
+          <p>
+            The session token is held in your browser's storage until it expires.
+            No data leaves the SQLite file unless you configure sync to another
+            device.
+          </p>
+
+          <h2>What is transmitted to recognise a meal</h2>
+          <p>
+            This is the one place data may leave your machine, so it is worth being
+            precise about.
+          </p>
+          <p>
+            When you snap a meal, the photo is sent from your browser to your
+            server, which passes it to the configured AI provider to identify the
+            dish and its ingredients. By default that provider is a local model
+            server running on the same machine or local network — so the photo
+            stays within hardware you control.
+          </p>
+          <p>
+            If you configure a remote AI provider (such as OpenAI or Gemini), the
+            photo is sent to that provider's API. In every case, the photo is not
+            stored on the server and is not written to any log file.
+          </p>
+          <p>
+            The AI insight feature works from a summary your device calculates
+            first — counts and associations, not your raw entries. Your notes and
+            photos are not sent to generate an insight.
+          </p>
+          <p>
+            Everything else the app does, including all of the pattern analysis and
+            the food ranking, runs in your browser and needs no network at all.
+          </p>
+
+          <h2>Cloud sync between your devices</h2>
+          <p>
+            The default is local-only: no sync, no copies, nothing to opt out of.
+            You can turn on sync in Settings to keep two devices in step.
+          </p>
+          <p>
+            When sync is on, your entries — meals and ingredients, symptoms and
+            severities, Bristol scores, stress and sleep values, and any note text
+            — travel through your own server so they can reach your other devices.
+            Meal photos are not synced and stay on-device. The app shows you this
+            before the first upload and will not start syncing without your
+            acknowledgement.
+          </p>
+
+          <h2>Exporting everything</h2>
+          <p>
+            Export needs no network and is always available. From Settings:
+          </p>
+          <ul>
+            <li>
+              <strong>Backup</strong> writes a single JSON file with your whole
+              timeline, photos included, which you can save wherever you keep files.
+              The same screen restores from one.
+            </li>
+            <li>
+              <strong>Export as CSV</strong> writes a spreadsheet of your timeline:
+              date and time, entry type, dish, confident and possible ingredients,
+              symptoms, Bristol score, stress, sleep, and your note.
+            </li>
+          </ul>
+
+          <h2>Deleting everything</h2>
+          <p>
+            Three things can be deleted, and you control each of them directly:
+          </p>
+          <ul>
+            <li>
+              <strong>The server-side sync copy.</strong> Settings has a
+              <em>Delete cloud copy</em> control that erases everything the server
+              holds from your sync data. Your on-device log is untouched.
+            </li>
+            <li>
+              <strong>Your account.</strong> Deleting the account removes your sync
+              data first and then the account record itself.
+            </li>
+            <li>
+              <strong>The data on your device.</strong> Delete individual entries in
+              the app, or clear the site's data in your browser to remove the whole
+              local store, photos and all.
+            </li>
+          </ul>
+
+          <h2>Who else is involved</h2>
+          <p>
+            With the default configuration — a local AI model server — nobody else
+            is involved. Your data stays on your hardware.
+          </p>
+          <p>
+            If you configure a remote AI provider, that provider receives meal
+            photos for recognition and summary text for insights. No other data is
+            sent to any third party.
+          </p>
+          <p>
+            These pages load no third-party scripts, embed nothing from another
+            domain, and set no tracking cookies. There is no analytics product, no
+            advertising network, and no SDK collecting anything in the background.
+          </p>
+
+          <h2>Changes to this page</h2>
+          <p>
+            When what the app does changes, this page changes with it — it describes
+            the software as it actually behaves.
+          </p>
+
+          <p class="btn-row"><a class="btn btn-primary" href="/login">Open the app</a></p>
+        </div>
+      </section>
+    </main>
+
+    <!--#include footer-->
+  </body>
+</html>
