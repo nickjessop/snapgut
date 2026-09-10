@@ -10,7 +10,12 @@ no diary data off that hardware.
 The default configuration uses a local AI model server for meal recognition, stores everything
 in a single SQLite file, and needs no cloud account, no API key, and no payment processor.
 
-![Illustrated polaroid of a logged meal: seeded bread, yoghurt, black coffee, a tomato, cheese and oats](public/img/hero-polaroid.webp)
+| | | | |
+| :---: | :---: | :---: | :---: |
+| ![The capture screen: a live camera viewfinder filling the phone, pointed at two plates of pasta on a white tablecloth, with a "Point at your plate" prompt above a shutter button](docs/screenshots/01-camera.jpg) | ![The timeline screen: meals and symptoms listed newest first under a September heading, each with a time, a title and its ingredients, one entry showing a photograph of a salad bowl](docs/screenshots/02-timeline.png) | ![The insights screen: four cards reading 85 meals logged, 12 symptom check-ins, 24 days tracked and bloating most common, above a written insight headed "Fructans keep showing up before bloating"](docs/screenshots/03-insights.png) | ![The foods screen: foods grouped under Avoid, Reduce and Neutral headings, each with an illustration, how often it was eaten, and how often symptoms followed](docs/screenshots/04-foods.png) |
+| Snap the meal | Log how you feel | Read the patterns | See which foods track |
+
+<sub>Sample data, and the `mock` AI provider — see [docs/screenshots/README.md](docs/screenshots/README.md).</sub>
 
 ## Quickstart
 
@@ -44,9 +49,12 @@ in a single SQLite file, and needs no cloud account, no API key, and no payment 
    node scripts/fetch-food-pack.mjs
    ```
 
-   The pack archive has not been published for this release yet, so this step currently exits
-   with a message explaining that and downloads nothing — skip it. Foods fall back to a
-   letter-avatar placeholder and everything else works identically.
+   The script verifies the archive's SHA-256 before extracting and leaves the directory
+   untouched if it does not match. Skip it and foods render a generated letter avatar instead;
+   nothing else changes. While this repository is private the release asset is not anonymously
+   downloadable, so use `gh release download food-pack-v1 --pattern 'food-pack-v1.tar.gz'` and
+   untar it into `./food-pack` for now. See [docs/food-pack.md](docs/food-pack.md) for the
+   provenance and licensing of the images.
 
 4. **Start the service**
 
@@ -359,7 +367,7 @@ node --env-file=.env server/main.js
 | `brand/` | Brand assets |
 | `docs/` | Documentation |
 
-![Illustrated bar chart of four bars rising left to right, standing for a symptom trend](public/img/step-chart.webp)
+
 
 [CONTRIBUTING.md](CONTRIBUTING.md) covers conventions, the test philosophy, and how changes are
 reviewed.
@@ -376,6 +384,7 @@ reviewed.
 | [docs/architecture.md](docs/architecture.md) | How the pieces fit together |
 | [docs/datastore.md](docs/datastore.md) | SQLite schema and backup detail |
 | [docs/cloud-sync.md](docs/cloud-sync.md) | The sync protocol |
+| [docs/food-pack.md](docs/food-pack.md) | The optional illustration pack: fetching it, provenance, licensing |
 
 ## Contributing and community
 

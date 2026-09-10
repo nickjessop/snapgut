@@ -26,6 +26,63 @@ The `Dockerfile` builds the PWA in a `node:24-slim` stage, then copies `dist/`, 
 `shared/` into a second `node:24-slim` stage that installs production dependencies only
 (`npm ci --omit=dev`) and runs as a non-root `snapgut` user with `/data` owned by it.
 
+### Building from source, or running the published image
+
+`docker-compose.yml` ships with `build: .`, so out of the box `docker compose up` builds the
+checkout you are standing in. That is deliberate — it is what the README quickstart promises,
+and a contributor running `docker compose up` should get their own code, not a release.
+
+Tagged releases are also published to GitHub Container Registry for `linux/amd64` and
+`linux/arm64`, so an arm64 host — a Raspberry Pi, an Apple silicon Mac — pulls a native image
+and compiles nothing. To use it, comment out `build: .` in `docker-compose.yml` and uncomment
+one `image:` line:
+
+```yaml
+services:
+  snapgut:
+    # build: .
+    image: ghcr.io/nickjessop/snap-gut:0.1.0
+```
+
+Three tag shapes are published per release, and they behave differently on upgrade:
+
+| Tag | Means | Moves? |
+| --- | --- | --- |
+| `0.1.0` | That exact release | Never. Pin this if you want upgrades to be a decision |
+| `0.1` | Newest `0.1.x` patch | Moves on each patch release |
+| `latest` | Newest release overall | Moves on every release, including minor and major |
+
+`latest` is only ever attached to a tagged release, never to a commit on `master`, so pulling
+it gets you something the maintainer chose to cut rather than the tip of the branch. It still
+crosses minor versions without asking, which is why `0.1.0` or `0.1` is the better choice for
+anything you care about.
+
+The image contains the server and the built PWA. It does not contain your data — that stays
+in the `./data` bind mount — the food illustration pack, or your `.env`. Those are unaffected
+by switching between the image and a source build, in either direction.
+
+### Upgrading
+
+The two paths differ, and it matters which one you are on:
+
+```bash
+# Published image
+docker compose pull
+docker compose up -d
+
+# Source build
+git pull
+docker compose up -d --build
+```
+
+On the image path, `docker compose pull` fetches whatever your tag now points at, so a pinned
+`0.1.0` fetches nothing until you edit the tag. On the source path, `--build` is what makes
+`git pull` take effect; without it Compose reuses the image it already has and you will
+conclude the upgrade did nothing.
+
+Either way, back up `./data` first — it is a single SQLite file, so a copy is enough — and
+read [the changelog](../CHANGELOG.md) for the versions you are crossing.
+
 ### Why the published port is loopback-only
 
 `127.0.0.1:8080:8080` means the port is reachable from the host and from nothing else. Combined

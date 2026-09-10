@@ -1,0 +1,94 @@
+# Publishes the runtime container image to GitHub Container Registry.
+#
+# This runs on tags only, never on pushes to master. A self-hosted project's
+# `latest` tag is what operators pull on upgrade, so it has to mean "the most
+# recent release the maintainer chose to cut", not "whatever landed on master an
+# hour ago". Tagging is a deliberate act; pushing to master is not.
+#
+# `workflow_dispatch` is here for re-running a publish that failed for a
+# registry-side reason. A dispatch produces a branch-named tag, never `latest`
+# and never a version tag — see the metadata step.
+name: Release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+# `packages: write` is the one privilege beyond read this workflow needs, and it
+# is what lets GITHUB_TOKEN push to ghcr.io for this repository. No PAT is
+# involved and none should be: a token scoped to this repo by the platform is
+# strictly less dangerous than a long-lived personal one in a secret.
+permissions:
+  contents: read
+  packages: write
+jobs:
+  publish:
+    name: Build and push image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      # GHCR requires a lowercase image path, but a GitHub owner or repository
+      # name may contain uppercase, so `${{ github.repository }}` cannot be used
+      # verbatim. Deriving it here instead of hardcoding the name keeps a fork
+      # publishing to its own namespace without editing this file.
+      #
+      # `tr` rather than bash's `${VAR,,}`: the parameter expansion needs bash 4,
+      # which the runner has and a developer reproducing this on macOS
+      # (bash 3.2) does not. `tr` behaves the same everywhere.
+      - name: Derive the lowercase image name
+        id: image
+        run: |
+          echo "name=ghcr.io/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      # QEMU provides the arm64 emulation that lets an amd64 runner produce an
+      # arm64 layer. Worth the build time here: Raspberry Pi and Apple silicon
+      # are both plausible hosts for a personal diary, and neither should have to
+      # compile anything. The runtime image has no native build step — SQLite is
+      # built into Node 24 as `node:sqlite` — so cross-building is just slower,
+      # not fragile.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # For tag v0.1.0 this produces 0.1.0, 0.1 and latest.
+      #
+      # The moving `0.1` tag lets an operator track patch releases without
+      # editing docker-compose.yml, while `0.1.0` stays immutable for anyone who
+      # wants to pin exactly. `latest=auto` (the default) attaches `latest` only
+      # to a non-prerelease semver tag, which is why a workflow_dispatch run —
+      # where the semver patterns match nothing — falls through to the branch
+      # name and cannot move `latest`.
+      - name: Derive image tags
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=ref,event=branch
+          flavor: |
+            latest=auto
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Shared with the CI docker job's cache, so a release build after a
+          # green CI run mostly reuses layers.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

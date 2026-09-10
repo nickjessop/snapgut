@@ -32,6 +32,11 @@ First open-source release of SnapGut. The tag has not been cut yet, so this entr
   Skipping it falls back to letter avatars.
 - Docker and Docker Compose deployment as the supported install path, plus configuration entirely
   through environment variables documented in `.env.example` and `docs/configuration.md`.
+- Multi-architecture container image published to GitHub Container Registry for tagged releases,
+  built for `linux/amd64` and `linux/arm64` so Raspberry Pi and Apple silicon hosts run a native
+  image without compiling anything. Each release is tagged three ways — exact (`0.1.0`), minor
+  (`0.1`) and `latest` — and `docker-compose.yml` builds from source by default, with the image
+  as a commented one-line alternative. See `docs/deployment.md`.
 
 ### Removed
 

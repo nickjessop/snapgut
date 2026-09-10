@@ -3,6 +3,8 @@
 // Tests for the fetch-food-pack script's core guarantees:
 // 1. A checksum mismatch leaves the target directory unchanged
 // 2. Re-running with all files already present is idempotent (no overwrites, no errors)
+// 3. ARCHIVE_URL and EXPECTED_SHA256 are wired to a real published asset
+// 4. The all-zero placeholder digest guard still refuses to run
 //
 // Validates: Requirements 5.9, 5.14
 //
@@ -26,8 +28,9 @@ import {
   existsSync,
   statSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
 
 /**
  * Simulates the fetch-food-pack script's checksum verification logic.
@@ -226,5 +229,114 @@ describe("fetchFoodPack — idempotent re-run", () => {
     expect(readFileSync(join(targetDir, "apple.webp"), "utf8")).toBe("already-here");
     // banana.webp was written
     expect(readFileSync(join(targetDir, "banana.webp"), "utf8")).toBe("banana-data");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The two tests above exercise the *logic* the script implements. The blocks
+// below assert against the real `scripts/fetch-food-pack.mjs` file: that its
+// release constants are actually wired to a published asset, and that the
+// placeholder guard protecting them still fires.
+// ---------------------------------------------------------------------------
+
+const scriptPath = resolve(__dirname, "..", "scripts", "fetch-food-pack.mjs");
+const scriptSource = readFileSync(scriptPath, "utf8");
+
+/** Pull a top-level string constant out of the script source. */
+function readConstant(name: string): string {
+  const match = scriptSource.match(
+    new RegExp(`const\\s+${name}\\s*=\\s*\\n?\\s*"([^"]+)"`)
+  );
+  if (!match) throw new Error(`Could not find constant ${name} in ${scriptPath}`);
+  return match[1];
+}
+
+const ALL_ZERO_DIGEST = "0".repeat(64);
+
+describe("fetchFoodPack — release constants are wired to a real asset", () => {
+  it("ARCHIVE_URL points at a published release asset, not the placeholder", () => {
+    const url = readConstant("ARCHIVE_URL");
+
+    // The original placeholder was github.com/user/food-snap — a literal "user".
+    expect(url).not.toContain("/user/");
+    expect(url).not.toContain("food-snap/releases");
+
+    const parsed = new URL(url);
+    expect(parsed.protocol).toBe("https:");
+    expect(parsed.hostname).toBe("github.com");
+    // /<owner>/<repo>/releases/download/<tag>/<asset>
+    expect(parsed.pathname).toMatch(
+      /^\/[\w.-]+\/[\w.-]+\/releases\/download\/food-pack-v1\/food-pack-v1\.tar\.gz$/
+    );
+  });
+
+  it("EXPECTED_SHA256 is a real 64-char hex digest, not a placeholder", () => {
+    const digest = readConstant("EXPECTED_SHA256");
+
+    expect(digest).toMatch(/^[0-9a-f]{64}$/);
+    expect(digest).not.toBe(ALL_ZERO_DIGEST);
+    // A digest of all one repeated character is never a real hash.
+    expect(new Set(digest.split("")).size).toBeGreaterThan(1);
+  });
+});
+
+describe("fetchFoodPack — placeholder guard survives", () => {
+  let targetDir: string;
+
+  beforeEach(() => {
+    targetDir = mkdtempSync(join(tmpdir(), "fetchpack-guard-"));
+  });
+
+  afterEach(() => {
+    rmSync(targetDir, { recursive: true, force: true });
+  });
+
+  /**
+   * Run a copy of the real script with EXPECTED_SHA256 swapped for `digest`.
+   * The guard runs before any network access, so this makes no requests.
+   */
+  function runWithDigest(digest: string) {
+    const realDigest = readConstant("EXPECTED_SHA256");
+    const patched = scriptSource.replace(`"${realDigest}"`, `"${digest}"`);
+    expect(patched).not.toBe(scriptSource); // substitution actually happened
+
+    const copyDir = mkdtempSync(join(tmpdir(), "fetchpack-guard-script-"));
+    const copyPath = join(copyDir, "fetch-food-pack.mjs");
+    writeFileSync(copyPath, patched);
+
+    try {
+      return spawnSync(process.execPath, [copyPath], {
+        encoding: "utf8",
+        env: { ...process.env, FOOD_PACK_DIR: targetDir },
+        timeout: 30_000,
+      });
+    } finally {
+      rmSync(copyDir, { recursive: true, force: true });
+    }
+  }
+
+  it("refuses to run if the digest is blanked back to all zeros", () => {
+    const result = runWithDigest(ALL_ZERO_DIGEST);
+
+    expect(result.status).toBe(1);
+    expect(`${result.stderr}`).toMatch(/all-zero placeholder/i);
+    // It bailed before downloading anything.
+    expect(`${result.stdout}`).not.toMatch(/Downloading archive/);
+    // And left the target directory untouched.
+    expect(readdirSync(targetDir)).toEqual([]);
+  });
+
+  it("refuses to run if the digest is malformed", () => {
+    const result = runWithDigest("47d03aef");
+
+    expect(result.status).toBe(1);
+    expect(`${result.stderr}`).toMatch(/not a valid SHA-256 hex digest/i);
+    expect(`${result.stdout}`).not.toMatch(/Downloading archive/);
+    expect(readdirSync(targetDir)).toEqual([]);
+  });
+
+  it("still contains an explicit all-zero digest check", () => {
+    // Guards against the check being deleted in a future edit.
+    expect(scriptSource).toMatch(/"0"\.repeat\(64\)/);
   });
 });

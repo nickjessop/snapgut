@@ -453,12 +453,15 @@ an illustration and nothing else changes. The boot summary reports `food pack 0 
 404s for slugs the food dictionary recognises are tallied in the `missing_foods` table —
 aggregate counts only, never linked to a user — so a future pack knows what to draw.
 
-**For this release the pack is not obtainable.** `scripts/fetch-food-pack.mjs` ships with
-placeholder values: `ARCHIVE_URL` points at `github.com/user/food-snap/releases/...` and
-`EXPECTED_SHA256` is 64 zeros. The script checks for that placeholder digest and exits 1 with a
-message telling you to update both constants, so it downloads nothing rather than fetching an
-unverified archive. Letter avatars are the expected experience until a release publishes a real
-URL and checksum.
+Fetch it with `node scripts/fetch-food-pack.mjs`, which verifies the archive's SHA-256 before
+extracting and leaves the target directory untouched if it does not match. See
+[food-pack.md](food-pack.md) for the slug convention, provenance, and the pack's separate
+licensing.
+
+One caveat while this repository is private: release assets are not anonymously downloadable,
+so the script's unauthenticated request returns `HTTP 404 Not Found` and extracts nothing. Use
+`gh release download food-pack-v1 --pattern 'food-pack-v1.tar.gz'` and untar it into the pack
+directory in the meantime.
 
 ## Uninstalling and deleting data
 

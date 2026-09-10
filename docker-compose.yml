@@ -1,6 +1,26 @@
 services:
   snapgut:
+    # Builds from this checkout. This is the default on purpose: `docker compose
+    # up` from a fresh clone must run *this* working tree, which is what the
+    # README quickstart promises and what the CI docker job exercises.
     build: .
+    #
+    # To run the published multi-arch image instead of building, comment out
+    # `build: .` above and uncomment one of these:
+    #
+    #   image: ghcr.io/nickjessop/snap-gut:latest   # newest release
+    #   image: ghcr.io/nickjessop/snap-gut:0.1      # newest 0.1.x patch
+    #   image: ghcr.io/nickjessop/snap-gut:0.1.0    # pinned exactly
+    #
+    # Why a commented line rather than setting `image:` and `build:` together:
+    # with both set, Compose resolves the image first and only builds when it
+    # cannot be obtained. Once the image exists on GHCR, `docker compose up` in a
+    # fresh clone would silently run the *published* release instead of the code
+    # in front of you — so a contributor testing a change could be running
+    # someone else's build without being told. Trading one commented line of
+    # operator setup for that ambiguity is not worth it. Nothing here is
+    # mutually exclusive with the image path; it is just explicit about which one
+    # you are on.
     ports:
       - "127.0.0.1:${PORT:-8080}:8080"
     volumes:

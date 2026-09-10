@@ -12,6 +12,16 @@
  *   node scripts/fetch-food-pack.mjs
  *   FOOD_PACK_DIR=./my-pack node scripts/fetch-food-pack.mjs
  *
+ * The pack is optional. Without it the UI renders generated letter avatars and
+ * nothing else changes — see docs/food-pack.md.
+ *
+ * While this repository is private the release asset is not anonymously
+ * downloadable, so this script will fail with an HTTP error. Until the repo is
+ * public, fetch it with an authenticated account instead:
+ *
+ *   gh release download food-pack-v1 --pattern 'food-pack-v1.tar.gz'
+ *   tar -xzf food-pack-v1.tar.gz -C ./food-pack
+ *
  * Environment:
  *   FOOD_PACK_DIR  — extraction target (default: ./food-pack)
  */
@@ -35,13 +45,23 @@ import { execSync } from "node:child_process";
 // Configuration — update these for each release.
 // ---------------------------------------------------------------------------
 
-/** URL of the .tar.gz archive containing the food pack images. */
+/**
+ * URL of the .tar.gz archive containing the food pack images.
+ *
+ * The archive holds bare `<slug>.webp` entries at its root — no wrapping
+ * directory — which is what `extractArchive` below expects to flatten into
+ * FOOD_PACK_DIR.
+ */
 const ARCHIVE_URL =
-  "https://github.com/user/food-snap/releases/download/food-pack-v1/food-pack-v1.tar.gz";
+  "https://github.com/nickjessop/snap-gut/releases/download/food-pack-v1/food-pack-v1.tar.gz";
 
-/** Expected SHA-256 hex digest of the archive file. */
+/**
+ * Expected SHA-256 hex digest of the archive file.
+ *
+ * 3,036 files, 62,844,026 bytes compressed, ~66 MB extracted.
+ */
 const EXPECTED_SHA256 =
-  "0000000000000000000000000000000000000000000000000000000000000000";
+  "47d03aef1325bc5d1db6048c2c306ef415ccef985781f272abd2c741ea9c40c6";
 
 // ---------------------------------------------------------------------------
 // Timeouts
@@ -273,10 +293,24 @@ async function main() {
   console.log(`Food pack target: ${FOOD_PACK_DIR}`);
   console.log(`Archive URL: ${ARCHIVE_URL}`);
 
+  // Supply-chain guard. An all-zero digest can never be a real SHA-256, so it
+  // only ever appears as an unfilled placeholder. Refuse rather than download
+  // something we cannot meaningfully verify. This must keep firing for any
+  // future release that lands here with the digest blanked back out.
   if (EXPECTED_SHA256 === "0".repeat(64)) {
     fatal(
-      "The archive URL and SHA-256 checksum are placeholders.\n" +
-        "  Update ARCHIVE_URL and EXPECTED_SHA256 in this script with values from the release."
+      "EXPECTED_SHA256 is the all-zero placeholder — the archive cannot be verified.\n" +
+        "  Set EXPECTED_SHA256 in this script to the real digest of the release asset\n" +
+        "  (shasum -a 256 food-pack-v1.tar.gz), and check ARCHIVE_URL points at it."
+    );
+  }
+
+  // Reject any digest that is not a well-formed 64-char hex SHA-256, so a
+  // truncated or corrupted paste fails loudly here rather than at comparison.
+  if (!/^[0-9a-f]{64}$/i.test(EXPECTED_SHA256)) {
+    fatal(
+      `EXPECTED_SHA256 is not a valid SHA-256 hex digest: "${EXPECTED_SHA256}"\n` +
+        "  Expected 64 hexadecimal characters."
     );
   }
 
@@ -292,7 +326,7 @@ async function main() {
     console.log("Verifying SHA-256 checksum...");
     const actual = await computeSha256(tempFile);
 
-    if (actual !== EXPECTED_SHA256) {
+    if (actual !== EXPECTED_SHA256.toLowerCase()) {
       fatal(
         `Checksum mismatch.\n` +
           `  Expected: ${EXPECTED_SHA256}\n` +

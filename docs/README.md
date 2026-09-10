@@ -25,6 +25,7 @@ Then, as needed: [ai-providers.md](ai-providers.md) to get meal recognition work
 | [operations.md](operations.md) | Boot summary, health checks, logs, backup and verified restore, secret rotation, moving an install, upgrades, SQLite troubleshooting, uninstall |
 | [datastore.md](datastore.md) | SQLite schema: tables, indexes, PRAGMAs, cursors, tombstone sweep, migrations |
 | [cloud-sync.md](cloud-sync.md) | The sync protocol: endpoints, limits, what is stored where, export, and the three deletion paths |
+| [food-pack.md](food-pack.md) | The optional food illustration pack: fetching and verifying it, the slug convention, what you get without it, provenance, and its unresolved licensing |
 
 ## Understanding the code
 
@@ -39,8 +40,8 @@ the analysis code, not for end users.
 
 | Document | What it covers |
 | --- | --- |
-| [fodmap-program.md](fodmap-program.md) | The FODMAP elimination and reintroduction structure the app follows |
-| [intuitive-eating.md](intuitive-eating.md) | The intuitive-eating framing the app's language and nudges are held to |
+| [fodmap-program.md](fodmap-program.md) | Trigger groups and ingredient tagging as the app implements them, the low-FODMAP protocol for context, and which parts of it are deliberately not built |
+| [intuitive-eating.md](intuitive-eating.md) | Why the app will not call a food a trigger: the evidence gates, the language rules, and where the scoring code still works against them |
 
 ## Elsewhere in the repo
 
