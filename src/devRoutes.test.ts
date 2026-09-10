@@ -7,15 +7,17 @@
 // The middleware is exercised the way Vite exercises it: the plugin's
 // `configureServer` hook is handed a stand-in server, and the connect handler it
 // registers is called with a request object.
+//
+// The map is now one document wide. With the marketing site gone, the only source
+// document a Navigation_Request can resolve to is the App_Shell, and the load-
+// bearing entry is `/` — without it `npm run dev` 404s on the bare host, which is
+// the one path a developer types most.
 
-import path from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-ignore -- untyped ESM JavaScript (vite/ is not TypeScript)
-import { devRouteFor, devRouteMap, marketingDevRoutes } from "../vite/devRoutes.js";
-// @ts-ignore -- untyped ESM JavaScript (vite/ is not TypeScript)
-import { marketingPartials } from "../vite/partials.js";
+import { appDevRoutes, devRouteFor, devRouteMap } from "../vite/devRoutes.js";
 // @ts-ignore -- untyped ESM JavaScript (shared/ is not TypeScript)
-import { APP_VIEWS, LOGIN_PATH, MARKETING_PAGES, marketingPaths } from "../shared/site.js";
+import { APP_VIEWS, LOGIN_PATH, ROOT_PATH } from "../shared/site.js";
 
 const APP_SHELL = "/app/index.html";
 
@@ -24,7 +26,7 @@ type Req = { url?: string; method?: string; headers?: Record<string, string> };
 /** Run one request through the middleware and report the URL Vite would see. */
 function serve(req: Req): { url: string | undefined; nexted: boolean } {
   const handlers: Array<(req: Req, res: unknown, next: () => void) => void> = [];
-  marketingDevRoutes().configureServer({
+  appDevRoutes().configureServer({
     middlewares: { use: (fn: (typeof handlers)[number]) => handlers.push(fn) },
   });
   expect(handlers).toHaveLength(1);
@@ -38,6 +40,12 @@ function serve(req: Req): { url: string | undefined; nexted: boolean } {
 }
 
 describe("devRouteFor", () => {
+  it("maps the origin root to the App_Shell source", () => {
+    // The regression this pins: dev must serve the app at `/` now that there is
+    // no marketing/index.html for it to fall back to.
+    expect(devRouteFor(ROOT_PATH)).toBe(APP_SHELL);
+  });
+
   it("maps the Login_Route and every App_Route to the App_Shell source", () => {
     expect(devRouteFor(LOGIN_PATH)).toBe(APP_SHELL);
     for (const view of APP_VIEWS) {
@@ -49,15 +57,9 @@ describe("devRouteFor", () => {
     expect(devRouteFor("/app/logs/2026-01-01")).toBe(APP_SHELL);
   });
 
-  it("maps each Marketing_Page path to its source file", () => {
-    for (const page of MARKETING_PAGES) {
-      expect(devRouteFor(page.path)).toBe(`/marketing/${page.file}`);
-    }
-  });
-
   it("ignores the query and fragment when resolving", () => {
     expect(devRouteFor("/login?next=%2Fapp%2Flogs")).toBe(APP_SHELL);
-    expect(devRouteFor("/privacy?ref=footer#data")).toBe("/marketing/privacy.html");
+    expect(devRouteFor("/?utm_source=x#top")).toBe(APP_SHELL);
   });
 
   it("leaves every other path for Vite to handle", () => {
@@ -67,8 +69,9 @@ describe("devRouteFor", () => {
       "/@vite/client",
       "/foods/apple.webp",
       "/appearance", // shares a prefix with /app but is not an App_Route
-      "/pricing/", // trailing slash: not a known route, dev does not fake that
-      "/pricing", // no longer a marketing page
+      "/privacy", // no longer served at all
+      "/terms",
+      "/login/", // trailing slash: the Origin_Server's 301, not dev's business
       "/nope",
       "",
     ]) {
@@ -78,48 +81,25 @@ describe("devRouteFor", () => {
 
   it("derives its table from the Route_Table rather than a literal", () => {
     const map = devRouteMap();
-    expect([...map.keys()].sort()).toEqual([...marketingPaths(), LOGIN_PATH].sort());
+    expect([...map.keys()].sort()).toEqual([LOGIN_PATH, ROOT_PATH].sort());
+    expect(new Set(map.values())).toEqual(new Set([APP_SHELL]));
   });
 });
 
-describe("marketingDevRoutes middleware", () => {
+describe("appDevRoutes middleware", () => {
   it("rewrites a navigation request and always calls next", () => {
-    expect(serve({ url: "/privacy" })).toEqual({ url: "/marketing/privacy.html", nexted: true });
+    expect(serve({ url: ROOT_PATH })).toEqual({ url: APP_SHELL, nexted: true });
     expect(serve({ url: "/app/logs" })).toEqual({ url: APP_SHELL, nexted: true });
     expect(serve({ url: "/nope" })).toEqual({ url: "/nope", nexted: true });
   });
 
   it("rewrites a request with no Accept header, and a HEAD request", () => {
-    expect(serve({ url: "/", headers: {} }).url).toBe("/marketing/index.html");
-    expect(serve({ url: "/", method: "HEAD" }).url).toBe("/marketing/index.html");
+    expect(serve({ url: ROOT_PATH, headers: {} }).url).toBe(APP_SHELL);
+    expect(serve({ url: ROOT_PATH, method: "HEAD" }).url).toBe(APP_SHELL);
   });
 
   it("leaves a non-document request alone", () => {
-    expect(serve({ url: "/", headers: { accept: "application/json" } }).url).toBe("/");
+    expect(serve({ url: ROOT_PATH, headers: { accept: "application/json" } }).url).toBe(ROOT_PATH);
     expect(serve({ url: "/login", method: "POST" }).url).toBe(LOGIN_PATH);
-  });
-});
-
-describe("the rewritten URL still resolves the right page for the partials plugin", () => {
-  const root = process.cwd();
-  const transform = marketingPartials({ root }).transformIndexHtml.handler;
-
-  it("substitutes each page's own metadata after the rewrite", () => {
-    for (const page of MARKETING_PAGES) {
-      const source = devRouteFor(page.path)!;
-      const html = transform("<head><!--#include head--></head>", {
-        filename: path.join(root, source),
-        path: source,
-      });
-      expect(html).toContain(`<title>${page.title}</title>`);
-    }
-  });
-
-  it("leaves the App_Shell untouched after the rewrite", () => {
-    const html = transform("<title>SnapGut</title>", {
-      filename: path.join(root, devRouteFor(LOGIN_PATH)!),
-      path: devRouteFor(LOGIN_PATH)!,
-    });
-    expect(html).toBeUndefined();
   });
 });

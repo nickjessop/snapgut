@@ -1,0 +1,89 @@
+<!doctype html>
+<!-- Served with status 404 by server/routes.js. Self-contained (no partials, no
+     shared CSS, no script) so it renders from a partial dist/. Wired in via
+     rollupOptions.input in vite.config.ts; kept out of the service-worker
+     precache, because the status is the response. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Page not found — SnapGut</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem 1.25rem;
+        box-sizing: border-box;
+        background: #fdfcf6;
+        color: #1b1b1b;
+        font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      main {
+        max-width: 30rem;
+      }
+      p.code {
+        margin: 0 0 0.5rem;
+        font-size: 0.8125rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #6b6b6b;
+      }
+      h1 {
+        margin: 0 0 0.75rem;
+        font-size: 1.5rem;
+        line-height: 1.25;
+      }
+      p {
+        margin: 0 0 1.25rem;
+      }
+      a {
+        display: inline-block;
+        padding: 0.625rem 1.125rem;
+        border-radius: 0.5rem;
+        background: #2d5d4d;
+        color: #fff;
+        text-decoration: none;
+        font-weight: 600;
+      }
+      a:focus-visible {
+        outline: 3px solid #2d5d4d;
+        outline-offset: 3px;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #141614;
+          color: #ececec;
+        }
+        p.code {
+          color: #a0a0a0;
+        }
+        a {
+          background: #3da57b;
+          color: #0d120f;
+        }
+        a:focus-visible {
+          outline-color: #3da57b;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="code">Error 404</p>
+      <h1>That page isn&rsquo;t here</h1>
+      <p>
+        The address may have a typo, or the link that brought you here may point at
+        something that has moved. Nothing is wrong on your end.
+      </p>
+      <a href="/">Open SnapGut</a>
+    </main>
+  </body>
+</html>

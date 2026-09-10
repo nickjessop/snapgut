@@ -248,10 +248,23 @@ or to share one across multiple instances.
 
 | | |
 | --- | --- |
-| **Purpose** | The public-facing origin (scheme + host) for canonical URLs, OG tags, sitemap, and robots.txt |
+| **Purpose** | Declares the public-facing origin (scheme + host) this instance is reachable at |
 | **Default** | None |
 | **Examples** | `https://diary.example.com`, `https://my-snapgut.tail1234.ts.net` |
-| **Notes** | When unset, `robots.txt` defaults to `Disallow: /` and the sitemap is empty. Canonical and OG URLs are omitted |
+| **Notes** | Declarative only — setting it changes no response. See below |
+
+This used to be the switch that made the instance indexable: with it set, the build wrote a
+`sitemap.xml` and a permissive `robots.txt`, and the marketing pages gained canonical and
+`og:url` tags. There are no marketing pages any more — `/` serves the app — so there is nothing
+to index and nothing to enumerate. `robots.txt` is now a static `Disallow: /` for every
+deployment, no sitemap is built, and `X-Robots-Tag: noindex` is sent on every response
+unconditionally. A self-hosted health diary should not appear in a search index whatever its
+URL is.
+
+What the variable still does: it is validated at boot, carried on the resolved config, and
+handed to the response-header middleware. Nothing consumes it today. It is kept because it is
+the one declared place for an instance's absolute public URL, and because removing it would be
+a breaking `.env` change for no gain.
 
 ### REQUIRE_HTTPS
 

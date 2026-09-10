@@ -3,10 +3,15 @@
 //   brand/wordmark.mjs      -> brand/wordmark.svg           reference artwork
 //   + brand/logo-symbol*.svg   brand/lockup.svg             reference artwork
 //                              brand/lockup-white.svg       reference artwork
-//                              public/logo-symbol.svg       served to the header
-//                              marketing/partials/brand.html the header lockup
 //                              src/wordmarkGeometry.ts      bundled by the app
 //                              src/symbolGeometry.ts        bundled by the app
+//                              marketing/assets/logo-symbol.svg  the website's mark
+//                              marketing/partials/brand.html     the header lockup
+//
+// The last two belong to the marketing site, which lives in a separate website
+// repository now — `marketing/` is gitignored and kept only to seed it. They are
+// written there rather than into `public/`, so running this script cannot put an
+// asset the app never references back into every instance's Build_Output.
 //
 // `scripts/gen-og.mjs` imports `brand/lockup.mjs` directly, so the card needs
 // nothing generated. Nothing else hand-copies path data or proportions: run
@@ -48,13 +53,16 @@ write(
     `${lockupSvg({ capHeight: 72, variant: "white", ink: "#ffffff" })}\n`
 );
 
-// --- Served assets ----------------------------------------------------------
-// Only the coloured symbol ships: it is the one the marketing header renders.
-// The white and black variants stay sources — the Open Graph card inlines the
-// white one at build time rather than fetching it, so shipping a copy would add
-// dead weight to every install's precache.
-copyFileSync(abs("brand/logo-symbol.svg"), abs("public/logo-symbol.svg"));
-console.log("wrote public/logo-symbol.svg (copied verbatim)");
+// --- The website's served mark ----------------------------------------------
+// Only the coloured symbol is copied out: it is the one the marketing header
+// renders. The white and black variants stay sources — the Open Graph card
+// inlines the white one at generation time rather than fetching it.
+//
+// The app does not use any of them: it draws its badge from `src/AppIcon.tsx` and
+// the generated icons in `public/`. So this lands in `marketing/assets/`, with the
+// header partial below it, rather than in the app's `public/`.
+copyFileSync(abs("brand/logo-symbol.svg"), abs("marketing/assets/logo-symbol.svg"));
+console.log("wrote marketing/assets/logo-symbol.svg (copied verbatim)");
 
 // --- Marketing header -------------------------------------------------------
 // Both pieces carry explicit width/height so the header reserves the right box
@@ -64,7 +72,8 @@ console.log("wrote public/logo-symbol.svg (copied verbatim)");
 const m = lockupMetrics(HEADER_CAP);
 
 // `width`/`height` on an <img> must be valid non-negative integers — the HTML
-// spec says so and marketing.budget.test.ts enforces it — while the lockup
+// spec says so, and the marketing budget test enforced it before that suite left
+// with the site — while the lockup
 // metrics are fractional. Rounding the symbol's box costs 0.04px of width at
 // this size, a 0.1% deviation from the artwork's aspect ratio, which is well
 // under a device pixel. The wordmark is an inline <svg>, where fractional

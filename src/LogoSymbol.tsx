@@ -6,16 +6,16 @@ interface LogoSymbolProps {
   className?: string;
   /**
    * An accessible name, when the symbol is the only thing naming the brand.
-   * Left off by default: the marketing header pairs it with a labelled wordmark
-   * and marks the symbol decorative, and the app's splash does the same, so a
-   * second "SnapGut" here would just be read out twice.
+   * Left off by default: every place we use it today pairs it with a labelled
+   * wordmark and marks the symbol decorative, so a second "SnapGut" here would
+   * just be read out twice.
    */
   label?: string;
 }
 
 /**
- * The SnapGut brand symbol — the same mark the marketing header shows, drawn
- * from `brand/logo-symbol-white.svg` via `src/symbolGeometry.ts`.
+ * The SnapGut brand symbol — the same mark the favicon and install icons carry,
+ * drawn from `brand/logo-symbol-white.svg` via `src/symbolGeometry.ts`.
  *
  * Painted with `currentColor` rather than the artwork's two-tone fills, so it
  * follows the surface it sits on: on the accent-gradient badge that is the

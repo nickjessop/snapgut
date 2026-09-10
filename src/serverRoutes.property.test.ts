@@ -1,7 +1,6 @@
 // @vitest-environment node
 //
-// Feature: marketing-site-and-routing, Property 3: Route resolution is total and
-// single-valued.
+// Property 3: Route resolution is total and single-valued.
 //
 // **Validates: Requirements 2.5, 2.9**
 //
@@ -12,12 +11,13 @@
 // Two halves, and the second is the load-bearing one:
 //
 //   - **Total and single-valued.** Every string resolves to a well-formed
-//     outcome whose `kind` is exactly one of the five `OUTCOME` values, with the
+//     outcome whose `kind` is exactly one of the four `OUTCOME` values, with the
 //     status and the fields that kind implies, and the same input resolves the
 //     same way twice (Requirement 2.9).
-//   - **App_Shell if and only if.** The shell is returned for exactly the
-//     Login_Route and the App_Routes and for nothing else, which is what stops
-//     Requirement 2.5's 404 from silently becoming today's soft-404 app shell.
+//   - **App_Shell if and only if.** The shell is returned for exactly the origin
+//     root, the Login_Route, and the App_Routes and for nothing else, which is
+//     what stops Requirement 2.5's 404 from silently becoming a soft-404 app
+//     shell.
 //
 // The oracle is derived from the requirement text and the Route_Table
 // (`shared/site.js`), not from `server/routes.js`: `redirectTargetFor` is
@@ -28,7 +28,10 @@
 // One precedence note, because it is the single place the resolution order is
 // observable rather than incidental: a Build_Output file that also sits under
 // `/app` (`/app/index.html` is a real one) resolves to the App_Shell, not to the
-// static outcome. The design's registration order says so, and the iff clause
+// static outcome. The same now goes for a stray `dist/index.html` left by an
+// older build, whose *path* would be `/index.html` — but the origin root `/` is
+// a shell path in its own right and is registered ahead of `serveStatic`, so no
+// file can shadow it. The design's registration order says so, and the iff clause
 // above demands it. Every other pair of outcome classes is disjoint, which the
 // exclusivity clause asserts — that disjointness is what makes "exactly one
 // outcome" a fact about the Route_Table rather than an artifact of handler order.
@@ -45,9 +48,8 @@ import {
   APP_VIEWS,
   LOGIN_PATH,
   NOT_FOUND_FILE,
+  ROOT_PATH,
   isAppPath,
-  isMarketingPath,
-  marketingPaths,
 } from "../shared/site.js";
 
 const ITERATIONS = 300;
@@ -59,12 +61,11 @@ type Outcome = {
   location?: string;
 };
 
-/** The five outcomes of the design's resolution table, and nothing else. */
+/** The four outcomes of the design's resolution table, and nothing else. */
 const OUTCOME_KINDS: readonly string[] = Object.values(OUTCOME);
 
 /** The status each outcome class carries, from the design's resolution table. */
 const STATUS_FOR: Record<string, number> = {
-  [OUTCOME.MARKETING]: 200,
   [OUTCOME.APP_SHELL]: 200,
   [OUTCOME.STATIC]: 200,
   [OUTCOME.REDIRECT]: 301,
@@ -74,23 +75,25 @@ const STATUS_FOR: Record<string, number> = {
 // --- The oracle, from the requirements and the Route_Table -------------------
 
 /**
- * The App_Shell set: exactly the Login_Route and the App_Routes (Requirements
- * 2.3, 2.5). `isAppPath` comes from the Route_Table, so this is the same
- * definition the client router and the service-worker denylist use.
+ * The App_Shell set: exactly the origin root, the Login_Route, and the App_Routes
+ * (Requirements 2.3, 2.5). `isAppPath` comes from the Route_Table, so this is the
+ * same definition the client router uses.
  */
-const isShellPath = (p: string): boolean => p === LOGIN_PATH || isAppPath(p);
+const isShellPath = (p: string): boolean =>
+  p === ROOT_PATH || p === LOGIN_PATH || isAppPath(p);
 
 /**
- * Requirement 2.6, restated: a Marketing_Page path or the Login_Route carrying a
- * trailing slash, `/` excepted. An App_Route keeps its 200, and an unknown path
- * with a trailing slash takes the single 404 of Requirement 2.5 rather than a
- * 301 to another 404.
+ * Requirement 2.6, restated: with the marketing site gone, the Login_Route
+ * carrying a trailing slash is the only redirect left. `/` is the origin root
+ * rather than a trailing slash to strip, an App_Route keeps its 200, and an
+ * unknown path with a trailing slash takes the single 404 of Requirement 2.5
+ * rather than a 301 to another 404.
  */
 function redirectEligible(p: string): boolean {
-  if (p === "/" || !p.endsWith("/")) return false;
+  if (p === ROOT_PATH || !p.endsWith("/")) return false;
   const stripped = p.replace(/\/+$/, "");
-  if (stripped === "") return false; // `//` names no page, so it takes the 404
-  return isMarketingPath(stripped) || stripped === LOGIN_PATH;
+  if (stripped === "") return false; // `//` names no document, so it takes the 404
+  return stripped === LOGIN_PATH;
 }
 
 const strippedTarget = (p: string): string => p.replace(/\/+$/, "");
@@ -98,7 +101,6 @@ const strippedTarget = (p: string): string => p.replace(/\/+$/, "");
 /** The expected outcome kind for a path against a given Build_Output. */
 function expectedKind(p: string, fileExists: (path: string) => boolean): string {
   if (redirectEligible(p)) return OUTCOME.REDIRECT;
-  if (isMarketingPath(p)) return OUTCOME.MARKETING;
   if (isShellPath(p)) return OUTCOME.APP_SHELL;
   if (fileExists(p)) return OUTCOME.STATIC;
   return OUTCOME.NOT_FOUND;
@@ -107,17 +109,17 @@ function expectedKind(p: string, fileExists: (path: string) => boolean): string 
 // --- Build_Output generation -------------------------------------------------
 
 /**
- * Files a real Build_Output holds, including two that overlap another outcome
- * class on purpose: `/index.html` (the home page's document, whose *path* is
- * `/`) and `/app/index.html` (a file that is also an App_Route).
+ * Files a real Build_Output holds, plus two that overlap another outcome class on
+ * purpose: `/app/index.html` (a file that is also an App_Route) and `/index.html`
+ * (which an older build left at the root — its *path* is `/index.html`, not `/`,
+ * so it must stay a plain static file and must not become the answer for `/`).
  */
 const DIST_FILES = [
   "/assets/index-a1b2c3.js",
-  "/assets/marketing-9f8e7d.css",
+  "/assets/index-9f8e7d.css",
   "/sw.js",
   "/manifest.webmanifest",
   "/robots.txt",
-  "/sitemap.xml",
   "/index.html",
   "/404.html",
   "/app/index.html",
@@ -138,7 +140,7 @@ const arbDist: fc.Arbitrary<ReadonlySet<string>> = fc
 const APP_PATHS = APP_VIEWS.map((v) => v.path);
 
 /** The paths the Route_Table itself names. */
-const arbTablePath = fc.constantFrom(...marketingPaths(), LOGIN_PATH, ...APP_PATHS);
+const arbTablePath = fc.constantFrom(ROOT_PATH, LOGIN_PATH, ...APP_PATHS);
 
 /**
  * Near misses: the shapes a prefix test, a case-insensitive compare, or a
@@ -307,7 +309,7 @@ describe("Property 3: Route resolution is total and single-valued", () => {
     );
   });
 
-  it("returns the App_Shell if and only if the path is the Login_Route or an App_Route", () => {
+  it("returns the App_Shell if and only if the path is the root, the Login_Route, or an App_Route", () => {
     fc.assert(
       fc.property(arbPath, arbDist, (path, dist) => {
         const outcome = resolveWith(path, dist);
@@ -316,8 +318,8 @@ describe("Property 3: Route resolution is total and single-valued", () => {
         expect(
           shell,
           shell
-            ? `${JSON.stringify(path)} got the App_Shell but is neither the Login_Route nor an App_Route`
-            : `${JSON.stringify(path)} is the Login_Route or an App_Route but resolved to ${outcome.kind}`
+            ? `${JSON.stringify(path)} got the App_Shell but is not the root, the Login_Route, or an App_Route`
+            : `${JSON.stringify(path)} is the root, the Login_Route, or an App_Route but resolved to ${outcome.kind}`
         ).toBe(isShellPath(path));
 
         // One shell document, at one path in the Build_Output (Requirement 3.8).
@@ -330,14 +332,10 @@ describe("Property 3: Route resolution is total and single-valued", () => {
   it("404s every path Requirement 2.5 names, and never answers one with the App_Shell", () => {
     fc.assert(
       fc.property(arbPath, arbDist, (path, dist) => {
-        // Requirement 2.5's antecedent: not a Marketing_Page path, not the
-        // Login_Route, not an App_Route, no file in the Build_Output — and not
-        // the trailing-slash redirect Requirement 2.6 claims first.
-        const unknown =
-          !isMarketingPath(path) &&
-          !isShellPath(path) &&
-          !dist.has(path) &&
-          !redirectEligible(path);
+        // Requirement 2.5's antecedent: not the origin root, not the Login_Route,
+        // not an App_Route, no file in the Build_Output — and not the
+        // trailing-slash redirect Requirement 2.6 claims first.
+        const unknown = !isShellPath(path) && !dist.has(path) && !redirectEligible(path);
         if (!unknown) return;
 
         const outcome = resolveWith(path, dist);
@@ -352,14 +350,12 @@ describe("Property 3: Route resolution is total and single-valued", () => {
   });
 
   it("keeps the document classes disjoint, so one outcome is not an artifact of handler order", () => {
-    // Marketing_Page, App_Shell, and redirect-eligible never overlap, so their
-    // relative registration order cannot change an answer. The static class is
-    // the one exception, resolved by precedence and checked below.
+    // App_Shell and redirect-eligible never overlap, so their relative
+    // registration order cannot change an answer. The static class is the one
+    // exception, resolved by precedence and checked below.
     fc.assert(
       fc.property(arbPath, (path) => {
-        const claims = [isMarketingPath(path), isShellPath(path), redirectEligible(path)].filter(
-          Boolean
-        );
+        const claims = [isShellPath(path), redirectEligible(path)].filter(Boolean);
         expect(
           claims.length,
           `${JSON.stringify(path)} is claimed by more than one document class`
@@ -369,14 +365,17 @@ describe("Property 3: Route resolution is total and single-valued", () => {
     );
   });
 
-  it("prefers the App_Shell over a Build_Output file that shares an App_Route path", () => {
+  it("prefers the App_Shell over a Build_Output file that shares a shell path", () => {
     // The one observable precedence: `/app/index.html` exists in dist, and the
     // shell handler is registered ahead of serveStatic, so the iff clause holds.
     const dist = new Set(DIST_FILES);
     expect(resolveWith("/app/index.html", dist).kind).toBe(OUTCOME.APP_SHELL);
-    // And a file that merely looks like a page path stays static: the home
-    // page's own path is `/`, not `/index.html`.
+    // And a stale root document left by an older build stays a plain static file:
+    // its path is `/index.html`, while `/` is the App_Shell in its own right and
+    // cannot be shadowed by it.
     expect(resolveWith("/index.html", dist).kind).toBe(OUTCOME.STATIC);
+    expect(resolveWith(ROOT_PATH, dist).kind).toBe(OUTCOME.APP_SHELL);
+    expect(resolveWith(ROOT_PATH, dist).file).toBe(APP_SHELL_FILE);
   });
 
   it("resolves every redirect target to a document, so a 301 never lands on another 301", () => {
@@ -395,7 +394,8 @@ describe("Property 3: Route resolution is total and single-valued", () => {
         expect(followed.kind, `${JSON.stringify(path)} redirects to another redirect`).not.toBe(
           OUTCOME.REDIRECT
         );
-        expect([OUTCOME.MARKETING, OUTCOME.APP_SHELL]).toContain(followed.kind);
+        expect(followed.kind).toBe(OUTCOME.APP_SHELL);
+        expect(followed.file).toBe(APP_SHELL_FILE);
       }),
       { numRuns: ITERATIONS }
     );

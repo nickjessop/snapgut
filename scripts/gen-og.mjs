@@ -1,14 +1,17 @@
-// Builds the Open Graph card the Marketing_Pages point `og:image` at
-// (Requirement 8.4), from the same brand sources every other mark comes from.
+// Builds the Open Graph card for the marketing site, from the same brand sources
+// every other mark comes from.
 //
-//   brand/lockup.mjs (symbol + wordmark) -> public/og.png  (1200x630)
+//   brand/lockup.mjs (symbol + wordmark) -> marketing/assets/og.png  (1200x630)
 //
-// Run with `npm run og` after the brand marks or the tagline change. The output
-// lands in `public/`, which Vite copies verbatim into the Build_Output, so the
-// card is a same-origin asset at the fixed path `/og.png`. Fixed rather than
-// content-hashed on purpose: crawlers read the URL as a literal string out of
-// `marketing/partials/meta.html`, so there is nowhere for a hash to come from —
-// the same reason the icons and the manifest keep fixed names.
+// Run with `npm run og` after the brand marks or the tagline change.
+//
+// The output used to land in `public/`, which Vite copies verbatim into the
+// Build_Output, because the card was served at `/og.png` for the marketing pages'
+// `og:image`. Those pages have moved to a separate website repository and this
+// app serves no indexable document, so nothing here references the card any more.
+// It is written into the gitignored `marketing/` tree instead, alongside the pages
+// that use it, so a run of this script cannot put an unreferenced 100 KB PNG back
+// into every instance's build output.
 //
 // The card is one SVG rasterized once. It used to composite the app icon as a
 // separate rounded-corner raster; the symbol is vector, so it now goes into the
@@ -20,7 +23,7 @@ import { lockupGroup, lockupMetrics } from "../brand/lockup.mjs";
 const W = 1200;
 const H = 630;
 
-const OUT = new URL("../public/og.png", import.meta.url);
+const OUT = new URL("../marketing/assets/og.png", import.meta.url);
 
 // The host printed on the card. Overridable so a fork can rebrand the card
 // without editing the generator; the default is the original deployment.
@@ -99,7 +102,7 @@ writeFileSync(OUT, png);
 
 const { width, height } = await sharp(png).metadata();
 console.log(
-  `wrote public/og.png (${width}x${height}, ${(png.length / 1024).toFixed(1)} KB)\n` +
+  `wrote marketing/assets/og.png (${width}x${height}, ${(png.length / 1024).toFixed(1)} KB)\n` +
     `lockup at ${PAD},${PAD} — ${lockup.width}x${lockup.height}, ` +
     `symbol ${lockup.symbol.width}x${lockup.symbol.height}, cap ${CAP}`
 );

@@ -449,8 +449,9 @@ before the sign-in page is even reachable.
       `{"ready":true,"schema":1}`. See [operations.md](operations.md) for what the fields mean.
 - [ ] `AUTH_PASSWORD` is at least 12 characters. With an exposed `BIND_HOST` the server refuses
       to boot without one.
-- [ ] `PUBLIC_ORIGIN` matches the public URL, or `robots.txt` stays `Disallow: /` and canonical
-      tags are omitted.
+- [ ] Nothing about crawling needs configuring: `robots.txt` is always `Disallow: /` and every
+      response carries `X-Robots-Tag: noindex`. `PUBLIC_ORIGIN` is declarative only and does not
+      change that — set it to the public URL if you want it recorded, or leave it unset.
 
 ## Resource expectations
 

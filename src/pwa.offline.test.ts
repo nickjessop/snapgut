@@ -17,25 +17,21 @@
 // declines to respond hands the navigation back to the browser, which then goes
 // to the network — that step is the platform's, not the worker's, so here it is
 // observed as "the worker called no respondWith". Real-device confirmation of a
-// Legacy_Install upgrade stays on the manual checklist (task 8).
+// Legacy_Install upgrade stays on the manual checklist.
 //
-// That browser half was confirmed once by hand, against `dist/` served over
-// localhost in Chromium with the network cut at the browser (2026-07-30): the
-// worker installed at scope `/` with `/app/index.html` precached and no
-// marketing document; an offline navigation to `/app/logs` rendered the
-// App_Shell while a non-precached `fetch` in the same page failed; an offline
-// navigation to `/pricing` failed at the network rather than being substituted;
-// and an edit to the origin's home document was visible on the next load of `/`
-// from the controlled client. It is recorded here rather than automated because
-// the repo has no browser test runner and adding one for this is out of
-// proportion to what it would add over the assertions below.
+// What changed with the marketing site's removal: `/` used to be on the
+// navigation denylist so a fresh landing page was always fetched from the origin.
+// It is now the app, so the worker answers it from the precached App_Shell — a
+// bare-host launch works offline, which is the point. The two things that must
+// stay out of the precache are the food pack (size) and the 404 document (its
+// status is the response).
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 // @ts-ignore -- untyped ESM JavaScript (shared/ is not TypeScript)
-import { APP_VIEWS, MARKETING_PAGES, NOT_FOUND_FILE } from "../shared/site.js";
+import { APP_VIEWS, LOGIN_PATH, NOT_FOUND_FILE, ROOT_PATH } from "../shared/site.js";
 // @ts-ignore -- untyped ESM JavaScript (vite/ is not TypeScript)
 import { APP_SHELL_DOCUMENT } from "../vite/pwa.js";
 import { bootServiceWorker, type ServiceWorkerHarness } from "./test/serviceWorkerHarness";
@@ -45,7 +41,7 @@ const distDir = path.join(repoRoot, "dist");
 const swPath = path.join(distDir, "sw.js");
 
 /** Everything the emitted worker's path sets are derived from. */
-const CONFIG_SOURCES = ["vite.config.ts", "vite/pwa.js", "vite/marketing.js", "shared/site.js"];
+const CONFIG_SOURCES = ["vite.config.ts", "vite/pwa.js", "shared/site.js"];
 
 /**
  * Build only when the emitted worker is missing or older than the config it is
@@ -61,13 +57,6 @@ const buildIfStale = () => {
   execFileSync("npm", ["run", "build"], { cwd: repoRoot, stdio: "pipe" });
 };
 
-const marketingPagePaths = (MARKETING_PAGES as readonly { path: string; file: string }[]).map(
-  (page) => page.path,
-);
-const marketingDocuments = [
-  ...(MARKETING_PAGES as readonly { file: string }[]).map((page) => page.file),
-  NOT_FOUND_FILE as string,
-];
 const appRoutes = (APP_VIEWS as readonly { path: string }[]).map((view) => view.path);
 
 let appShell = "";
@@ -85,62 +74,76 @@ beforeAll(async () => {
   onlineWorker = await bootServiceWorker(distDir);
 }, 60_000);
 
-describe("the built Service_Worker precaches the App_Shell and no Marketing_Page", () => {
+describe("the built Service_Worker precaches the App_Shell", () => {
   it("holds the App_Shell after install", () => {
     expect(offlineWorker.precachedUrls()).toContain(`/${APP_SHELL_DOCUMENT}`);
   });
 
-  it("holds no Marketing_Site document", () => {
-    const precached = offlineWorker.precachedUrls();
-    for (const file of marketingDocuments) {
-      expect(precached).not.toContain(`/${file}`);
+  it("holds no not-found document, whose status is the whole response", () => {
+    // Precached, the worker would answer a typo with the 404 body and status 200 —
+    // exactly the soft 404 that Requirement 2.5 exists to remove.
+    expect(offlineWorker.precachedUrls()).not.toContain(`/${NOT_FOUND_FILE}`);
+  });
+
+  it("precaches no food-pack illustration (R5.6)", () => {
+    for (const url of offlineWorker.precachedUrls()) {
+      expect(url.startsWith("/foods/"), `${url} is in the precache`).toBe(false);
     }
   });
 });
 
-describe("an App_Route navigation offline resolves to the Navigation_Fallback (R5.5)", () => {
-  it.each([...appRoutes, "/app/logs?filter=today", "/app/unknown-subview"])(
-    "%s is answered from the precached App_Shell with no network",
-    async (route) => {
-      const outcome = await offlineWorker.navigate(route);
-      expect(outcome.handledByWorker).toBe(true);
-      expect(outcome.response?.status).toBe(200);
-      expect(outcome.body).toBe(appShell);
-    },
-  );
+describe("a navigation offline resolves to the Navigation_Fallback (R5.5)", () => {
+  it.each([
+    ROOT_PATH,
+    LOGIN_PATH,
+    ...appRoutes,
+    "/app/logs?filter=today",
+    "/app/unknown-subview",
+  ])("%s is answered from the precached App_Shell with no network", async (route) => {
+    const outcome = await offlineWorker.navigate(route as string);
+    expect(outcome.handledByWorker).toBe(true);
+    expect(outcome.response?.status).toBe(200);
+    expect(outcome.body).toBe(appShell);
+  });
 
-  it("answers without reaching the network", async () => {
+  it("answers the bare origin without reaching the network (R5.4)", async () => {
+    // The behaviour change: `/` used to be denied so the marketing homepage
+    // stayed fresh. It is the app now, so a launch from the bare host works with
+    // the network cut.
+    const before = offlineWorker.networkLog.length;
+    const outcome = await offlineWorker.navigate(ROOT_PATH);
+    expect(outcome.body).toBe(appShell);
+    expect(offlineWorker.networkLog.slice(before)).toEqual([]);
+  });
+
+  it("answers an App_Route without reaching the network", async () => {
     const before = offlineWorker.networkLog.length;
     const outcome = await offlineWorker.navigate("/app/insights");
     expect(outcome.body).toBe(appShell);
     expect(offlineWorker.networkLog.slice(before)).toEqual([]);
   });
+
+  it("answers `/` the same way while online", async () => {
+    const outcome = await onlineWorker.navigate(ROOT_PATH);
+    expect(outcome.handledByWorker).toBe(true);
+    expect(outcome.body).toBe(appShell);
+  });
 });
 
-describe("a Marketing_Page navigation is not answered from precache (R5.4)", () => {
-  it.each(marketingPagePaths)("%s is left to the Origin_Server while online", async (route) => {
-    const outcome = await onlineWorker.navigate(route);
-    expect(outcome.handledByWorker).toBe(false);
-  });
+describe("the denylist leaves the non-navigation surface to the Origin_Server (R5.2)", () => {
+  it.each(["/api/health", "/robots.txt"])(
+    "%s is left to the Origin_Server, never answered with the App_Shell",
+    async (route) => {
+      const outcome = await onlineWorker.navigate(route);
+      expect(outcome.handledByWorker).toBe(false);
+      expect(outcome.body).not.toBe(appShell);
+    },
+  );
 
-  it.each(marketingPagePaths)("%s is left to the network while offline", async (route) => {
-    // Offline the navigation fails at the network rather than being substituted
-    // with the App_Shell — no offline Marketing_Site is the accepted trade-off.
-    const outcome = await offlineWorker.navigate(route);
-    expect(outcome.handledByWorker).toBe(false);
-  });
-
-  it("caches no Marketing_Page document as a side effect of a navigation", async () => {
-    for (const route of marketingPagePaths) await onlineWorker.navigate(route);
-    const cached = onlineWorker.precachedUrls();
-    for (const file of marketingDocuments) {
-      expect(cached).not.toContain(`/${file}`);
+  it("caches no food-pack entry as a side effect of a navigation", async () => {
+    await onlineWorker.navigate(ROOT_PATH);
+    for (const url of onlineWorker.precachedUrls()) {
+      expect(url.startsWith("/foods/")).toBe(false);
     }
-    expect(cached).not.toContain("/");
-  });
-
-  it("leaves a trailing-slash Marketing_Page path to the Origin_Server's redirect", async () => {
-    const outcome = await onlineWorker.navigate("/privacy/");
-    expect(outcome.handledByWorker).toBe(false);
   });
 });

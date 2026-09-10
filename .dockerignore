@@ -24,6 +24,11 @@ food-pack/
 # Icon sources — only used by `npm run icons`; the emitted icons live in public/
 brand/
 
+# The old marketing site. Gitignored and retained on disk only to seed a separate
+# website repository — the build reads nothing from it, so it has no business in
+# the build context.
+marketing/
+
 # Local scratch, planning, and release notes, none of which the build reads.
 # Keeps the build context small and the build-stage layer free of material that
 # is not part of the image.

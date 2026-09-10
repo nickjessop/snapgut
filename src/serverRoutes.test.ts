@@ -2,7 +2,11 @@
 //
 // The Origin_Server's routes and per-class headers, driven end to end.
 //
-// _Requirements: 2.2, 2.3, 2.4, 2.5, 2.6, 8.6, 8.9, 11.8, 12.9_
+// _Requirements: 2.3, 2.4, 2.5, 2.6, 8.6, 8.9, 11.8, 12.9_
+//
+// The marketing site is gone, so the matrix has four rows rather than five: `/`,
+// `/login`, `/app`, and `/app/*` are all the App_Shell; `/privacy` and `/terms`
+// are 404s like any other unknown path; and `/login/` is the only 301 left.
 //
 // Every assertion here comes from a real request: the site routes and the
 // per-class header middleware are mounted on a fresh Hono app and driven with
@@ -38,29 +42,25 @@ import { registerSiteHeaders } from "../server/headers.js";
 import { CSP } from "../server/csp.js";
 import {
   LOGIN_PATH,
-  MARKETING_PAGES,
   NOT_FOUND_FILE,
+  ROOT_PATH,
 } from "../shared/site.js";
 
 const repoRoot = path.resolve(__dirname, "..");
 const distDir = path.join(repoRoot, "dist");
 
 const CANONICAL_HOST = "localhost";
-/** A non-canonical hostname for testing noindex behavior. */
+/** A second hostname, to show the response body does not depend on it. */
 const RUN_APP_HOST = "snapgut-3f1a2b-uc.a.run.app";
 
-const marketingPages = MARKETING_PAGES as readonly { path: string; file: string }[];
-
-/** Everything the emitted documents and generated files are derived from. */
-const SOURCE_DIRS = ["marketing", "app", "vite"];
-const SOURCE_FILES = ["vite.config.ts", "shared/site.js"];
+/** Everything the emitted documents and static files are derived from. */
+const SOURCE_DIRS = ["app", "vite", "public"];
+const SOURCE_FILES = ["vite.config.ts", "shared/site.js", "404.html"];
 /** The Build_Output files these assertions read. */
 const OUTPUTS = [
-  ...marketingPages.map((page) => page.file),
   NOT_FOUND_FILE as string,
   APP_SHELL_FILE as string,
   "robots.txt",
-  "sitemap.xml",
   "manifest.webmanifest",
   "sw.js",
 ];
@@ -142,32 +142,55 @@ beforeAll(() => {
   registerSiteRoutes(app);
 }, 120_000);
 
-describe("a Marketing_Page path (R2.2)", () => {
-  it.each(marketingPages.map((page) => [page.path, page.file]))(
-    "%s serves its own document with status 200",
-    async (pathname, file) => {
-      const res = await get(pathname as string);
-      expect(res.status).toBe(200);
-      expect(await res.text()).toBe(distText(file as string));
+describe("the origin root (R2.3)", () => {
+  // The change this pins: `/` is the app, not a landing page and not a redirect.
+  // A redirect to `/app` would be unserveable offline, and a `dist/index.html`
+  // left behind by an older build must not shadow the shell handler either.
+  it("serves the App_Shell with status 200 and no redirect", async () => {
+    const res = await get(ROOT_PATH);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe(appShell);
+  });
+
+  it("carries the App_Shell headers: no-cache, noindex, HTML", async () => {
+    const res = await get(ROOT_PATH);
+    expect(res.headers.get("cache-control")).toBe("no-cache");
+    expect(res.headers.get("x-robots-tag")).toBe("noindex");
+    expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+  });
+
+  it("emits no root document that could shadow it", () => {
+    expect(existsSync(path.join(distDir, "index.html"))).toBe(false);
+  });
+});
+
+describe("the retired marketing paths now 404 (breaking change)", () => {
+  it.each(["/privacy", "/terms", "/sitemap.xml"])(
+    "%s answers 404 with the not-found document",
+    async (pathname) => {
+      const res = await get(pathname);
+      expect(res.status).toBe(404);
+      expect(await res.text()).toBe(notFoundDocument);
     },
   );
 
-  it.each(marketingPages.map((page) => page.path))(
-    "%s is cacheable at the edge, revalidated by the browser",
-    async (pathname) => {
-      const res = await get(pathname);
-      expect(res.headers.get("cache-control")).toBe(
-        "public, max-age=0, s-maxage=3600, must-revalidate",
-      );
-      expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
-      // With no publicOrigin configured, all responses get noindex
-      expect(res.headers.get("x-robots-tag")).toBe("noindex");
+  it.each(["/privacy.html", "/terms.html", "/index.html"])(
+    "%s is not in the Build_Output",
+    (file) => {
+      expect(existsSync(path.join(distDir, file))).toBe(false);
     },
   );
 });
 
-describe("the Login_Route and every App_Route (R2.3, R3.8, R8.6)", () => {
-  const shellPaths = [LOGIN_PATH, "/app", "/app/logs", "/app/insights", "/app/settings"];
+describe("the origin root, the Login_Route, and every App_Route (R2.3, R3.8, R8.6)", () => {
+  const shellPaths = [
+    ROOT_PATH,
+    LOGIN_PATH,
+    "/app",
+    "/app/logs",
+    "/app/insights",
+    "/app/settings",
+  ];
 
   it.each([...shellPaths, "/app/logs?filter=today", "/app/unknown/deep/link"])(
     "%s serves the one App_Shell document with status 200",
@@ -210,15 +233,22 @@ describe("a file in the Build_Output (R2.4)", () => {
     expect(res.headers.get("content-type")).toBe("application/manifest+json");
   });
 
-  it.each([
-    ["/robots.txt", "text/plain; charset=utf-8"],
-    ["/sitemap.xml", "application/xml; charset=utf-8"],
-  ])("%s is served with a bounded cache and the right type", async (pathname, type) => {
-    const res = await get(pathname);
+  it("serves robots.txt with a bounded cache, as plain text, disallowing everything", async () => {
+    const res = await get("/robots.txt");
     expect(res.status).toBe(200);
-    expect(await res.text()).toBe(distText(pathname.slice(1)));
+    const body = await res.text();
+    expect(body).toBe(distText("robots.txt"));
+    expect(body).toContain("User-agent: *");
+    expect(body).toContain("Disallow: /");
+    // No sitemap is emitted any more, so nothing may advertise one.
+    expect(body).not.toContain("Sitemap:");
+    expect(body).not.toContain("Allow:");
     expect(res.headers.get("cache-control")).toBe("public, max-age=3600");
-    expect(res.headers.get("content-type")).toBe(type);
+    expect(res.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+  });
+
+  it("emits no sitemap.xml", () => {
+    expect(existsSync(path.join(distDir, "sitemap.xml"))).toBe(false);
   });
 });
 
@@ -226,8 +256,9 @@ describe("an unknown path (R2.5)", () => {
   const unknown = [
     "/nope",
     "/blog/first-post",
-    "/pricing/extra",
+    "/privacy",
     "/nonsense/",
+    "/index.html",
     "/index.html.bak",
     "/assets/does-not-exist.js",
   ];
@@ -251,25 +282,28 @@ describe("an unknown path (R2.5)", () => {
 });
 
 describe("a trailing slash (R2.6)", () => {
-  it.each([...marketingPages.map((p) => p.path).filter((p) => p !== "/"), LOGIN_PATH])(
-    "%s/ redirects permanently to the path without it",
-    async (pathname) => {
-      const res = await get(`${pathname}/`);
-      expect(res.status).toBe(301);
-      expect(res.headers.get("location")).toBe(pathname);
-    },
-  );
-
-  it("keeps the query string on the redirect", async () => {
-    const res = await get("/privacy/?ref=footer");
+  it("redirects `/login/` permanently to the path without it", async () => {
+    const res = await get(`${LOGIN_PATH}/`);
     expect(res.status).toBe(301);
-    expect(res.headers.get("location")).toBe("/privacy?ref=footer");
+    expect(res.headers.get("location")).toBe(LOGIN_PATH);
   });
 
-  it("leaves `/` alone", async () => {
-    const res = await get("/");
+  it("keeps the query string on the redirect", async () => {
+    const res = await get("/login/?next=%2Fapp%2Flogs");
+    expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe("/login?next=%2Fapp%2Flogs");
+  });
+
+  it("leaves `/` alone: the root is the app, not a redirect", async () => {
+    const res = await get(ROOT_PATH);
     expect(res.status).toBe(200);
-    expect(await res.text()).toBe(distText("index.html"));
+    expect(await res.text()).toBe(appShell);
+  });
+
+  it("keeps an App_Route with a trailing slash at 200", async () => {
+    const res = await get("/app/");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe(appShell);
   });
 
   it("answers an unknown trailing-slash path with a single 404, not a 301", async () => {
@@ -278,15 +312,17 @@ describe("a trailing slash (R2.6)", () => {
   });
 });
 
-describe("noindex behavior with no PUBLIC_ORIGIN (R8.9)", () => {
-  const paths = ["/", "/privacy", LOGIN_PATH, "/app", "/nope"];
+describe("nothing is indexable (R8.9)", () => {
+  const paths = [ROOT_PATH, LOGIN_PATH, "/app", "/robots.txt", "/nope"];
 
-  it("every path carries noindex when no publicOrigin is configured", async () => {
-    for (const pathname of paths) {
+  it("every path carries noindex, whatever the class", async () => {
+    // `shouldNoIndex` is unconditional now: with no marketing site there is no
+    // indexable surface, and PUBLIC_ORIGIN no longer opens one.
+    for (const pathname of [...paths, hashedAssetPath]) {
       const res = await get(pathname);
-      expect(res.headers.get("x-robots-tag")).toBe("noindex");
+      expect(res.headers.get("x-robots-tag"), pathname).toBe("noindex");
     }
-    const redirect = await get("/privacy/");
+    const redirect = await get(`${LOGIN_PATH}/`);
     expect(redirect.headers.get("x-robots-tag")).toBe("noindex");
   });
 
@@ -300,26 +336,19 @@ describe("noindex behavior with no PUBLIC_ORIGIN (R8.9)", () => {
 
   it("keeps the same status for each class", async () => {
     for (const [pathname, status] of [
-      ["/", 200],
+      [ROOT_PATH, 200],
       [LOGIN_PATH, 200],
       ["/nope", 404],
-      ["/privacy/", 301],
+      [`${LOGIN_PATH}/`, 301],
     ] as const) {
       expect((await get(pathname, RUN_APP_HOST)).status).toBe(status);
     }
   });
 });
 
-describe("the JSON-LD hash merge (now simplified: single CSP for all)", () => {
-  it("sends the base CSP on every Marketing_Page (no hashes)", async () => {
-    for (const pathname of marketingPages.map((p) => p.path)) {
-      const csp = (await get(pathname)).headers.get("content-security-policy");
-      expect(csp).toBe(CSP);
-    }
-  });
-
+describe("one CSP for every response class", () => {
   it("sends the App_Shell a policy with no hash at all", async () => {
-    for (const pathname of [LOGIN_PATH, "/app", "/app/logs"]) {
+    for (const pathname of [ROOT_PATH, LOGIN_PATH, "/app", "/app/logs"]) {
       const csp = (await get(pathname)).headers.get("content-security-policy");
       expect(csp).toBe(CSP);
       expect(csp).not.toContain("sha256-");
@@ -327,7 +356,7 @@ describe("the JSON-LD hash merge (now simplified: single CSP for all)", () => {
   });
 
   it("keeps script-src strict on every class", async () => {
-    for (const pathname of ["/", "/privacy", LOGIN_PATH, "/app", hashedAssetPath, "/nope"]) {
+    for (const pathname of [ROOT_PATH, LOGIN_PATH, "/app", hashedAssetPath, "/robots.txt", "/nope"]) {
       const directive = scriptSrc((await get(pathname)).headers.get("content-security-policy"));
       expect(directive).toContain("'self'");
       expect(directive).not.toContain("unsafe-inline");
@@ -378,7 +407,7 @@ describe("the security header set per route class (R11.8)", () => {
     request(serverApp.fetch, pathname, { host: CANONICAL_HOST });
 
   it.each([
-    ["Marketing_Page", "/", 200],
+    ["origin root", ROOT_PATH, 200],
     ["Login_Route", LOGIN_PATH, 200],
     ["App_Route", "/app/logs", 200],
     ["/api/*", "/api/health", 200],
@@ -458,7 +487,7 @@ describe("Strict-Transport-Security with requireHttps (R11.1)", () => {
   it("is sent when requireHttps is on and request has x-forwarded-proto: https", async () => {
     const httpsApp = createTestApp({ REQUIRE_HTTPS: "1" });
 
-    for (const pathname of ["/", LOGIN_PATH, "/app"]) {
+    for (const pathname of [ROOT_PATH, LOGIN_PATH, "/app"]) {
       const res = await Promise.resolve(
         httpsApp.fetch(
           new Request(`https://${CANONICAL_HOST}${pathname}`, {

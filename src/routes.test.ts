@@ -6,7 +6,7 @@
 // Validates: Requirements 3.4, 4.1, 16.1, 16.4
 
 import { describe, expect, it } from "vitest";
-import { APP_VIEWS, DEFAULT_APP_PATH, LOGIN_PATH } from "../shared/site.js";
+import { APP_VIEWS, DEFAULT_APP_PATH, LOGIN_PATH, ROOT_PATH } from "../shared/site.js";
 import { formatRoute, mayEnterApp, parseRoute, sanitizeNext } from "./routes";
 
 describe("parseRoute", () => {
@@ -43,8 +43,21 @@ describe("parseRoute", () => {
     });
   });
 
+  it("resolves the origin root to the default Addressable_View", () => {
+    // There is no landing page: `/` is the app. The URL is canonicalised to
+    // DEFAULT_APP_PATH in place by `useRouter` (pinned end to end in
+    // src/routing.client.test.tsx), which is why `formatRoute` must never spell
+    // this route `/` — otherwise the canonicalisation would have nothing to
+    // change and `/` would stick in the URL bar.
+    const root = parseRoute(ROOT_PATH, "");
+    expect(root).toEqual(parseRoute(DEFAULT_APP_PATH, ""));
+    expect(root).toEqual({ kind: "app", tab: "camera", flow: null });
+    expect(formatRoute(root!)).toBe(DEFAULT_APP_PATH);
+    expect(formatRoute(root!)).not.toBe(ROOT_PATH);
+  });
+
   it("returns null for a path that names no app view", () => {
-    for (const path of ["/", "/pricing", "/privacy", "/blog/post", "/apple", "", "/app/nope"]) {
+    for (const path of ["/pricing", "/privacy", "/blog/post", "/apple", "", "/app/nope"]) {
       expect(parseRoute(path, "")).toBeNull();
     }
   });
@@ -96,6 +109,10 @@ describe("sanitizeNext", () => {
       "/app/logs#frag",
       "/app/unknown",
       " /app",
+      // The origin root parses to an app view, but it is still not a `next`
+      // target: `sanitizeNext` returns the Route_Table's own spelling, so a
+      // signed-in redirect lands on `/app` and never on `/`.
+      ROOT_PATH,
     ]) {
       expect(sanitizeNext(raw)).toBe(DEFAULT_APP_PATH);
     }

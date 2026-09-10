@@ -284,8 +284,8 @@
  * `.insights`, `.sheet`, and `.settings-scroll` are the scroll containers, each
  * with `overscroll-behavior: contain` so reaching the end does not chain outward.
  *
- * Scoped to the app bundle. The Marketing_Site has its own stylesheet and must keep
- * scrolling like an ordinary page. */
+ * Scoped to the app bundle, which is the only document that wants it. The 404
+ * document carries its own inline styles and scrolls like an ordinary page. */
 html {
   height: 100%;
   overflow: hidden;

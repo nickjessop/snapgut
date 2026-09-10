@@ -61,12 +61,11 @@ npm test          # vitest, the whole suite
 ```
 
 **Build before you test.** `dist/` is gitignored, and a few tests assert against the built
-output — `marketing.isolation.test.ts` compares the marketing documents' module graphs against
-the app bundle, `pwa.offline.test.ts` checks the service-worker precache manifest, and
-`marketing.budget.test.ts` checks asset sizes. On a fresh clone with no `dist/`, running `npm
-test` first fails seven of them for want of an artifact rather than because anything is wrong.
-For the same reason, rebuild after changing anything under `marketing/` or `vite/`, or those
-tests will be measuring a stale `dist/`.
+output — `serverRoutes.test.ts` drives the real Hono app against the documents and static files
+the build emits, and `pwa.offline.test.ts` runs the generated `dist/sw.js` and checks its
+precache manifest. Both rebuild for themselves when `dist/` is missing or stale, but that is a
+fallback, not the intended order. For the same reason, rebuild after changing anything under
+`app/`, `public/`, `vite/`, or `404.html`, or those tests will be measuring a stale `dist/`.
 
 Node 24 or newer is required, and not only by `engines`. Below it the suite gives misleading
 results: `node:sqlite` does not exist, so the SQLite tests cannot run, and Node's own
@@ -83,7 +82,8 @@ will not exercise what CI exercises.
 | `src/` | React 18 PWA client (TypeScript) and the test suite. |
 | `shared/` | Route table shared between client and server. |
 | `vite/` | Custom build plugins. |
-| `marketing/` | Static marketing pages served at `/`, `/privacy`, `/terms`. |
+| `app/` | The app-shell document, served at `/`, `/login`, `/app` and `/app/*`. |
+| `public/` | Copied verbatim into `dist/`: icons, favicons, `robots.txt`. |
 | `brand/` | Brand assets and icon sources. |
 | `docs/` | Documentation. |
 | `food-pack/` | 3,036 food illustrations, gitignored and fetched separately. |

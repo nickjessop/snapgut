@@ -1,16 +1,34 @@
 // @vitest-environment node
 //
-// Feature: marketing-site-and-routing, Property 4: Every marketing path is
-// excluded from navigation fallback.
+// Property: the Service_Worker's path sets keep the Navigation_Fallback resolvable
+// and confine the denylist to the non-navigation surface.
 //
-// Node environment on purpose: this asserts against the build-time
-// configuration in vite/pwa.js, which touches no DOM.
+// Validates: Requirements 5.1, 5.2, 5.3, 5.6, 5.8
 //
-// The values under test are the ones vite.config.ts passes to Workbox, imported
-// from the same module rather than restated here — that is why vite/pwa.js
-// exports them (Requirement 5.8). Restating the denylist in the test would let
-// the config and the assertion drift apart, which is the exact failure this
-// property exists to catch.
+// Node environment on purpose: this asserts against the build-time configuration
+// in `vite/pwa.js`, which touches no DOM.
+//
+// **What this file used to be.** It was "Property 4: every marketing path is
+// excluded from navigation fallback" — a property over the Marketing_Page set,
+// checking that each page's path was denied so the worker never answered the
+// landing page from the precached App_Shell. With the marketing site gone that set
+// is empty and every clause over it is vacuously true, so those clauses are gone
+// rather than left to pass without saying anything.
+//
+// **Why the file survives.** Three things it established are not about marketing
+// and are load-bearing for the offline story, which now includes `/`:
+//
+//   1. The pairing that makes the Navigation_Fallback work at all — the App_Shell
+//      is matched by no `globIgnores` pattern (so it *is* precached) and by no
+//      denylist entry (so the fallback is reachable). An over-broad ignore would
+//      silently leave the worker with nothing to answer an offline navigation
+//      with, which is not a failure any single assertion elsewhere catches.
+//   2. The denylist is not a blanket: every entry is anchored, and none of them
+//      match a navigable path. A `/^\/api/` that had lost its trailing slash, or
+//      an unanchored pattern, would deny `/app/logs` too and take the whole app
+//      offline story with it.
+//   3. `globIgnores` uses only the glob syntax this file can match, so the
+//      matcher below cannot quietly disagree with workbox-build.
 //
 // Matching follows Workbox's own rules so a pass here means a pass in the build
 // and in the worker:
@@ -23,58 +41,22 @@
 //     pattern against the Build_Output-relative path with minimatch semantics.
 //     `globMatch` below reimplements the subset of those semantics the patterns
 //     actually use, and `SUPPORTED_GLOB_SYNTAX` fails the run if a pattern ever
-//     reaches for a feature it does not cover, so the reimplementation cannot
-//     quietly disagree with the build.
-//
-// Three clauses over the generated Marketing_Page set, plus the two non-vacuity
-// guards that keep them from being satisfied trivially:
-//
-// 1. Every Marketing_Page path in the Route_Table — and the trailing-slash form
-//    of it, which the Origin_Server answers with a 301 the worker must not
-//    intercept — is matched by at least one denylist entry (Requirement 5.2).
-//    Adding a page to the Route_Table without the denylist deriving from it
-//    fails here rather than silently shipping a homepage the Service_Worker
-//    hijacks (Requirement 5.8).
-// 2. Every Marketing_Site document is matched by at least one `globIgnores`
-//    pattern, so no Marketing_Page can enter the Precache_Manifest
-//    (Requirement 5.3).
-// 3. The App_Shell document is matched by no `globIgnores` pattern, so it stays
-//    in the Precache_Manifest. Clauses 2 and 3 are one pairing, not two facts:
-//    the fallback is only resolvable because the document it names is precached
-//    while the marketing documents are not.
-//
-// Three further clauses take Requirement 5.8's generality seriously: the real
-// denylist entries are checked against the build's derivation formula rather than
-// against four literals, that formula is then applied to generated hypothetical
-// Route_Table paths to show it denies whatever a fifth entry could hold, and
-// today's patterns are shown not to match a path outside the Route_Table — so
-// "the page is denied" says something about the table having been read.
-//
-// Note on a case this property does not reach: because Workbox matches
-// pathname + search, a request form carrying a query string (`/?utm_source=x`)
-// is a different string from the path itself. The property is stated over the
-// paths in `marketingPaths()`, so that form is out of its scope.
-//
-// Validates: Requirements 5.2, 5.8
+//     reaches for a feature it does not cover.
 
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
   APP_SHELL_DOCUMENT,
   NAVIGATE_FALLBACK,
-  marketingDocumentGlobs,
-  marketingPathPatterns,
   navigateFallbackDenylist,
   precacheIgnores,
   // @ts-expect-error -- untyped ESM JavaScript (vite/ is plain JS, like server/ and shared/)
 } from "../vite/pwa.js";
-import { isMarketingPath, marketingPaths } from "../shared/site.js";
+import { APP_VIEWS, LOGIN_PATH, NOT_FOUND_FILE, ROOT_PATH } from "../shared/site.js";
 
 /** The configuration as the build hands it to Workbox. */
 const DENYLIST: readonly RegExp[] = navigateFallbackDenylist();
-const PATH_PATTERNS: readonly RegExp[] = marketingPathPatterns();
 const IGNORES: readonly string[] = precacheIgnores();
-const MARKETING_DOCUMENTS: readonly string[] = marketingDocumentGlobs();
 
 /**
  * Workbox's matcher, narrowed to what it does with a denylist: the first pattern
@@ -109,8 +91,7 @@ const segmentRe = (segment: string) =>
  * path. A `**` segment spans zero or more path segments, except as the final
  * segment where it requires at least one — which is why `foods/**` does not
  * match a file literally named `foods`, and why `**\/foods\/**` still matches
- * `foods/apple.webp`. Cross-checked against minimatch 10 for the patterns in
- * `precacheIgnores()` and for the App_Shell and marketing document paths.
+ * `foods/apple.webp`.
  */
 function globMatch(path: string, pattern: string): boolean {
   const parts = path.split("/");
@@ -136,237 +117,128 @@ const ignoringPatterns = (outputPath: string): string[] =>
 
 // --- Generators -------------------------------------------------------------
 
-/** Exactly the Marketing_Page paths, in Route_Table order. */
-const arbMarketingPath: fc.Arbitrary<string> = fc.constantFrom(...marketingPaths());
-
 /**
- * The request forms of one Route_Table path that resolve to that same page. The
- * trailing-slash form is included because a Navigation_Request for `/pricing/`
- * inside a controlled client has to reach the Origin_Server's 301; answering it
- * from precache would strand the user on the App_Shell.
+ * Every path a Navigation_Request can carry that the Origin_Server answers with
+ * the App_Shell: the origin root, the Login_Route, the Route_Table's views, and
+ * the deep links under the app prefix that the client router owns. All of them
+ * must reach the fallback, offline included.
  */
-const requestForms = (path: string): string[] =>
-  path === "/" ? [path] : [path, `${path}/`];
-
-/** A Marketing_Page path in any of the request forms that resolve to it. */
-const arbMarketingRequestForm: fc.Arbitrary<string> = arbMarketingPath.chain((path) =>
-  fc.constantFrom(...requestForms(path))
-);
-
-/** Every document the Marketing_Site emits, as a Build_Output-relative path. */
-const arbMarketingDocument: fc.Arbitrary<string> = fc.constantFrom(...MARKETING_DOCUMENTS);
-
-/**
- * The build's own derivation, restated once so it can be applied to a path the
- * Route_Table does not contain: a Route_Table path escaped for literal use, then
- * anchored, with the optional trailing slash every path but the home page gets
- * (`marketingPathPatterns` in `vite/pwa.js`). The clause that checks the real
- * patterns against this formula is what keeps the restatement honest — if the
- * build's derivation changes, that clause fails rather than this one drifting.
- *
- * Named apart from the glob `escapeRe` above: `*` and `?` are wildcards in a
- * glob and literals in a path, so the two escape sets are deliberately not the
- * same.
- */
-const escapeRouteRe = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-const derivedPattern = (path: string): RegExp =>
-  new RegExp(`^${escapeRouteRe(path)}${path === "/" ? "" : "/?"}$`);
-
-/**
- * Paths a fifth Route_Table entry could plausibly hold, including segments made
- * of the characters that are metacharacters in a regular expression — an
- * unescaped `.` or `+` in the derivation would show up here as a pattern that
- * matches more than its own page.
- */
-const arbHypotheticalSegment: fc.Arbitrary<string> = fc.oneof(
+const arbNavigablePath: fc.Arbitrary<string> = fc.oneof(
   {
     weight: 4,
     arbitrary: fc.constantFrom(
-      "blog",
-      "faq",
-      "about",
-      "how-it-works",
-      "for-clinicians",
-      "changelog"
+      ROOT_PATH,
+      LOGIN_PATH,
+      ...(APP_VIEWS as readonly { path: string }[]).map((v) => v.path)
     ),
   },
-  { weight: 2, arbitrary: fc.constantFrom("v1.2", "c++", "a(b)", "$plans", "q?", "*all", "a|b") },
+  {
+    weight: 2,
+    arbitrary: fc.constantFrom(
+      "/app/",
+      "/app/logs?filter=today",
+      "/app/unknown/deep/link",
+      "/login?next=%2Fapp%2Flogs",
+      "/?utm_source=x"
+    ),
+  },
   {
     weight: 1,
     arbitrary: fc
-      .stringMatching(/^[a-z0-9._+-]{1,10}$/)
-      .filter((segment) => segment.length > 0),
+      .array(fc.constantFrom("logs", "insights", "settings", "x", "2026-01-01"), {
+        minLength: 1,
+        maxLength: 3,
+      })
+      .map((segments) => `/app/${segments.join("/")}`),
   }
 );
 
-/** A hypothetical Marketing_Page path: rooted, no trailing slash, no empty segment. */
-const arbHypotheticalPath: fc.Arbitrary<string> = fc
-  .array(arbHypotheticalSegment, { minLength: 1, maxLength: 3 })
-  .map((segments) => `/${segments.join("/")}`);
-
 /**
- * Candidate paths weighted toward the near misses a hand-written denylist gets
- * wrong: the Route_Table's own paths, casing and prefix variants, extra
- * segments, and doubled slashes. Free-form strings keep the space open. The
- * clause asserts only over the members that really are Marketing_Page paths —
- * the rest are there so a generator that stopped producing them would be
- * visible as a coverage failure, not as a silent pass.
+ * The surface the denylist exists for: paths that are not navigations, or where
+ * a substituted HTML body would be the wrong kind of answer.
  */
-const arbCandidatePath: fc.Arbitrary<string> = fc.oneof(
-  { weight: 6, arbitrary: arbMarketingRequestForm },
+const arbDeniedPath: fc.Arbitrary<string> = fc.oneof(
   {
     weight: 3,
     arbitrary: fc.constantFrom(
-      "/pricingx",
-      "/PRICING",
-      "/pricing/plans",
-      "//pricing",
-      "/privacy-policy",
-      "/termsofservice",
-      "/app",
-      "/app/logs",
-      "/login",
-      "/api/foods",
+      "/api/health",
+      "/api/me",
+      "/api/auth/request",
       "/foods/apple.webp",
-      "/robots.txt",
-      "/sitemap.xml",
-      "",
-      "//"
+      "/foods/nested/pear.webp",
+      "/robots.txt"
     ),
   },
   {
     weight: 1,
     arbitrary: fc
-      .array(fc.constantFrom("pricing", "privacy", "terms", "app", "", "blog"), {
-        maxLength: 3,
-      })
-      .map((segments) => `/${segments.join("/")}`),
-  },
-  { weight: 1, arbitrary: fc.string({ maxLength: 16 }) }
+      .array(fc.stringMatching(/^[a-z0-9-]{1,8}$/), { minLength: 1, maxLength: 3 })
+      .map((segments) => `/api/${segments.join("/")}`),
+  }
 );
 
-/**
- * True for the request forms clause 1 covers: a Marketing_Page path, bare or
- * with the trailing slash the Origin_Server redirects. `//` is deliberately not
- * one of them — its pathname is not the home page's, and the Origin_Server does
- * not serve the home document for it.
- */
-const resolvesToMarketingPage = (path: string): boolean =>
-  isMarketingPath(path) ||
-  marketingPaths().some((page: string) => page !== "/" && path === `${page}/`);
+// --- The property -----------------------------------------------------------
 
-// --- Property 4 -------------------------------------------------------------
+describe("the Service_Worker path sets keep the app answerable offline", () => {
+  it("leaves the App_Shell precached, so the Navigation_Fallback resolves", () => {
+    // An ignore pattern broad enough to catch `app/index.html` would drop the
+    // fallback document itself, and Workbox would have nothing to answer an
+    // offline navigation with.
+    expect(ignoringPatterns(APP_SHELL_DOCUMENT)).toEqual([]);
+    expect(NAVIGATE_FALLBACK).toBe(`/${APP_SHELL_DOCUMENT}`);
+  });
 
-describe("Property 4: Every marketing path is excluded from navigation fallback", () => {
-  it("matches at least one denylist entry for every Marketing_Page request form", () => {
+  it("leaves the Navigation_Fallback document reachable, so the denylist is not a blanket", () => {
+    expect(denyingPatterns(NAVIGATE_FALLBACK)).toEqual([]);
+  });
+
+  it("denies no path the Origin_Server answers with the App_Shell", () => {
+    // The clause that replaces the old marketing one, and the reason `/` works
+    // offline now: a Navigation_Request for the app must reach the fallback.
     fc.assert(
-      fc.property(arbMarketingRequestForm, (path) => {
-        const matched = denyingPatterns(path);
+      fc.property(arbNavigablePath, (path) => {
         expect(
-          matched.length,
-          `no navigateFallbackDenylist entry matches the Marketing_Page path ${JSON.stringify(
-            path
-          )}; the Service_Worker would answer it with the App_Shell`
-        ).toBeGreaterThan(0);
+          denyingPatterns(path),
+          `${JSON.stringify(path)} is answered with the App_Shell but the worker denies the fallback for it`
+        ).toEqual([]);
       }),
-      { numRuns: 200 }
+      { numRuns: 300 }
     );
   });
 
-  it("denies every generated path that resolves to a Marketing_Page", () => {
+  it("denies every path that is not a navigation the App_Shell can answer", () => {
     fc.assert(
-      fc.property(arbCandidatePath, (path) => {
-        if (!resolvesToMarketingPage(path)) return;
+      fc.property(arbDeniedPath, (path) => {
         expect(
           denyingPatterns(path).length,
-          `${JSON.stringify(path)} resolves to a Marketing_Page but is not denied`
+          `${JSON.stringify(path)} would be answered with the App_Shell`
         ).toBeGreaterThan(0);
       }),
       { numRuns: 300 }
     );
   });
 
-  it("keeps every Marketing_Site document out of the Precache_Manifest", () => {
-    // The other half of the pairing: denying the fallback only helps if the
-    // worker has no precached copy of the page to answer with either
-    // (Requirement 5.3).
-    fc.assert(
-      fc.property(arbMarketingDocument, (document) => {
-        expect(
-          ignoringPatterns(document).length,
-          `no globIgnores pattern matches the Marketing_Site document ${JSON.stringify(
-            document
-          )}; it would be precached and served stale from cache`
-        ).toBeGreaterThan(0);
-      }),
-      { numRuns: 100 }
-    );
-  });
-
-  it("leaves the App_Shell precached, so the Navigation_Fallback resolves", () => {
-    // Non-vacuity for the clause above: an ignore pattern broad enough to catch
-    // `app/index.html` would drop the fallback document itself, and Workbox
-    // would have nothing to answer an offline App_Route with.
-    expect(ignoringPatterns(APP_SHELL_DOCUMENT)).toEqual([]);
-    expect(NAVIGATE_FALLBACK).toBe(`/${APP_SHELL_DOCUMENT}`);
-  });
-
-  it("leaves the Navigation_Fallback document reachable, so the denylist is not a blanket", () => {
-    // Not a second property: this is what keeps the denylist clauses from being
-    // satisfied by a pattern that denies everything.
-    expect(denyingPatterns(NAVIGATE_FALLBACK)).toEqual([]);
-    expect(denyingPatterns("/app")).toEqual([]);
-  });
-
-  it("derives one anchored denylist pattern per Route_Table entry", () => {
-    // The derivation, not today's four values: `marketingPathPatterns()` is a
-    // map over `marketingPaths()`, and every pattern it produces is in the
-    // denylist. Together with the clause below this is what makes Requirement
-    // 5.8 hold for a fifth page as much as for the four that exist — a page can
-    // only fail to be denied if this map stops being driven by the Route_Table,
-    // and then clause 1 fails.
-    expect(PATH_PATTERNS).toHaveLength(marketingPaths().length);
-    for (const [i, path] of marketingPaths().entries()) {
-      expect(PATH_PATTERNS[i].source).toBe(derivedPattern(path).source);
-      expect(DENYLIST.some((entry) => entry.source === PATH_PATTERNS[i].source)).toBe(true);
+  it("anchors every denylist entry at the start of the path", () => {
+    // An unanchored `/api\//` would match `/app/api/x`, and worse, a pattern like
+    // `/robots\.txt/` without the `^` would match `/app/robots.txt`.
+    for (const pattern of DENYLIST) {
+      expect(pattern.source.startsWith("^\\/"), `${pattern} is not anchored`).toBe(true);
+      expect(pattern.flags, `${pattern} carries flags`).toBe("");
     }
   });
 
-  it("denies any hypothetical Route_Table path the same derivation would cover", () => {
-    // Requirement 5.8 asks for the derivation to hold generally. A hypothetical
-    // entry cannot be pushed into `marketingPaths()` from here — the Route_Table
-    // is static and the build reads the same module — so the argument runs the
-    // other way: apply the build's own formula to a generated path and check the
-    // pattern it yields denies that path, both request forms, and nothing
-    // adjacent to it. With the clause above, that covers every path a future
-    // entry could hold.
-    fc.assert(
-      fc.property(arbHypotheticalPath, (path) => {
-        const pattern = derivedPattern(path);
-        for (const form of requestForms(path)) expect(pattern.test(form)).toBe(true);
-        for (const near of [`${path}x`, `${path}/deeper`, `/x${path}`, `${path}//`]) {
-          expect(pattern.test(near), `${pattern} over-matches ${near}`).toBe(false);
-        }
-      }),
-      { numRuns: 200 }
-    );
+  it("keeps the not-found document out of the Precache_Manifest", () => {
+    // Its status is the whole response. Precached, the worker would answer a typo
+    // with the 404 body and status 200 — the soft 404 Requirement 2.5 removes.
+    expect(ignoringPatterns(NOT_FOUND_FILE as string).length).toBeGreaterThan(0);
   });
 
-  it("does not already match a path outside the Route_Table", () => {
-    // Non-vacuity for the two clauses above: if a marketing pattern matched an
-    // unrelated path, "the page is denied" would carry no information about the
-    // Route_Table having been read at all.
-    fc.assert(
-      fc.property(arbHypotheticalPath, (path) => {
-        if (resolvesToMarketingPage(path)) return;
-        expect(
-          PATH_PATTERNS.filter((pattern) => pattern.test(path)),
-          `${JSON.stringify(path)} is not a Marketing_Page but a marketing pattern matches it`
-        ).toEqual([]);
-      }),
-      { numRuns: 200 }
-    );
+  it("keeps the food pack out of the Precache_Manifest (R5.6)", () => {
+    for (const file of ["foods/apple.webp", "foods/nested/pear.webp"]) {
+      expect(ignoringPatterns(file).length, `${file} would be precached`).toBeGreaterThan(0);
+    }
+    // Non-vacuity: the pattern is about the directory, not about `.webp`.
+    expect(ignoringPatterns("app-icon-384.webp")).toEqual([]);
   });
 
   it("uses only the glob syntax this test can match, so globIgnores cannot drift", () => {

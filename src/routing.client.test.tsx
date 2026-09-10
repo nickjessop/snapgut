@@ -14,13 +14,21 @@
 //   - a backward navigation while an Ephemeral_Flow is open runs the flow's
 //     cancel path and stays inside the App_Shell (Req 4.6)
 //   - a boot at an App_Route activates zero Ephemeral_Flows (Req 4.8)
+//   - a boot at the origin root renders the default view and canonicalises the
+//     URL to `/app` in place, adding no history entry
 //
 // Validates: Requirements 3.1, 3.2, 3.3, 4.2, 4.6, 4.8
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, cleanup, waitFor, act, fireEvent } from "@testing-library/react";
 import { ONBOARDED_KEY } from "./Intro";
-import { APP_VIEWS, DEFAULT_APP_PATH, LOGIN_PATH, isAppPath } from "../shared/site.js";
+import {
+  APP_VIEWS,
+  DEFAULT_APP_PATH,
+  LOGIN_PATH,
+  ROOT_PATH,
+  isAppPath,
+} from "../shared/site.js";
 
 const h = vi.hoisted(() => ({
   /** The held Session_Token, or `null` for a signed-out device. */
@@ -217,6 +225,83 @@ describe("boot while a Session_Token is held (Req 3.1, 3.3)", () => {
 
     // `/app/insights` is the insights tab, not the default camera view.
     expect(document.querySelector(".tabbar button.active")?.textContent).toContain("Insights");
+  });
+});
+
+describe("boot at the origin root", () => {
+  // The marketing site is gone: `/` is served the App_Shell by the Origin_Server,
+  // with no redirect (a 301 could not be answered offline by the Service_Worker).
+  // The client's half of that story is the choice this block pins — `/` resolves
+  // to the default Addressable_View, and the URL is corrected to the Route_Table's
+  // own spelling with `replaceState`.
+  //
+  // Why canonicalise rather than leave `/` in the bar: every other view has one
+  // address, `formatRoute` produces one spelling per view, and the state → URL
+  // effect compares against that spelling. Leaving `/` in place would mean either
+  // two addresses for the camera view or a special case in that comparison, and
+  // the special case would have to be re-derived at every future call site.
+  // Replacing is also what keeps `/` out of the history: a push would make the
+  // back gesture bounce `/app` → `/` → `/app` instead of leaving the app.
+
+  it("renders the default Addressable_View", async () => {
+    bootAt(ROOT_PATH);
+    await shell();
+
+    expect(inTabShell()).toBe(true);
+    // The camera view is the default: neither tab button is marked active.
+    expect(document.querySelector(".tabbar button.active")).toBeNull();
+  });
+
+  it("canonicalises the URL to the default App_Route in place, adding no entry", async () => {
+    bootAt(ROOT_PATH);
+    const lengthBefore = window.history.length;
+    await shell();
+
+    await waitFor(() => expect(url()).toBe(DEFAULT_APP_PATH));
+    // Replaced, not pushed: pressing Back from `/` must leave the app rather than
+    // land on the entry the correction came from.
+    expect(replaced).toEqual([DEFAULT_APP_PATH]);
+    expect(pushed).toEqual([]);
+    expect(window.history.length).toBe(lengthBefore);
+  });
+
+  it("settles: the correction runs once and does not re-trigger itself", async () => {
+    bootAt(ROOT_PATH);
+    await shell();
+    await waitFor(() => expect(url()).toBe(DEFAULT_APP_PATH));
+
+    // A redirect loop would show up as a growing write log. Give the effects room
+    // to run again and check nothing else was written.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(replaced).toEqual([DEFAULT_APP_PATH]);
+    expect(pushed).toEqual([]);
+    expect(url()).toBe(DEFAULT_APP_PATH);
+  });
+
+  it("navigates between tabs from the root, one entry each", async () => {
+    bootAt(ROOT_PATH);
+    await shell();
+    await waitFor(() => expect(url()).toBe(DEFAULT_APP_PATH));
+
+    await click(screen.getByText("Logs"));
+    expect(url()).toBe("/app/logs");
+    expect(pushed).toEqual(["/app/logs"]);
+
+    await click(screen.getByText("Insights"));
+    expect(url()).toBe("/app/insights");
+    expect(pushed).toEqual(["/app/logs", "/app/insights"]);
+  });
+
+  it("does the same with no Session_Token", async () => {
+    h.token = null;
+    bootAt(ROOT_PATH);
+    await shell();
+
+    await waitFor(() => expect(url()).toBe(DEFAULT_APP_PATH));
+    expect(pushed).toEqual([]);
+    expect(screen.queryByText("Sign in to SnapGut")).toBeNull();
   });
 });
 

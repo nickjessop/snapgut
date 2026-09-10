@@ -8,9 +8,9 @@ follows the code and says so.
 
 ## Shape
 
-One Node process serves everything: the marketing pages, the app shell, the static assets, the
-food illustrations, and the JSON API. There is no separate frontend server, no queue, no worker,
-and no external database.
+One Node process serves everything: the app shell, the static assets, the food illustrations, and
+the JSON API. There is no separate frontend server, no queue, no worker, and no external
+database — and no marketing site: `/` is the app.
 
 ```text
 Browser (React 18 PWA, IndexedDB)
@@ -55,7 +55,8 @@ binding a port, which is what makes route-level tests possible in-process.
    body-size, authentication, and two-tier rate-limit chain.
 7. **`/foods/:file`** — validated food-pack reads with an immutable cache header.
 8. **Site routes** via `registerSiteRoutes(app)` from `server/routes.js`: the trailing-slash
-   redirect, the marketing pages, the app shell, static files from `dist/`, and a terminal 404.
+   redirect, the app shell for `/`, `/login`, `/app` and `/app/*`, static files from `dist/`, and
+   a terminal 404.
 
 Registration order is load-bearing. Hono matches in registration order, so the site routes must
 be mounted **last** — the `/*` static handler and the `*` catch-all would otherwise swallow
@@ -139,10 +140,12 @@ design's other structural rule did survive: `main.js` is the only module that ca
 | `server/foodPack.js` | Validated pack reads and the boot-time survey |
 | `server/foodDict.js`, `server/food-dict.json` | Ingredient-to-slug canonicalisation |
 | `server/clientIp.js` | The single place a client address is derived for rate limiting |
-| `shared/site.js`, `shared/site.d.ts` | The route table: marketing pages, login path, app prefix, app views, generated filenames |
+| `shared/site.js`, `shared/site.d.ts` | The route table: root path, login path, app prefix, app views, the 404 filename |
 | `src/` | The React PWA in TypeScript, plus every test |
-| `vite/` | Build-time plugins: marketing page emitters, partials, PWA path sets, dev routes |
+| `vite/` | Build-time plugins: `pwa.js` (service-worker path sets), `devRoutes.js` (dev-server document mapping) |
 | `app/index.html` | The single app-shell document |
+| `404.html` | The standalone not-found document, a build input in its own right |
+| `public/` | Copied verbatim into `dist/`: icons, favicons, `robots.txt` |
 | `scripts/` | Generators (icons, OG images, food dictionary) and `fetch-food-pack.mjs` |
 | `docs/` | This documentation |
 | `dist/` | Build output. The server serves documents and assets from here |
@@ -221,17 +224,28 @@ and a validation branch in `server/config.js`. Do not add parsing.
 
 ## The route table
 
-`shared/site.js` is the single source of truth for every public path: `MARKETING_PAGES` (path,
-output file, title, description), `LOGIN_PATH`, `APP_PREFIX`, `APP_VIEWS`, `NOT_FOUND_FILE`, and
-`GENERATED_FILES`. Five consumers derive from it rather than repeating literals: the client
-router, `server/routes.js`, `server/headers.js`, `vite/marketing.js` (build inputs and the
-sitemap), and `vite/pwa.js` (service-worker path sets). Adding a marketing page is one entry
-there.
+`shared/site.js` is the single source of truth for every public path: `ROOT_PATH`, `LOGIN_PATH`,
+`APP_PREFIX`, `APP_VIEWS`, `DEFAULT_APP_PATH`, `NOT_FOUND_FILE`, and `isAppPath`. Four consumers
+derive from it rather than repeating literals: the client router, `server/routes.js`,
+`server/headers.js`, and `vite/devRoutes.js` (the dev-server document mapping).
 
-`resolveRoute(pathname)` in `server/routes.js` states the outcome for any path —
-`redirect`, `marketing`, `app-shell`, `static`, `not-found` — in the same order the handlers are
-registered, so a path cannot resolve one way in the resolver and another way in the running
-server. Tests call `resolveRoute` directly.
+`resolveRoute(pathname)` in `server/routes.js` states the outcome for any path — `redirect`,
+`app-shell`, `static`, `not-found` — in the same order the handlers are registered, so a path
+cannot resolve one way in the resolver and another way in the running server. Tests call
+`resolveRoute` directly.
+
+**The origin root is the app.** `/`, `/login`, `/app` and `/app/*` are all answered with the one
+app-shell document. `/` is deliberately *not* a redirect to `/app`: a 301 cannot be served from
+the service-worker cache, so a redirect would make a bare-host launch fail offline. It is also
+registered ahead of the static handler, so a `dist/index.html` left behind by an older build
+cannot shadow it. The client side of the decision is in `src/routes.ts`, where `parseRoute("/")`
+resolves to the default addressable view, and in `src/useRouter.ts`, whose URL → state effect
+rewrites the address to `/app` with `history.replaceState` — replacing rather than pushing, so
+the back gesture leaves the app instead of bouncing between the two spellings.
+
+`/login/` is the only trailing-slash redirect left. `/nonsense/` takes a single 404 rather than a
+301 onto another 404, and an app route keeps its 200 so the shell answers exactly the paths
+`isAppPath` recognises.
 
 `server/headers.js` classifies a response by path **and actual status**, then applies that class's
 policy:
@@ -240,20 +254,22 @@ policy:
 | --- | --- | --- |
 | `api` | `no-store` | Always `noindex` |
 | `foods` | left as the handler set it | The handler sets `immutable` for a year |
-| `marketing` | `public, max-age=0, s-maxage=3600, must-revalidate` | Indexable once `PUBLIC_ORIGIN` is set |
-| `app-shell` | `no-cache` | Always `noindex` |
+| `app-shell` | `no-cache` | `/`, `/login`, `/app`, `/app/*` |
 | `hashed-asset` | `public, max-age=31536000, immutable` | `/assets/*` |
 | `revalidate-asset` | `no-cache` | `/sw.js`, the manifest — so a deploy is picked up |
-| `crawler-file` | `public, max-age=3600` | `robots.txt`, `sitemap.xml` |
-| `other-static` | `public, max-age=3600` | Icons, the OG image |
+| `crawler-file` | `public, max-age=3600` | `robots.txt` |
+| `other-static` | `public, max-age=3600` | Icons, favicons |
 | `redirect` | left alone | Classified by status, not path |
-| `not-found` | `no-store` | Always `noindex` |
+| `not-found` | `no-store` | The 404 document |
 
 Classifying redirects and 404s by status rather than by a second path-matching pass means the
-headers describe what the server actually answered. `X-Robots-Tag: noindex` is applied to
-everything while `PUBLIC_ORIGIN` is unset — an operator who has not declared a public URL should
-not be indexed. `server/csp.js` returns one policy for every class, with no `unsafe-inline` or
-`unsafe-eval` in `script-src`.
+headers describe what the server actually answered. `X-Robots-Tag: noindex` goes on **every**
+response, whatever the class and whatever `PUBLIC_ORIGIN` is: with the marketing site gone there
+is no indexable surface, and a self-hosted health diary should not be in a search index.
+`robots.txt` says the same thing (`Disallow: /`) and is a static file in `public/` rather than a
+build artifact — there is nothing left to derive. No `sitemap.xml` is emitted.
+`server/csp.js` returns one policy for every class, with no `unsafe-inline` or `unsafe-eval` in
+`script-src`.
 
 ## Sync, briefly
 
@@ -286,10 +302,13 @@ Offline-first, in `src/`:
   `src/fodmap.ts` compute patterns, food ranking and statistics in the browser. `/api/insights`
   receives an already-aggregated summary and only narrates it.
 - **The service worker** (`vite-plugin-pwa`, configured through `vite/pwa.js`) precaches the app
-  shell and hashed assets, and deliberately excludes `/foods/**`, `/img/**` and the marketing
-  documents — thousands of illustrations would bloat the install, and a precached marketing page
-  would answer `/` with a stale copy. `navigateFallbackDenylist` keeps `/api/*`, the marketing
-  paths, `/foods/*`, `robots.txt` and `sitemap.xml` reaching the server.
+  shell and hashed assets and answers every navigation from the shell through
+  `navigateFallback` — including `/`, which is what makes a launch from the bare host work
+  offline. `globIgnores` excludes `/foods/**` (thousands of illustrations would bloat the install;
+  they are runtime-cached on demand) and `404.html` (its status *is* the response, and a precached
+  copy would be served with 200). `navigateFallbackDenylist` keeps `/api/*`, `/foods/*` and
+  `robots.txt` reaching the server — those are not navigations, and an HTML body would be the
+  wrong kind of answer.
 - **A secure context** is required by the browser for live camera capture, PWA install and
   offline caching. On plain HTTP the app falls back to the file picker. See
   [deployment.md](deployment.md).
@@ -324,10 +343,9 @@ Four kinds of test, by intent:
 | Component | `*.test.tsx` with Testing Library | The React surface, including accessibility expectations |
 
 Some suites are guard rails rather than feature tests: `syncRoutes.privacy.test.ts` asserts what
-may not appear in a log line, `marketing.claims.test.ts` holds the marketing copy to what the app
-actually does, and `envExample.test.ts` keeps `.env.example` aligned with the config parser.
-Expect to update those when you change behaviour, and read the failure message before assuming
-the test is wrong.
+may not appear in a log line, and `envExample.test.ts` keeps `.env.example` aligned with the
+config parser. Expect to update those when you change behaviour, and read the failure message
+before assuming the test is wrong.
 
 ## Where to change things
 
@@ -337,9 +355,10 @@ the test is wrong.
 | Add an AI provider | `server/ai/<provider>.js`, `server/ai/index.js`, `server/config.js`, `src/ai.adapters.test.ts`, [ai-providers.md](ai-providers.md) |
 | Change a prompt or the parse fallback | `server/app.js` (`recognizePrompt`, `BASE_INSIGHT_PROMPT`, `FOCUS_PROMPTS`, `sanitizeMeal`) |
 | Add an API route | `server/app.js`, before `registerSiteRoutes`; a route-level test in `src/` |
-| Add a marketing page | `shared/site.js` (one `MARKETING_PAGES` entry), `vite/marketing.js` if it needs new partials |
-| Change caching or robots behaviour | `server/headers.js`, `src/site.table.test.ts` |
-| Change the CSP | `server/csp.js`, `src/marketingCsp.test.ts` |
+| Add an addressable view | `shared/site.js` (one `APP_VIEWS` entry), `src/App.tsx`, `src/routes.test.ts` |
+| Change what a path resolves to | `server/routes.js`, `vite/devRoutes.js`, `src/serverRouteResolution.test.ts`, `src/serverRoutes.property.test.ts` |
+| Change caching or robots behaviour | `server/headers.js`, `public/robots.txt`, `src/serverRoutes.test.ts` |
+| Change the CSP | `server/csp.js`, `src/csp.test.ts` |
 | Add a database table or column | `server/sqlite/schema.js` (a new migration entry — never edit version 1), both backends, both equivalence tests, [datastore.md](datastore.md) |
 | Change a store method | `server/store.js` or `server/eventStore.js` **and** the matching `server/sqlite/*.js`, plus the equivalence test's generator |
 | Change the sync protocol | `server/sync.js`, `src/cloudSync.ts`, [cloud-sync.md](cloud-sync.md) |

@@ -10,10 +10,24 @@ no diary data off that hardware.
 The default configuration uses a local AI model server for meal recognition, stores everything
 in a single SQLite file, and needs no cloud account, no API key, and no payment processor.
 
-| | | | |
-| :---: | :---: | :---: | :---: |
-| ![The capture screen: a live camera viewfinder filling the phone, pointed at a plate of salmon on wilted spinach at a restaurant table, with a "Point at your plate" prompt above a shutter button](docs/screenshots/01-camera.jpg) | ![The timeline screen: meals and symptoms listed newest first under a September heading, each with a time, a title and its ingredients, one entry showing a photograph of a salad bowl](docs/screenshots/02-timeline.png) | ![The insights screen: four cards reading 85 meals logged, 12 symptom check-ins, 24 days tracked and bloating most common, above a written insight headed "Fructans keep showing up before bloating"](docs/screenshots/03-insights.png) | ![The foods screen: foods grouped under Avoid, Reduce and Neutral headings, each with an illustration, how often it was eaten, and how often symptoms followed](docs/screenshots/04-foods.png) |
-| Snap the meal | Log how you feel | Read the patterns | See which foods track |
+<!-- Explicit width on each image, rather than bare markdown. In a markdown table
+     GitHub sizes an image to its column, and the columns are sized by the caption
+     text below them — so four identically-sized screenshots rendered at four
+     different heights. A fixed width keeps them uniform. -->
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/01-camera.jpg" width="180" alt="The capture screen: a live camera viewfinder filling the phone, pointed at a plate of salmon on wilted spinach at a restaurant table, with a &quot;Point at your plate&quot; prompt above a shutter button"></td>
+    <td align="center"><img src="docs/screenshots/02-timeline.png" width="180" alt="The timeline screen: meals and symptoms listed newest first under a September heading, each with a time, a title and its ingredients, one entry showing a photograph of a salad bowl"></td>
+    <td align="center"><img src="docs/screenshots/03-insights.png" width="180" alt="The insights screen: four cards reading 85 meals logged, 12 symptom check-ins, 24 days tracked and bloating most common, above a written insight headed &quot;Fructans keep showing up before bloating&quot;"></td>
+    <td align="center"><img src="docs/screenshots/04-foods.png" width="180" alt="The foods screen: foods grouped under Avoid, Reduce and Neutral headings, each with an illustration, how often it was eaten, and how often symptoms followed"></td>
+  </tr>
+  <tr>
+    <td align="center">Snap the meal</td>
+    <td align="center">Log how you feel</td>
+    <td align="center">Read the patterns</td>
+    <td align="center">See which foods track</td>
+  </tr>
+</table>
 
 <sub>Sample data, and the `mock` AI provider — see [docs/screenshots/README.md](docs/screenshots/README.md).</sub>
 
@@ -93,13 +107,17 @@ reporting process.
 
 ## What the build serves
 
-The build produces static marketing pages alongside the app, and the origin server serves them
-at `/`, `/privacy` and `/terms`. So the homepage of your instance is a product landing page,
-not the diary. The app itself lives at [`/login`](http://localhost:8080/login) and the routes
-under `/app`.
+Your instance serves the app and nothing else. There is no landing page: the root
+[`/`](http://localhost:8080/) *is* the diary, and so are [`/login`](http://localhost:8080/login)
+and every route under `/app`. All four are answered with the same single-page document, so `/`
+works offline once the service worker has installed. Anything else — a typo, a stale bookmark —
+gets a plain `404` page, never the app with a 200.
 
-Those pages are plain HTML in [`marketing/`](marketing) — replace or delete them if you would
-rather your instance served something else at `/`.
+Earlier versions shipped a product landing page at `/` plus `/privacy` and `/terms`. Those pages
+have moved to a separate website repository; the self-hoster-facing substance survives as
+[docs/privacy.md](docs/privacy.md) and [docs/terms.md](docs/terms.md). `robots.txt` is
+`Disallow: /` and every response carries `X-Robots-Tag: noindex`, unconditionally — a
+self-hosted health diary has nothing to offer a crawler.
 
 ## Reaching the app from your phone (tunnel)
 
@@ -344,7 +362,7 @@ Other commands:
 ```bash
 npm test                      # vitest suite
 npm run typecheck             # tsc --noEmit
-npm run build                 # production bundle plus the marketing pages
+npm run build                 # production bundle: the app shell and the 404 page
 ```
 
 To run the API on its own with the env file loaded:
@@ -363,7 +381,8 @@ node --env-file=.env server/main.js
 | `src/` | React PWA and the test suite |
 | `shared/` | Route table shared by client and server |
 | `vite/` | Build plugins |
-| `marketing/` | Static marketing pages |
+| `app/` | The app shell document — the one HTML page the server hands out |
+| `public/` | Files copied verbatim into the build: icons, favicons, `robots.txt` |
 | `brand/` | Brand assets |
 | `docs/` | Documentation |
 

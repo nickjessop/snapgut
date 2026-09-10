@@ -7,7 +7,38 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- **BREAKING: `/` now serves the app.** SnapGut is self-hosted software, so an instance no longer
+  ships a product landing page. The origin root, `/login`, `/app` and `/app/*` are all answered
+  with the one app-shell document, and `/` is served directly rather than redirected to `/app` —
+  a redirect cannot come from the service-worker cache, so this is what makes a launch from the
+  bare host work offline. The client router treats `/` as an alias of the default view and
+  rewrites the address to `/app` in place with `history.replaceState`, so no history entry is
+  added and pressing Back from `/` leaves the app.
+- `robots.txt` is now unconditionally `User-agent: *` / `Disallow: /`, and `X-Robots-Tag: noindex`
+  is sent on every response whatever `PUBLIC_ORIGIN` is set to. There is no indexable surface
+  left, and a self-hosted health diary should not be in a search index.
+- `PUBLIC_ORIGIN` is now declarative only. It used to switch on the sitemap, permissive
+  `robots.txt` rules, and canonical/`og:url` tags; none of those exist any more. The variable is
+  still read and validated, so no `.env` change is needed.
+
+### Removed
+
+- **BREAKING: `/privacy` and `/terms` now return 404.** Anyone who bookmarked either page will
+  get the not-found document. Their substance — what stays on the device, what the server's
+  SQLite file holds, what leaves the machine for the AI provider, the export formats, the three
+  deletion paths, the not-a-medical-device framing, and the operator's responsibilities — is
+  preserved as [`docs/privacy.md`](docs/privacy.md) and [`docs/terms.md`](docs/terms.md), with the
+  account-record description corrected to match the single-local-credential auth model.
+- **BREAKING: `/sitemap.xml` now returns 404.** No sitemap is built; there is nothing to
+  enumerate.
+- The `marketing/` sources, the marketing build plugins (`vite/marketing.js`, `vite/partials.js`),
+  and the now-unreferenced marketing illustrations and Open Graph card from `public/`. The
+  marketing pages move to a separate website repository.
+- The not-found document is now a self-contained `404.html` at the repository root with inline
+  styles, instead of a marketing-styled page built from shared partials. It is still served with
+  status 404 and is still never the app shell.
 
 ## [0.1.0] - unreleased
 

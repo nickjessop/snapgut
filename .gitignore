@@ -36,3 +36,12 @@ food-pack/
 .kiro/specs/cloud-sync/
 .kiro/specs/google-sheets-integration/
 .kiro/specs/native-app-store-launch/
+
+# The old marketing site. SnapGut is self-hosted software, so `/` serves the app
+# and there is no landing page in this repository any more. These sources are
+# kept on disk only to seed a separate `snapgut-website` repo — nothing in the
+# build, the server, or the tests reads them. `marketing/assets/` holds the
+# illustrations and the Open Graph card that moved out of `public/` with them.
+# The substance of the privacy and terms pages lives on as docs/privacy.md and
+# docs/terms.md.
+marketing/

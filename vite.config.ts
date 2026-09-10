@@ -21,28 +21,17 @@ const buildStamp = new Date()
   .slice(0, 13);
 const APP_BUILD = `${pkgVersion}+${buildStamp}`;
 // @ts-expect-error -- untyped ESM JavaScript (vite/ is plain JS, like server/ and shared/)
-import { marketingPartials } from "./vite/partials.js";
-// @ts-expect-error -- untyped ESM JavaScript (vite/ is plain JS, like server/ and shared/)
-import { marketingBuild, marketingInputs } from "./vite/marketing.js";
-// @ts-expect-error -- untyped ESM JavaScript (vite/ is plain JS, like server/ and shared/)
-import { marketingDevRoutes } from "./vite/devRoutes.js";
+import { appDevRoutes } from "./vite/devRoutes.js";
 // @ts-expect-error -- untyped ESM JavaScript (vite/ is plain JS, like server/ and shared/)
 import { NAVIGATE_FALLBACK, navigateFallbackDenylist, precacheIgnores } from "./vite/pwa.js";
 
 export default defineConfig({
   plugins: [
     react(),
-    // Dev only: resolves /login, /app/*, and each Marketing_Page path to its
-    // source document, so a path lands on the same document class in dev as the
-    // Origin_Server serves in production (Requirement 7.5).
-    marketingDevRoutes(),
-    // D2: expands the marketing pages' <!--#include …--> markers and substitutes
-    // their title, description, and canonical URL from the Route_Table. A no-op
-    // for the App_Shell.
-    marketingPartials(),
-    // Flattens dist/marketing/*.html to the Route_Table's `file` paths and fails
-    // the build on an asset a page references but the build did not emit.
-    marketingBuild(),
+    // Dev only: resolves `/`, `/login`, and `/app/*` to the App_Shell source, so
+    // a path lands on the same document class in dev as the Origin_Server serves
+    // in production (Requirement 7.5).
+    appDevRoutes(),
     VitePWA({
       // "prompt" rather than "autoUpdate", and *not* to show a prompt.
       //
@@ -59,11 +48,12 @@ export default defineConfig({
       // for a moment when nothing unsaved is open.
       registerType: "prompt",
       // The plugin's own injection is document-blind: it would add
-      // <script src="/registerSW.js"> to every HTML input, so a Marketing_Page
-      // would register the Service_Worker and pull in a script from the app's
-      // output (Requirements 7.7, 11.3). Registration lives in src/swUpdate.ts,
-      // called from src/main.tsx — the App_Shell is the only document that loads
-      // the app bundle, so it is the only document that starts the worker.
+      // <script src="/registerSW.js"> to every HTML input, so the standalone
+      // 404 document would register the Service_Worker and pull in a script from
+      // the app's output (Requirements 7.7, 11.3). Registration lives in
+      // src/swUpdate.ts, called from src/main.tsx — the App_Shell is the only
+      // document that loads the app bundle, so it is the only one that starts
+      // the worker.
       injectRegister: null,
       includeAssets: [
         "favicon.svg",
@@ -90,11 +80,12 @@ export default defineConfig({
         background_color: "#2d5d4d",
         display: "standalone",
         orientation: "portrait",
-        // A launch from the home screen opens the app, not the landing page
-        // (Requirement 6.1). Scope stays "/" rather than "/app" so the
-        // Login_Route is inside the installed app — scoping to "/app" would send
-        // a signed-out install's sign-in screen to a browser tab (Requirement
-        // 6.2).
+        // Left at "/app" rather than moved to "/": both open the app now, and
+        // "/app" is the canonical spelling the client router settles on, so an
+        // install launches straight at it with no in-place URL correction
+        // (Requirement 6.1). Scope stays "/" so the Login_Route and the origin
+        // root are inside the installed app — scoping to "/app" would send a
+        // signed-out install's sign-in screen to a browser tab (Requirement 6.2).
         start_url: "/app",
         scope: "/",
         icons: [
@@ -113,17 +104,19 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Both sets come from the Route_Table via vite/pwa.js: the food pack and
-        // every Marketing_Site document stay out of the Precache_Manifest, and a
-        // Navigation_Request for a Marketing_Page or an API path is left to the
-        // Origin_Server (Requirements 5.2, 5.3, 5.6).
+        // Both sets come from vite/pwa.js: the food pack and the 404 document
+        // stay out of the Precache_Manifest, and a Navigation_Request for an API
+        // path or an asset is left to the Origin_Server (Requirements 5.2, 5.3,
+        // 5.6).
         globIgnores: precacheIgnores(),
         // The App_Shell answers a navigation the precache has no document for,
-        // which is what makes an App_Route work offline (Requirements 5.1, 5.5).
+        // which is what makes `/` and every App_Route work offline
+        // (Requirements 5.1, 5.5).
         navigateFallback: NAVIGATE_FALLBACK,
         navigateFallbackDenylist: navigateFallbackDenylist(),
-        // A worker built before the split precached the document for "/"; this
-        // drops that entry when the new worker activates (Requirement 5.7).
+        // Drops entries a previously installed worker precached and this one no
+        // longer names — the flattened marketing documents above all
+        // (Requirement 5.7).
         cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
@@ -158,12 +151,12 @@ export default defineConfig({
   build: {
     outDir: "dist",
     rollupOptions: {
-      // One input per document: the App_Shell at app/index.html (so the
-      // marketing site can own the project root — Vite still resolves
-      // /src/main.tsx from the root, so the entry itself is unaffected), plus
-      // one Marketing_Page per Route_Table entry and the not-found document.
-      // Derived rather than listed, so adding a page is one Route_Table entry.
-      input: marketingInputs(),
+      // The two documents the build emits, listed rather than derived: the
+      // App_Shell, which the Origin_Server answers `/`, `/login`, `/app`, and
+      // `/app/*` with (Vite still resolves /src/main.tsx from the project root,
+      // so keeping the shell in `app/` costs the entry nothing), and the
+      // standalone not-found document that the terminal 404 handler reads.
+      input: { app: "app/index.html", notFound: "404.html" },
     },
   },
 });

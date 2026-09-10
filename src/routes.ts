@@ -16,6 +16,7 @@ import {
   APP_VIEWS,
   DEFAULT_APP_PATH,
   LOGIN_PATH,
+  ROOT_PATH,
 } from "../shared/site.js";
 import type { Flow, Tab } from "./App";
 
@@ -57,8 +58,13 @@ function viewForPath(path: string) {
 /**
  * Resolve a pathname and search string to a Route.
  *
- * Returns `null` for anything that is neither the Login_Route nor an App_Route —
- * a marketing path, a reserved path, or a typo. The result is always a Route the
+ * The origin root resolves to the default Addressable_View: there is no landing
+ * page, so visiting the host opens the app. `formatRoute` spells that view
+ * `DEFAULT_APP_PATH`, never `/`, so `useRouter` can canonicalise the URL in
+ * place on boot.
+ *
+ * Returns `null` for anything that is neither the origin root, the Login_Route,
+ * nor an App_Route — that is, a typo. The result is always a Route the
  * Route_Table contains, never a partially populated one.
  */
 export function parseRoute(pathname: string, search = ""): Route | null {
@@ -69,7 +75,7 @@ export function parseRoute(pathname: string, search = ""): Route | null {
     return { kind: "login", next: readNext(search) };
   }
 
-  const view = viewForPath(path);
+  const view = viewForPath(path === ROOT_PATH ? DEFAULT_APP_PATH : path);
   if (view) return { kind: "app", tab: view.tab, flow: view.flow };
 
   return null;

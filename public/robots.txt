@@ -1,0 +1,12 @@
+# SnapGut is a self-hosted food and symptom diary. There is no marketing site
+# and no public content: every path this origin answers is either the app itself
+# or a 404. A crawled URL would tell an index who is running a health diary and
+# where, so nothing here is offered for crawling — unconditionally, whatever
+# PUBLIC_ORIGIN is set to. The Origin_Server sends `X-Robots-Tag: noindex` on
+# every response as well, for a crawler that fetches a path regardless.
+#
+# A static file rather than a generated one: with the Route_Table's marketing
+# entries gone there is nothing left to derive, and Vite copies `public/`
+# verbatim into the Build_Output.
+User-agent: *
+Disallow: /

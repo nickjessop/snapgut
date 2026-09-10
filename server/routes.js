@@ -24,30 +24,31 @@ import path from "node:path";
 import {
   APP_PREFIX,
   LOGIN_PATH,
-  MARKETING_PAGES,
   NOT_FOUND_FILE,
+  ROOT_PATH,
   isAppPath,
-  isMarketingPath,
 } from "../shared/site.js";
 
 /** The Build_Output root, as both a relative path (for serveStatic) and resolved. */
 export const DIST_ROOT = "./dist";
 
 /**
- * The one App_Shell document. The Login_Route and every App_Route are answered
- * with this same file, so the shell exists at exactly one path in the
- * Build_Output (Requirement 3.8).
+ * The one App_Shell document. The origin root, the Login_Route, and every
+ * App_Route are answered with this same file, so the shell exists at exactly one
+ * path in the Build_Output (Requirement 3.8).
  */
 export const APP_SHELL_FILE = "app/index.html";
 
-/** The five outcomes a path can resolve to (design Property 3). */
+/** The four outcomes a path can resolve to (design Property 3). */
 export const OUTCOME = Object.freeze({
-  MARKETING: "marketing",
   APP_SHELL: "app-shell",
   STATIC: "static",
   REDIRECT: "redirect",
   NOT_FOUND: "not-found",
 });
+
+/** True for the paths answered with the App_Shell: `/`, `/login`, `/app`, `/app/*`. */
+const isShellPath = (p) => p === ROOT_PATH || p === LOGIN_PATH || isAppPath(p);
 
 /** Served when the Build_Output has no `404.html` (an unbuilt or partial dist). */
 const FALLBACK_NOT_FOUND =
@@ -60,17 +61,22 @@ const distFile = (file) => `${DIST_ROOT}/${file}`;
 /**
  * The target of the trailing-slash redirect, or `null` when a path needs none.
  *
- * Deliberately narrow: only a Marketing_Page path or the Login_Route with a
- * trailing slash redirects (Requirement 2.6). Redirecting every trailing slash
- * would turn `/nonsense/` into a 301 followed by a 404, where Requirement 2.5
- * asks for a single 404. `/` is left alone, and an App_Route keeps its 200 so
- * that the app shell is served for exactly the paths `isAppPath` recognises.
+ * With the marketing site gone, `/login/` is the only path left that redirects
+ * (Requirement 2.6): it is the one non-prefixed document path a link or a typo
+ * can reach with a trailing slash. Redirecting every trailing slash would turn
+ * `/nonsense/` into a 301 followed by a 404, where Requirement 2.5 asks for a
+ * single 404. An App_Route keeps its 200, so the shell is served for exactly the
+ * paths `isAppPath` recognises. `/` is the origin root and already canonical —
+ * it is not a trailing slash to strip, and stripping it would leave the empty
+ * string.
  */
 export function redirectTargetFor(pathname) {
-  if (typeof pathname !== "string" || pathname === "/" || !pathname.endsWith("/")) return null;
+  if (typeof pathname !== "string" || pathname === ROOT_PATH || !pathname.endsWith("/")) {
+    return null;
+  }
   const stripped = pathname.replace(/\/+$/, "");
   if (stripped === "" || isAppPath(stripped)) return null;
-  if (isMarketingPath(stripped) || stripped === LOGIN_PATH) return stripped;
+  if (stripped === LOGIN_PATH) return stripped;
   return null;
 }
 
@@ -105,12 +111,12 @@ export function distFileExists(pathname) {
  * Resolve a request path to exactly one outcome (Requirement 2.9).
  *
  * The order is the resolution order of the registered handlers: the
- * trailing-slash redirect, then the Marketing_Pages, then the Login_Route and
- * the App_Routes, then a real file in the Build_Output, then the not-found
- * document. `/api/*` paths are handled before this resolver is ever consulted,
- * so an unmatched one falls through to the same 404 as any other unknown path.
+ * trailing-slash redirect, then the origin root, the Login_Route, and the
+ * App_Routes, then a real file in the Build_Output, then the not-found document.
+ * `/api/*` paths are handled before this resolver is ever consulted, so an
+ * unmatched one falls through to the same 404 as any other unknown path.
  *
- * @param {string} pathname the request path, e.g. `/pricing`
+ * @param {string} pathname the request path, e.g. `/app/logs`
  * @param {{ fileExists?: (pathname: string) => boolean }} [options]
  *   `fileExists` substitutes a Build_Output for testing.
  */
@@ -120,10 +126,7 @@ export function resolveRoute(pathname, options = {}) {
   const location = redirectTargetFor(pathname);
   if (location !== null) return { kind: OUTCOME.REDIRECT, status: 301, location };
 
-  const page = MARKETING_PAGES.find((p) => p.path === pathname);
-  if (page) return { kind: OUTCOME.MARKETING, status: 200, file: page.file };
-
-  if (pathname === LOGIN_PATH || isAppPath(pathname)) {
+  if (isShellPath(pathname)) {
     return { kind: OUTCOME.APP_SHELL, status: 200, file: APP_SHELL_FILE };
   }
 
@@ -159,7 +162,7 @@ async function readNotFound() {
 export function registerSiteRoutes(app) {
   // Trailing slash → 301 to the canonical path (Requirement 2.6). Registered
   // ahead of the document handlers; Hono's router is strict about the trailing
-  // slash, so `/pricing/` would otherwise reach no handler at all.
+  // slash, so `/login/` would otherwise reach no handler at all.
   app.use("*", async (c, next) => {
     const location = redirectTargetFor(new URL(c.req.url).pathname);
     if (location === null) return next();
@@ -168,24 +171,24 @@ export function registerSiteRoutes(app) {
     return c.redirect(`${location}${new URL(c.req.url).search}`, 301);
   });
 
-  // Each Marketing_Page, from the Route_Table (Requirement 2.2).
-  for (const page of MARKETING_PAGES) {
-    app.get(page.path, serveStatic({ path: distFile(page.file) }));
-  }
-
-  // The Login_Route and every App_Route share the one App_Shell document
-  // (Requirements 2.3, 3.8).
+  // The origin root, the Login_Route, and every App_Route share the one
+  // App_Shell document (Requirements 2.3, 3.8). `/` is registered here rather
+  // than redirected to `/app`: visiting the host is opening the app, and a
+  // redirect is not something the Service_Worker can answer offline. It is also
+  // registered ahead of `serveStatic` below so no `dist/index.html` left behind
+  // by an older build can shadow it.
   const appShell = serveStatic({ path: distFile(APP_SHELL_FILE) });
+  app.get(ROOT_PATH, appShell);
   app.get(LOGIN_PATH, appShell);
   app.get(APP_PREFIX, appShell);
   app.get(`${APP_PREFIX}/*`, appShell);
 
   // Real files in the Build_Output: hashed assets, the manifest, the service
-  // worker, robots.txt, sitemap.xml (Requirement 2.4).
+  // worker, robots.txt (Requirement 2.4).
   app.use("/*", serveStatic({ root: DIST_ROOT }));
 
-  // Terminal handler: an unknown path gets the marketing-styled not-found
-  // document with status 404, never the App_Shell (Requirement 2.5). This
-  // replaces the SPA catch-all that made every typo a soft 404 with status 200.
+  // Terminal handler: an unknown path gets the standalone not-found document
+  // with status 404, never the App_Shell (Requirement 2.5). This replaces the
+  // SPA catch-all that made every typo a soft 404 with status 200.
   app.get("*", async (c) => c.html(await readNotFound(), 404));
 }

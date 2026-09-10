@@ -5,16 +5,18 @@
 // Validates: Requirements 11.1, 11.2, 11.5
 //
 // After origin independence (task 6.4), the CSP is a single base policy for all
-// response classes. There are no per-page hashes because the JSON-LD blocks have
-// been removed.
+// response classes: there are no per-page hashes, because there are no per-page
+// inline scripts. Renamed from `marketingCsp.test.ts` when the marketing site was
+// removed — the policy was never marketing-specific, and there is no
+// `CLASS.MARKETING` left to check parity against.
 
 import { describe, expect, it } from "vitest";
 // @ts-ignore -- untyped ESM JavaScript (server/ is not TypeScript)
 import { CSP, cspFor } from "../server/csp.js";
 // @ts-ignore -- untyped ESM JavaScript (server/ is not TypeScript)
-import { CLASS, classifyPath, headersFor } from "../server/headers.js";
+import { CLASS, headersFor } from "../server/headers.js";
 // @ts-ignore -- untyped ESM JavaScript (shared/ is not TypeScript)
-import { LOGIN_PATH, marketingPaths } from "../shared/site.js";
+import { LOGIN_PATH, ROOT_PATH } from "../shared/site.js";
 
 /** The `script-src` directive of a policy. */
 const scriptSrc = (policy: string) =>
@@ -39,13 +41,8 @@ describe("the base policy", () => {
 });
 
 describe("cspFor returns the same policy for all classes", () => {
-  it("returns the base CSP for a Marketing_Page", () => {
-    expect(cspFor(CLASS.MARKETING, "/")).toBe(CSP);
-    expect(cspFor(CLASS.MARKETING, "/privacy")).toBe(CSP);
-  });
-
   it("returns the base CSP for the App_Shell (Requirement 11.5)", () => {
-    for (const p of [LOGIN_PATH, "/app", "/app/logs", "/app/settings"]) {
+    for (const p of [ROOT_PATH, LOGIN_PATH, "/app", "/app/logs", "/app/settings"]) {
       expect(cspFor(CLASS.APP_SHELL, p)).toBe(CSP);
       expect(cspFor(CLASS.APP_SHELL, p)).not.toContain("sha256-");
     }
@@ -53,15 +50,14 @@ describe("cspFor returns the same policy for all classes", () => {
 
   it("sends a policy on every response class, with no hashes anywhere", () => {
     const cases: Array<[string, number]> = [
-      ["/", 200],
-      ["/privacy", 200],
+      [ROOT_PATH, 200],
       ["/login", 200],
       ["/app/logs", 200],
       ["/api/entries", 200],
       ["/assets/index-abc123.js", 200],
       ["/foods/apple.webp", 200],
       ["/robots.txt", 200],
-      ["/privacy/", 301],
+      ["/login/", 301],
       ["/nonsense", 404],
     ];
 

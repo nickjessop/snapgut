@@ -4,41 +4,24 @@ import {
   APP_VIEWS,
   DEFAULT_APP_PATH,
   LOGIN_PATH,
-  MARKETING_PAGES,
   NOT_FOUND_FILE,
-  RESERVED_CONTENT_PREFIX,
-  indexablePaths,
+  ROOT_PATH,
   isAppPath,
-  isMarketingPath,
-  marketingPaths,
 } from "../shared/site.js";
 
 describe("Route_Table", () => {
-  it("names the v1 page set with a unique path, file, title, and description", () => {
-    expect(marketingPaths()).toEqual(["/", "/privacy", "/terms"]);
-
-    const unique = (xs: string[]) => new Set(xs).size === xs.length;
-    expect(unique(MARKETING_PAGES.map((p) => p.file))).toBe(true);
-    expect(unique(MARKETING_PAGES.map((p) => p.title))).toBe(true);
-    expect(unique(MARKETING_PAGES.map((p) => p.description))).toBe(true);
-    for (const page of MARKETING_PAGES) {
-      expect(page.path.startsWith("/")).toBe(true);
-      expect(page.file).toMatch(/^[a-z0-9-]+\.html$/);
-      expect(page.description.length).toBeGreaterThan(0);
-    }
-  });
-
-  it("keeps the marketing, login, and app path classes disjoint", () => {
-    for (const path of marketingPaths()) {
-      expect(isMarketingPath(path)).toBe(true);
-      expect(isAppPath(path)).toBe(false);
-    }
-    expect(isMarketingPath(LOGIN_PATH)).toBe(false);
+  it("keeps the root, login, and app path classes distinct", () => {
+    // `/` is answered with the App_Shell, but it is not an App_Route: the client
+    // router treats it as an alias and canonicalises it to DEFAULT_APP_PATH, and
+    // `sanitizeNext` must never accept it as a `next` target.
+    expect(isAppPath(ROOT_PATH)).toBe(false);
     expect(isAppPath(LOGIN_PATH)).toBe(false);
+    expect(ROOT_PATH).not.toBe(LOGIN_PATH);
 
     for (const view of APP_VIEWS) {
       expect(isAppPath(view.path)).toBe(true);
-      expect(isMarketingPath(view.path)).toBe(false);
+      expect(view.path).not.toBe(ROOT_PATH);
+      expect(view.path).not.toBe(LOGIN_PATH);
     }
   });
 
@@ -46,8 +29,13 @@ describe("Route_Table", () => {
     expect(isAppPath(APP_PREFIX)).toBe(true);
     expect(isAppPath("/app/anything")).toBe(true);
     expect(isAppPath("/application")).toBe(false);
-    expect(isAppPath(RESERVED_CONTENT_PREFIX + "post")).toBe(false);
-    expect(isMarketingPath(RESERVED_CONTENT_PREFIX + "post")).toBe(false);
+    expect(isAppPath("/blog/post")).toBe(false);
+  });
+
+  it("names every Addressable_View by a unique path under the app prefix", () => {
+    const paths = APP_VIEWS.map((v) => v.path);
+    expect(new Set(paths).size).toBe(paths.length);
+    for (const path of paths) expect(path.startsWith(APP_PREFIX)).toBe(true);
   });
 
   it("maps /app/settings onto the logs tab plus the settings flow", () => {
@@ -60,8 +48,8 @@ describe("Route_Table", () => {
     expect(APP_VIEWS.find((v) => v.path === DEFAULT_APP_PATH)?.tab).toBe("camera");
   });
 
-  it("indexes exactly the marketing paths", () => {
-    expect(indexablePaths()).toEqual(marketingPaths());
+  it("names the default view and the not-found document", () => {
+    expect(APP_VIEWS.some((v) => v.path === DEFAULT_APP_PATH)).toBe(true);
     expect(NOT_FOUND_FILE).toBe("404.html");
   });
 });

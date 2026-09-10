@@ -26,6 +26,8 @@ Then, as needed: [ai-providers.md](ai-providers.md) to get meal recognition work
 | [datastore.md](datastore.md) | SQLite schema: tables, indexes, PRAGMAs, cursors, tombstone sweep, migrations |
 | [cloud-sync.md](cloud-sync.md) | The sync protocol: endpoints, limits, what is stored where, export, and the three deletion paths |
 | [food-pack.md](food-pack.md) | The optional food illustration pack: fetching and verifying it, the slug convention, what you get without it, provenance, and its unresolved licensing |
+| [privacy.md](privacy.md) | What stays in the browser, what the server's SQLite file holds, what leaves the machine for the AI provider, sync, export formats, and the three deletion paths |
+| [terms.md](terms.md) | What the app claims and does not claim, the not-a-medical-device framing, and the operator's responsibilities for a self-hosted instance |
 
 ## Understanding the code
 

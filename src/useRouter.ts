@@ -163,7 +163,24 @@ export function useRouter(options: UseRouterOptions): Router {
     setRoute(parsed);
     // The URL leads until the view state matches it.
     syncedRef.current = false;
-    if (parsed?.kind === "app") optionsRef.current.onRoute(parsed);
+    if (parsed?.kind === "app") {
+      // The origin root is an alias of the default App_Route, so booting at `/`
+      // has to leave the URL bar naming the view that is on screen. It cannot be
+      // left to the state → URL effect: the view state at `/` already *is* the
+      // default view, so nothing changes and that effect never re-runs — the URL
+      // would stay `/` while the camera tab renders.
+      //
+      // `replaceState` and not a push, so pressing Back from `/` leaves the app
+      // rather than bouncing between `/` and `/app`. Called directly rather than
+      // through `write`, because `write` declares the URL and the state in step
+      // and here the state is still catching up.
+      const canonical = formatRoute(parsed);
+      if (canonical !== currentUrl()) {
+        window.history.replaceState(null, "", canonical);
+        setRoute(parseRoute(window.location.pathname, window.location.search));
+      }
+      optionsRef.current.onRoute(parsed);
+    }
   }, [enabled]);
 
   // ---- Effect 3: the Ephemeral_Flow sentinel, on backward navigation ----
@@ -198,9 +215,10 @@ export function useRouter(options: UseRouterOptions): Router {
         syncedRef.current = false;
         onRoute(parsed);
       }
-      // A `null` route means the entry belongs to the Marketing_Site rather than
-      // the App_Shell. A backward navigation to it is a document load the browser
-      // owns, so it is allowed to proceed untouched (Requirement 4.7).
+      // A `null` route means the entry names no view at all — a path the
+      // Origin_Server answers with its 404 document. A backward navigation to it
+      // is a document load the browser owns, so it is allowed to proceed
+      // untouched (Requirement 4.7).
     }
 
     window.addEventListener("popstate", onPopState);
@@ -215,8 +233,9 @@ export function useRouter(options: UseRouterOptions): Router {
 
     if (isEphemeralFlow(flow)) {
       // Opening a flow: one marked entry at the unchanged URL, so the back
-      // gesture has something to land on that is not the Marketing_Site
-      // (Requirement 4.5). Re-runs while the same flow stays open are no-ops.
+      // gesture has something to land on inside the App_Shell rather than
+      // leaving it (Requirement 4.5). Re-runs while the same flow stays open are
+      // no-ops.
       if (!onSentinelEntry()) write("push", currentUrl(), { flow: true });
       return;
     }

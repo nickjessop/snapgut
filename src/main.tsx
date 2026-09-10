@@ -16,8 +16,8 @@ startAppHeightSync();
 // The App_Shell is the only document that registers the Service_Worker. The
 // plugin's automatic injection is off (`injectRegister: null` in
 // vite.config.ts), because it would put the registration shim into every HTML
-// document the build emits, marketing pages included — and those must load
-// nothing from the app's output (Requirements 7.7, 11.3).
+// document the build emits — which includes the standalone `404.html`, and that
+// one must load nothing from the app's output (Requirements 7.7, 11.3).
 //
 // Updates still apply on their own, with no prompt and no approval — but the reload
 // waits for a moment when nothing unsaved is open, because a captured photo lives

@@ -49,7 +49,7 @@ export default function Intro({ onFinish }: { onFinish: () => void }) {
     return (
       <div className="app intro splash-screen">
         {/* The app icon, decorative here — the wordmark under it is the labelled
-            one, exactly as in the marketing header's lockup. */}
+            one, so the pair reads out once. */}
         <div className="intro-badge splash-badge">
           <AppIcon size={116} />
         </div>

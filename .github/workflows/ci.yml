@@ -54,11 +54,12 @@ jobs:
         run: npm run typecheck
 
       # The build has to precede the tests. `dist/` is gitignored, so a fresh
-      # checkout has none, and src/marketing.isolation.test.ts,
-      # src/pwa.offline.test.ts and src/marketing.budget.test.ts assert against
-      # the built output — they compare the marketing documents' module graphs
-      # against the app bundle and check the service-worker precache manifest.
-      # Run them first and seven fail for want of an artifact rather than a bug.
+      # checkout has none, and src/serverRoutes.test.ts and
+      # src/pwa.offline.test.ts assert against the built output — the former
+      # drives the real Hono app over the emitted documents and static files, the
+      # latter runs the generated dist/sw.js and reads its precache manifest.
+      # Both rebuild for themselves if dist/ is missing or stale, but that is a
+      # fallback: doing it here keeps the build failure separate from a test one.
       - name: Production build (vite build)
         run: npm run build
 

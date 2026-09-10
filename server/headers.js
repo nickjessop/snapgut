@@ -9,8 +9,8 @@
 
 import {
   LOGIN_PATH,
+  ROOT_PATH,
   isAppPath,
-  isMarketingPath,
 } from "../shared/site.js";
 import { CSP, cspFor } from "./csp.js";
 
@@ -23,17 +23,18 @@ export const CLASS = Object.freeze({
   API: "api",
   /** `/foods/*`: the existing immutable proxy — its headers are left alone. */
   FOODS: "foods",
-  /** A Marketing_Page document. */
-  MARKETING: "marketing",
-  /** The Login_Route or an App_Route, both answered with the App_Shell. */
+  /**
+   * The origin root, the Login_Route, or an App_Route — all three answered with
+   * the App_Shell.
+   */
   APP_SHELL: "app-shell",
   /** A content-hashed build asset under `/assets/`. */
   HASHED_ASSET: "hashed-asset",
   /** `/sw.js` and the manifest: revalidated so a deploy is picked up. */
   REVALIDATE_ASSET: "revalidate-asset",
-  /** `robots.txt` and `sitemap.xml`. */
+  /** `robots.txt`. */
   CRAWLER_FILE: "crawler-file",
-  /** Any other real file in the Build_Output (icons, the OG image). */
+  /** Any other real file in the Build_Output (icons, favicons). */
   OTHER_STATIC: "other-static",
   /** The trailing-slash 301. */
   REDIRECT: "redirect",
@@ -47,7 +48,6 @@ const HTML_TYPE = "text/html; charset=utf-8";
 const CACHE_CONTROL = Object.freeze({
   [CLASS.API]: "no-store",
   [CLASS.FOODS]: null,
-  [CLASS.MARKETING]: "public, max-age=0, s-maxage=3600, must-revalidate",
   [CLASS.APP_SHELL]: "no-cache",
   [CLASS.HASHED_ASSET]: "public, max-age=31536000, immutable",
   [CLASS.REVALIDATE_ASSET]: "no-cache",
@@ -56,9 +56,6 @@ const CACHE_CONTROL = Object.freeze({
   [CLASS.REDIRECT]: null,
   [CLASS.NOT_FOUND]: "no-store",
 });
-
-/** The classes that carry `noindex` even when PUBLIC_ORIGIN is set. */
-const NOINDEX_CLASSES = new Set([CLASS.API, CLASS.APP_SHELL, CLASS.NOT_FOUND]);
 
 /**
  * The class a response belongs to.
@@ -72,11 +69,10 @@ export function classifyPath(pathname, status = 200) {
   if (p === "/foods" || p.startsWith("/foods/")) return CLASS.FOODS;
   if (status >= 300 && status < 400) return CLASS.REDIRECT;
   if (status === 404) return CLASS.NOT_FOUND;
-  if (isMarketingPath(p)) return CLASS.MARKETING;
-  if (p === LOGIN_PATH || isAppPath(p)) return CLASS.APP_SHELL;
+  if (p === ROOT_PATH || p === LOGIN_PATH || isAppPath(p)) return CLASS.APP_SHELL;
   if (p.startsWith("/assets/")) return CLASS.HASHED_ASSET;
   if (p === "/sw.js" || p === "/manifest.webmanifest") return CLASS.REVALIDATE_ASSET;
-  if (p === "/robots.txt" || p === "/sitemap.xml") return CLASS.CRAWLER_FILE;
+  if (p === "/robots.txt") return CLASS.CRAWLER_FILE;
   return CLASS.OTHER_STATIC;
 }
 
@@ -86,21 +82,24 @@ export function cacheControlFor(cls) {
 }
 
 /**
- * Whether the response carries `X-Robots-Tag: noindex`.
+ * Whether the response carries `X-Robots-Tag: noindex`. Always.
  *
- * When `publicOrigin` is unset (null/undefined), noindex is returned for ALL
- * classes — the operator has not declared a public URL, so nothing should be
- * indexed.
+ * With the marketing site gone there is no indexable surface left: every
+ * document this server answers is the App_Shell or the not-found page, and a
+ * self-hosted health diary is not something that should ever appear in a search
+ * index — the URL alone tells a crawler who is running one. `robots.txt` says
+ * the same thing (`Disallow: /`); this is the header that says it to a crawler
+ * that fetched the path anyway.
  *
- * When `publicOrigin` is set, noindex is returned only for NOINDEX_CLASSES
- * (API, app-shell, not-found).
+ * The parameters are kept so the signature stays stable for callers and so
+ * re-introducing a per-class exception is a change here rather than a
+ * re-plumbing. `publicOrigin` no longer affects indexing.
  *
- * @param {string} cls a CLASS value
- * @param {string|null|undefined} publicOrigin the configured PUBLIC_ORIGIN
+ * @param {string} [_cls] a CLASS value, unused
+ * @param {string|null|undefined} [_publicOrigin] the configured PUBLIC_ORIGIN, unused
  */
-export function shouldNoIndex(cls, publicOrigin) {
-  if (!publicOrigin) return true;
-  return NOINDEX_CLASSES.has(cls);
+export function shouldNoIndex(_cls, _publicOrigin) {
+  return true;
 }
 
 /**
@@ -109,14 +108,11 @@ export function shouldNoIndex(cls, publicOrigin) {
  */
 export function contentTypeFor(cls, pathname) {
   switch (cls) {
-    case CLASS.MARKETING:
     case CLASS.APP_SHELL:
     case CLASS.NOT_FOUND:
       return HTML_TYPE;
     case CLASS.CRAWLER_FILE:
-      return pathname === "/robots.txt"
-        ? "text/plain; charset=utf-8"
-        : "application/xml; charset=utf-8";
+      return "text/plain; charset=utf-8";
     case CLASS.REVALIDATE_ASSET:
       return pathname === "/manifest.webmanifest" ? "application/manifest+json" : null;
     default:
