@@ -6,15 +6,18 @@
 // Requirement 12.8 — "exactly one of the six Sync_State values at any time" —
 // reduces to totality and single-valuedness of that function over the entire
 // condition space, including the combinations a real Sync_Cycle would never
-// produce (a cycle in progress that also failed, an entitlement snapshot that
-// went false mid-cycle). `arbSyncStateInput` generates the flags independently
-// for exactly that reason.
+// produce (a cycle in progress that also failed, a Cloud_Destination that reads
+// as disabled while a cycle is still in flight). `arbSyncStateInput` generates
+// the flags independently for exactly that reason.
 //
 // Four claims get their own tests beyond the table walk, because each is a
 // consequence the requirements name separately:
 //
 // - `off` whenever no Session_Token is held, *regardless of every other field*
 //   (Req 1.6, 12.8 step 1).
+// - `off` whenever the Cloud_Destination is disabled or absent, even on a
+//   signed-in device with a cycle flag, a failure, or a stored timestamp set
+//   (Req 12.1, 12.8 step 4) — the second and last route to `off`.
 // - never `synced` while the Outbox is non-empty (Req 12.8 step 7).
 // - the `synced → idle` move of Req 12.9 falls out of derivation: raising the
 //   Outbox count on a `synced` snapshot yields `idle` with the last-successful
@@ -195,10 +198,16 @@ describe("Property 15: Sync_State derivation is total and single-valued", () => 
     );
   });
 
-  it("reports `off` when Pro is false and the destination is disabled (Req 1.4, 12.8 step 3)", () => {
+  it("reports `off` when a Session_Token is held but the destination is disabled (Req 12.1, 12.8 step 4)", () => {
     fc.assert(
       fc.property(arbSyncStateInput, (base) => {
-        const i = { ...base, hasSession: true, pro: false, enabled: false };
+        // The companion of the test above: this is the *other* route to `off`, the
+        // one a signed-in device takes when it has simply not turned the
+        // Cloud_Destination on. Every remaining field is left as generated, so the
+        // claim is that the disabled destination alone decides the state — a
+        // cycle flag, a recorded failure, a stored timestamp, and a non-empty
+        // Outbox are all overridden by it, and none of them leaks into a payload.
+        const i = { ...base, hasSession: true, enabled: false };
         expect(derive(i)).toEqual({ state: "off" });
       }),
       { numRuns: 200 },

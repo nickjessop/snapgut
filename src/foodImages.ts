@@ -1,14 +1,17 @@
 // Resolution for food thumbnails.
 //
-// Preference order:
-//   1. Our own generated illustration pack (~3,000 foods), served same-origin from
-//      /foods/* out of a private GCS bucket. No licensing or attribution strings,
-//      consistent botanical style, no runtime AI cost.
-//   2. TheMealDB's static CDN — DEV ONLY fallback. Their free tier/test key is for
-//      development & educational use and the artwork is user-contributed, so this
-//      must stay off (or be properly licensed) for a commercial launch.
-//      See docs/security-and-infra-todo.md.
-//   3. A generated letter-avatar (handled by FoodImage).
+// Two sources, in order:
+//   1. Our own illustration pack (~3,000 foods), served same-origin from /foods/*
+//      by the operator's own server out of FOOD_PACK_DIR. Consistent style, no
+//      attribution strings, no runtime AI cost — and, because it is same-origin,
+//      no third party learns what anyone ate.
+//   2. A generated letter-avatar (handled by FoodImage), so a food with no
+//      illustration still renders something rather than a broken-image icon.
+//
+// There is deliberately no third-party image CDN in this list. An earlier version
+// had one behind an off-by-default flag; it went because a request to it would
+// have carried a food name off the operator's machine, which is the one thing
+// this app promises not to do.
 //
 // The model doesn't always name a food exactly the way the pack does ("Carrots" vs
 // "Carrot", "Cilantro" vs "Coriander"), so we try a few slug variants before giving
@@ -175,16 +178,4 @@ export function slugCandidates(name: string, canonical?: string): string[] {
 /** Local illustration-pack URLs to try, in order (256px WebP with alpha). */
 export function packUrls(name: string, canonical?: string): string[] {
   return slugCandidates(name, canonical).map((s) => `/foods/${s}.webp`);
-}
-
-/**
- * Whether the (unlicensed for commercial use) TheMealDB fallback is allowed.
- * Off unless VITE_MEALDB_FALLBACK=1, so production never depends on it.
- */
-export const MEALDB_FALLBACK = import.meta.env.VITE_MEALDB_FALLBACK === "1";
-
-/** TheMealDB ingredient thumbnail (dev-only fallback). */
-export function mealDbUrl(name: string): string {
-  const slug = name.trim().replace(/\s+/g, "_");
-  return `https://www.themealdb.com/images/ingredients/${encodeURIComponent(slug)}-small.png`;
 }

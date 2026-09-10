@@ -10,14 +10,14 @@
  *
  *  - **Associative, never causal or diagnostic.** "Often reported alongside", not
  *    "causes". Nothing here may read as a diagnosis, an intolerance test, or a
- *    treatment recommendation — the same line `docs/positioning.md` draws for the
- *    marketing copy, for the same regulatory reason.
+ *    treatment recommendation — the line `docs/intuitive-eating.md` draws in
+ *    "What the app may and may not say", for the regulatory reason it gives.
  *  - **Honest about our own precision.** Group membership comes from the food
  *    dictionary where it exists and a coarse keyword match otherwise, so every entry
  *    says the tagging is approximate rather than implying lab-grade data. We do not
  *    have Monash's portion-aware measurements and must not sound like we do.
  *  - **No elimination advice.** Cutting food groups out is a clinician's call, and
- *    `docs/positioning.md` forbids us implying otherwise.
+ *    `docs/intuitive-eating.md` forbids us implying otherwise.
  *
  * Static content, so it costs no request and works offline.
  */

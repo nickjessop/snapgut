@@ -47,11 +47,6 @@ import {
   setDestinationEnabled,
 } from "./syncSettings";
 
-// Stub for removed entitlement function — tests will be cleaned up in task 1.8/1.9
-function applyEntitlement(_e: { pro: boolean; proUntil: number | null }): void {}
-
-const PRO_ENTITLEMENT = { pro: true, proUntil: null };
-
 /** The cursor already stored before an operation runs. */
 const SEEDED_CURSOR = formatCursor(1, 100);
 /** The cursor the Sync_Service hands back from a fresh (post-purge) timeline. */
@@ -199,7 +194,6 @@ function installFetch(script: Script): RequestLog {
           jsonResponse(200, {
             outcomes: ids.map((id) => ({ id, outcome: "stored" })),
             highestSequence: 10,
-            entitlement: PRO_ENTITLEMENT,
           }),
         );
       }
@@ -212,9 +206,7 @@ function installFetch(script: Script): RequestLog {
 
       if (url.startsWith(CLOUD_DATA_PATH)) {
         log.calls.push({ method, url, ids: [] });
-        return Promise.resolve(
-          script.del ?? jsonResponse(200, { ok: true, deleted: 3, entitlement: PRO_ENTITLEMENT }),
-        );
+        return Promise.resolve(script.del ?? jsonResponse(200, { ok: true, deleted: 3 }));
       }
 
       throw new Error(`unexpected request: ${method} ${url}`);
@@ -224,7 +216,7 @@ function installFetch(script: Script): RequestLog {
   return log;
 }
 
-/** A signed-in, Pro, Cloud-enabled device holding `records` locally. */
+/** A signed-in, Cloud-enabled device holding `records` locally. */
 async function setUpDevice(records: StoredRecord[]): Promise<void> {
   await resetStores();
   resetCloudSyncForTests();
@@ -233,7 +225,6 @@ async function setUpDevice(records: StoredRecord[]): Promise<void> {
 
   setToken("session-token-for-tests");
   await restoreSyncSettings();
-  applyEntitlement(PRO_ENTITLEMENT);
   setDestinationEnabled("cloud", true);
 
   await seedRecords(records);
@@ -313,8 +304,8 @@ describe("cursor-invalid recovery", () => {
     const log = installFetch({
       pulls: [
         // Req 13.13 — the stored cursor is reported as no longer valid.
-        { error: "cursor_invalid", cursor: null, entitlement: PRO_ENTITLEMENT },
-        { records: [], cursor: RECOVERY_CURSOR, hasMore: false, entitlement: PRO_ENTITLEMENT },
+        { error: "cursor_invalid", cursor: null },
+        { records: [], cursor: RECOVERY_CURSOR, hasMore: false },
       ],
     });
 
@@ -341,7 +332,7 @@ describe("cursor-invalid recovery", () => {
     await setMeta("cursor", SEEDED_CURSOR);
 
     const log = installFetch({
-      pulls: [{ error: "cursor_invalid", cursor: null, entitlement: PRO_ENTITLEMENT }],
+      pulls: [{ error: "cursor_invalid", cursor: null }],
     });
     // Replace the push answer with a 5xx, leaving the pull script in place.
     const original = globalThis.fetch as unknown as (
@@ -413,7 +404,7 @@ describe("deleteCloudCopy", () => {
 
     installFetch({
       pulls: [],
-      del: jsonResponse(500, { error: "delete_incomplete", entitlement: PRO_ENTITLEMENT }),
+      del: jsonResponse(500, { error: "delete_incomplete" }),
     });
 
     const result = await deleteCloudCopy();

@@ -119,16 +119,17 @@ export function uniqueIp(): string {
   return `198.51.100.${nextId()}`;
 }
 
-/** A user record plus a valid Session_Token for it. All features are ungated. */
-export async function proUser(label = "pro"): Promise<{ email: string; token: string }> {
-  const email = uniqueEmail(label);
-  const store = await userStore();
-  await store.upsertUser(email);
-  return { email, token: mintToken(email) };
-}
-
-/** A user record with no Pro_Entitlement, plus a valid Session_Token for it. */
-export async function freeUser(label = "free"): Promise<{ email: string; token: string }> {
+/**
+ * A user record plus a valid Session_Token for it — everything a request needs
+ * to be accepted by `/api/sync/*`.
+ *
+ * There is deliberately only one of these. A self-hosted instance has no tiers,
+ * so holding a Session_Token is the whole of a caller's authority: any two
+ * signed-in users are interchangeable as far as these routes are concerned, and
+ * a test that wants to be refused should send no token or a broken one rather
+ * than a differently privileged user.
+ */
+export async function signedInUser(label = "user"): Promise<{ email: string; token: string }> {
   const email = uniqueEmail(label);
   const store = await userStore();
   await store.upsertUser(email);

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { isMissing, markMissing } from "./imageCache";
-import { packUrls, mealDbUrl, slugify, MEALDB_FALLBACK } from "./foodImages";
+import { packUrls, slugify } from "./foodImages";
 
 // Deterministic background for the fallback letter-avatar.
 function colorFor(name: string): string {
@@ -10,9 +10,9 @@ function colorFor(name: string): string {
 }
 
 /**
- * Ingredient thumbnail. Tries our own illustration pack first, then (in dev only)
- * TheMealDB, then falls back to a generated letter-avatar so we never render a
- * broken-image icon. See src/foodImages.ts for why the order matters.
+ * Ingredient thumbnail. Tries our own illustration pack, then falls back to a
+ * generated letter-avatar so we never render a broken-image icon. See
+ * src/foodImages.ts for why there is no third-party source in that list.
  */
 export default function FoodImage({
   name,
@@ -22,10 +22,7 @@ export default function FoodImage({
   canonical?: string;
 }) {
   const slug = canonical || slugify(name);
-  const sources = [
-    ...packUrls(name, canonical),
-    ...(MEALDB_FALLBACK ? [mealDbUrl(name)] : []),
-  ];
+  const sources = packUrls(name, canonical);
 
   // Skip straight to the avatar for foods we've already learned have no image.
   const [idx, setIdx] = useState(() => (isMissing(slug) ? sources.length : 0));

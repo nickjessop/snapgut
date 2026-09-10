@@ -65,8 +65,6 @@ import {
 /** A spy handle, kept structural so the tests do not name Vitest's mock types. */
 type Restorable = { mockRestore: () => void };
 
-const PRO_ENTITLEMENT = { pro: true, proUntil: null };
-
 /** Requirement 11.11's floor between successive automatic retries. */
 const AUTO_RETRY_FLOOR_MS = 60_000;
 
@@ -214,12 +212,6 @@ interface Service {
   unexpected: string[];
   /** Pull requests parked awaiting a response. */
   parked: ((res: Response) => void)[];
-  /**
-   * The entitlement every answer carries. Mutable because the transport funnels
-   * it into `syncSettings`, so a Pro_Lapse has to be visible in what the
-   * Sync_Service says as well as in the local snapshot.
-   */
-  entitlement: { pro: boolean; proUntil: number | null };
   /** Release the oldest parked pull; false when none is parked. */
   release: (outcome: "success" | "failure") => boolean;
 }
@@ -234,7 +226,6 @@ function installFetch(options: ServiceOptions = {}): Service {
     maxOutstanding: 0,
     unexpected: [],
     parked: [],
-    entitlement: PRO_ENTITLEMENT,
     release: (outcome) => {
       const parked = service.parked.shift();
       if (!parked) return false;
@@ -245,7 +236,6 @@ function installFetch(options: ServiceOptions = {}): Service {
               records: options.pullRecords ?? [],
               cursor: formatCursor(1, sequence),
               hasMore: options.pullHasMore ?? false,
-              entitlement: service.entitlement,
             })
           : jsonResponse(503, { error: "server_error" }),
       );
@@ -281,7 +271,6 @@ function installFetch(options: ServiceOptions = {}): Service {
           jsonResponse(200, {
             outcomes,
             highestSequence: null,
-            entitlement: service.entitlement,
           }),
         );
       }
@@ -306,7 +295,7 @@ function installFetch(options: ServiceOptions = {}): Service {
 }
 
 // ---------------------------------------------------------------------------
-// A signed-in, Pro, Cloud-enabled device
+// A signed-in, Cloud-enabled device
 // ---------------------------------------------------------------------------
 
 interface DeviceOptions {

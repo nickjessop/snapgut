@@ -115,10 +115,9 @@ not-ready state unreachable and therefore untestable. Passing a `{ value: boolea
 `buildApp` lets a test hold it at `false` and assert the not-ready response, and leaves somewhere
 to report a future degraded state without changing the response contract.
 
-The design document for this conversion
-(`.kiro/specs/self-hosted-open-source/design.md`) shows a `server/boot.js` module owning phases
-1 to 3. **That module does not exist.** The five phases are inlined in `server/main.js`. The
-design's other structural rule did survive: `main.js` is the only module that calls `serve()`.
+There is no separate `server/boot.js`: all five phases are inlined in `server/main.js`. The rule
+that matters held anyway — `main.js` is the only module that calls `serve()`, so there is exactly
+one place where the process starts listening.
 
 ## Module layout
 
@@ -369,13 +368,6 @@ before assuming the test is wrong.
 
 ## Known documentation drift
 
-Flagged rather than silently corrected, since these files are not this document's to change:
-
-- `.kiro/specs/self-hosted-open-source/design.md` shows a `server/boot.js` module. It does not
-  exist; phases 1 to 3 are inlined in `server/main.js`.
-- The same document's `Config` typedef predates the `openai-compatible`, `litellm` and
-  `anthropic` providers and the `jsonMode` / `extraHeaders` fields. `server/config.js` is
-  current.
 Two entries previously listed here have been resolved and are recorded because the resolution is
 worth knowing:
 

@@ -1,7 +1,8 @@
 // On-device analytics over the event timeline. Because meals and symptoms are now
 // separate timestamped events, we correlate them across a LAG WINDOW: a symptom is
 // linked to meals eaten in the hours before it. The compact "evidence summary"
-// (not raw logs) is what we send to the AI to narrate. See docs/research-and-insights.md.
+// (not raw logs) is what we send to the AI to narrate — see docs/fodmap-program.md
+// for why the correlation is grouped by FODMAP family rather than by food.
 
 import {
   confidentIngredients,

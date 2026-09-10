@@ -26,7 +26,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   eventStore,
   mealRecord,
-  proUser,
+  signedInUser,
   purgeEventData,
   pushBody,
   syncApp,
@@ -124,7 +124,7 @@ afterEach(() => {
 describe("request logging", () => {
   it("writes one metadata-only line for a push carrying health data", async () => {
     const app = syncApp();
-    const { email, token } = await proUser();
+    const { email, token } = await signedInUser();
 
     const res = await syncCall(app, {
       method: "POST",
@@ -150,7 +150,7 @@ describe("request logging", () => {
 
   it("writes one line for a pull, counting the records served and no more", async () => {
     const app = syncApp();
-    const { email, token } = await proUser();
+    const { email, token } = await signedInUser();
     const store = await eventStore();
     await store.push(email, [healthRecord("log-3")]);
 
@@ -173,7 +173,7 @@ describe("request logging", () => {
 
   it("logs a rejected request by its reason code, never by its payload", async () => {
     const app = syncApp();
-    const { email, token } = await proUser();
+    const { email, token } = await signedInUser();
 
     const res = await syncCall(app, {
       method: "POST",
@@ -218,7 +218,7 @@ describe("request logging", () => {
 
   it("reduces a thrown Error to its class name and answers generically", async () => {
     const app = syncApp();
-    const { email, token } = await proUser();
+    const { email, token } = await signedInUser();
     const store = await eventStore();
 
     // The realistic leak: an error raised while handling a payload is free to
@@ -254,7 +254,7 @@ describe("request logging", () => {
 
   it("reduces a thrown string to its type name rather than printing it", async () => {
     const app = syncApp();
-    const { email, token } = await proUser();
+    const { email, token } = await signedInUser();
     const store = await eventStore();
 
     // A non-Error throw escapes Hono's error handler, which is why the outermost
@@ -289,7 +289,7 @@ describe("request logging", () => {
 describe("cloud copy deletion", () => {
   it("removes every stored record, keeps the account, and invalidates the cursor", async () => {
     const app = syncApp();
-    const { email, token } = await proUser();
+    const { email, token } = await signedInUser();
     const store = await eventStore();
     const users = await userStore();
     await store.push(email, [healthRecord("del-1"), healthRecord("del-2")]);
@@ -302,7 +302,7 @@ describe("cloud copy deletion", () => {
     expect(res.body).toMatchObject({ ok: true, deleted: 2 });
     expect(await store.countFor(email)).toBe(0);
 
-    // The account and its entitlement live in the user store and are untouched.
+    // The account itself lives in the user store and is untouched.
     expect(await users.getUser(email)).toMatchObject({ email });
     expect(verifyToken(token, process.env.SESSION_SECRET || "test-secret-for-vitest-only-do-not-use-in-production")).toBe(email);
 
@@ -327,7 +327,7 @@ describe("cloud copy deletion", () => {
 
   it("reports failure without deleting anything when the purge fails", async () => {
     const app = syncApp();
-    const { email, token } = await proUser();
+    const { email, token } = await signedInUser();
     const store = await eventStore();
     const users = await userStore();
     await store.push(email, [healthRecord("del-3")]);
@@ -355,14 +355,15 @@ describe("account deletion ordering", () => {
   // through the same helpers the route uses.
 
   it("purges every stored record before the user record is removed", async () => {
-    const { email, token } = await proUser();
+    const { email, token } = await signedInUser();
     const store = await eventStore();
     const users = await userStore();
     await store.push(email, [healthRecord("acct-1"), healthRecord("acct-2")]);
 
     // Step 1 — events. The user record is deliberately still present afterwards:
-    // removing it first would drop the entitlement `/api/sync/*` checks and leave
-    // the stored events unreachable through any authenticated path (Req 17.1).
+    // removing it first would drop the account `/api/sync/*` authenticates
+    // against and leave the stored events unreachable through any authenticated
+    // path (Req 17.1).
     const purge = await purgeEventData(email);
     expect(purge).toMatchObject({ ok: true, deleted: 2 });
     expect(await store.countFor(email)).toBe(0);
@@ -380,7 +381,7 @@ describe("account deletion ordering", () => {
   });
 
   it("fails safe when the purge outruns its deadline", async () => {
-    const { email, token } = await proUser();
+    const { email, token } = await signedInUser();
     const store = await eventStore();
     const users = await userStore();
     await store.push(email, [healthRecord("acct-3")]);
@@ -392,7 +393,7 @@ describe("account deletion ordering", () => {
     expect(purge).toEqual({ ok: false, reason: "timeout" });
 
     vi.restoreAllMocks();
-    // The user record, the entitlement, and the Session_Token all survive, so the
+    // The events, the user record, and the Session_Token all survive, so the
     // account remains usable and the request can be repeated (Req 17.2).
     expect(await store.countFor(email)).toBe(1);
     expect(await users.getUser(email)).toMatchObject({ email });
@@ -400,7 +401,7 @@ describe("account deletion ordering", () => {
   });
 
   it("fails safe when the purge errors", async () => {
-    const { email, token } = await proUser();
+    const { email, token } = await signedInUser();
     const store = await eventStore();
     const users = await userStore();
     await store.push(email, [healthRecord("acct-4")]);

@@ -1,4 +1,5 @@
-// The three pre-launch changes in docs/pre-launch-fixes.md:
+// Three properties of the meal capture flow, pinned together because they were
+// built together and the third is a regression of the first two:
 //
 //   1. a meal can be logged with no photo, or with one from the photo library
 //   2. the When picker can name an exact instant, clamped to the present
@@ -131,12 +132,11 @@ describe("logging a meal with no photo", () => {
     await click(screen.getByText("Log without a photo"));
     await screen.findByText("Meal details");
 
-    // No image means nothing to analyse — not an AI use spent, not a paywall, not
-    // a sign-in prompt. Showing any of those would explain a restriction that
-    // does not exist.
+    // No image means nothing to analyse, so neither the analysing state nor the
+    // sign-in prompt belongs here. Showing either would offer a step that cannot
+    // do anything with this entry.
     expect(screen.queryByText("Analyzing your meal…")).toBeNull();
     expect(screen.queryByText("Sign in to use AI")).toBeNull();
-    expect(screen.queryByText("Unlock Pro")).toBeNull();
     expect(screen.queryByText("Ingredients are yours to fill in")).toBeNull();
   });
 

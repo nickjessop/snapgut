@@ -40,8 +40,8 @@ again, which fails on the tables that already exist.
 
 ### `users`
 
-The account record. After the self-hosted conversion this holds only the email and a creation
-timestamp — no profile fields, no entitlement, no usage counters.
+The account record. It holds only the email and a creation timestamp — no profile fields, no
+plan or usage counters, nothing about the person beyond the address they sign in with.
 
 | Column | Type | Constraints | Description |
 | --- | --- | --- | --- |

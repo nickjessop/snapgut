@@ -1,6 +1,10 @@
 // Coarse, keyword-based FODMAP / trigger tagging for free-text food names.
-// This is an MVP heuristic; see docs/research-and-insights.md for the upgrade
-// path (AI-returned FODMAP tags + portion-aware red/amber/green).
+//
+// Deliberately a heuristic, and the code says so where it matters: the food
+// dictionary is consulted first and this keyword pass is the fallback, so a
+// tag here is a guess about a name rather than a measurement of a portion.
+// docs/fodmap-program.md explains what the grouping is for and what it cannot
+// support; the obvious upgrade path is AI-returned tags with portion awareness.
 
 export type TriggerGroup =
   | "fructans"

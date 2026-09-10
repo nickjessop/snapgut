@@ -618,7 +618,12 @@ export const arbClockSequence: fc.Arbitrary<number[]> = fc
 // Sync_State derivation (Property 15, Requirement 12.8)
 // ---------------------------------------------------------------------------
 
-/** Mirrors the `SyncStateInput` shape from design.md; task 8.5 owns the real type. */
+/**
+ * Mirrors `SyncStateInput` from `src/cloudSync.ts`. Restated here rather than
+ * imported so the generators are an independent transcription of the shape: a
+ * field added to the real type and not to this one stops `toInput` compiling in
+ * `cloudSync.state.test.ts`, which is the point.
+ */
 export interface SyncStateInputLike {
   hasSession: boolean;
   enabled: boolean;

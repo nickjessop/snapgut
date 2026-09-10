@@ -48,7 +48,7 @@ export async function fetchMe(): Promise<Me | null> {
   return res.json();
 }
 
-/** Delete the server-side account (entitlement). Caller wipes local data + token. */
+/** Delete the server-side account record. Caller wipes local data + token. */
 export function deleteAccount(): Promise<{ ok: boolean }> {
   return post("/api/account/delete");
 }

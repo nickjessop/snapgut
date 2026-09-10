@@ -107,7 +107,7 @@ describe("what works with no account", () => {
     bootAt(DEFAULT_APP_PATH);
     await shell();
 
-    // No sign-in form, no paywall, no redirect — just the app.
+    // No sign-in form and no redirect — just the app.
     expect(screen.queryByText("Sign in to SnapGut")).toBeNull();
     expect(window.location.pathname + window.location.search).toBe(DEFAULT_APP_PATH);
   });
@@ -142,12 +142,11 @@ describe("what works with no account", () => {
     bootAt("/app/insights");
     await shell();
 
-    // The stats are computed locally, so they are visible without an account —
-    // and the AI block asks for sign-in rather than for money, because an
-    // anonymous visitor still has their whole free AI trial ahead of them.
+    // The stats are computed locally, so they are visible without an account.
+    // Only the AI block asks for one, and it asks for exactly that — an account
+    // on the operator's own instance, which is all the feature ever needs.
     await screen.findByText("AI insight");
     expect(screen.getByText("Sign in to use AI")).toBeTruthy();
-    expect(screen.queryByText("Unlock Pro")).toBeNull();
   });
 });
 

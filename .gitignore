@@ -28,14 +28,12 @@ data/
 # Fetch it with scripts/fetch-food-pack.mjs
 food-pack/
 
-# Agent workspace: local MCP settings, and planning specs that are working notes
-# rather than published documentation. `.kiro/specs/self-hosted-open-source/`
-# documents the current architecture and IS tracked.
-.kiro/settings/
-.kiro/specs/marketing-site-and-routing/
-.kiro/specs/cloud-sync/
-.kiro/specs/google-sheets-integration/
-.kiro/specs/native-app-store-launch/
+# Agent workspace: local MCP settings and planning specs. These are working
+# notes, not published documentation — they are written against the hosted
+# service this project was converted from, so they describe infrastructure and a
+# commercial surface that no longer exist and would only mislead a reader.
+# `docs/architecture.md` is the tracked description of how the code works now.
+.kiro/
 
 # The old marketing site. SnapGut is self-hosted software, so `/` serves the app
 # and there is no landing page in this repository any more. These sources are

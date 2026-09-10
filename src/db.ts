@@ -130,10 +130,10 @@ export function isTombstone(r: StoredRecord): r is Tombstone {
  * An event as a caller builds it, before a Revision_Time is assigned: the input
  * shape of `putEvent`.
  *
- * The log flows and a reconstructed spreadsheet row have no revision to offer —
- * `putEvent` owns that assignment (Req 5.2, 5.8) — while a stored `LogEvent` is
- * assignable to this type, so an edit of an existing event passes through
- * unchanged.
+ * A record arriving from a log flow or a restored backup has no revision to
+ * offer — `putEvent` owns that assignment (Req 5.2, 5.8) — while a stored
+ * `LogEvent` is assignable to this type, so an edit of an existing event passes
+ * through unchanged.
  */
 export type DraftEvent =
   | Omit<MealEvent, "updatedAt">
@@ -346,9 +346,9 @@ async function writeInOneTransaction(
  * The content, the Revision_Time, and the Outbox entry all land in one durable
  * transaction (Req 4.6, 5.2). The Outbox is keyed by id, so a repeat write to
  * the same id replaces its entry rather than adding a second one (Req 4.6:
- * at most one entry per id). Enqueuing is unconditional on the destination
- * being enabled or on Pro, so an id logged today still syncs whenever the
- * destination is turned on.
+ * at most one entry per id). Enqueuing does not depend on the destination being
+ * enabled, so an id logged today still syncs whenever the destination is turned
+ * on.
  */
 export async function putEvent(
   event: LogEvent | DraftEvent,

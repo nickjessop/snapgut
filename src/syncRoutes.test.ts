@@ -26,14 +26,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   eventStore,
-  freeUser,
   IP_REQUESTS_PER_WINDOW,
   MAX_RECORD_BYTES,
   MAX_SYNC_BODY_BYTES,
   mealRecord,
   mintToken,
-  proUser,
   pushBody,
+  signedInUser,
   syncApp,
   syncCall,
   syncFetch,
@@ -85,7 +84,7 @@ describe("sync middleware chain", () => {
 
   it("answers 401 when the Session_Token signature does not verify, real user or not", async () => {
     const app = syncApp();
-    const { email } = await freeUser();
+    const { email } = await signedInUser();
     const store = await userStore();
     expect(await store.getUser(email)).not.toBeNull();
 
@@ -105,7 +104,7 @@ describe("sync middleware chain", () => {
 
   it("lets a user delete their cloud copy", async () => {
     const app = syncApp();
-    const { email, token } = await proUser();
+    const { email, token } = await signedInUser();
     const store = await eventStore();
     await store.push(email, [mealRecord("keep-1"), mealRecord("keep-2")]);
 
@@ -125,7 +124,7 @@ describe("sync middleware chain", () => {
 
   it("touches no stored Event_Record on the way to a 401", async () => {
     const app = syncApp();
-    const owner = await proUser();
+    const owner = await signedInUser();
     const store = await eventStore();
     const seeded = [mealRecord("untouched-1"), mealRecord("untouched-2")];
     await store.push(owner.email, seeded);
@@ -167,8 +166,8 @@ describe("sync middleware chain", () => {
 describe("request identity", () => {
   it("ignores a user identifier in the push body and stores under the token identity", async () => {
     const app = syncApp();
-    const caller = await proUser("caller");
-    const victim = await proUser("victim");
+    const caller = await signedInUser("caller");
+    const victim = await signedInUser("victim");
     const store = await eventStore();
 
     const { status, body } = await syncCall(app, {
@@ -194,8 +193,8 @@ describe("request identity", () => {
 
   it("ignores a user identifier in the pull query string", async () => {
     const app = syncApp();
-    const caller = await proUser("caller");
-    const victim = await proUser("victim");
+    const caller = await signedInUser("caller");
+    const victim = await signedInUser("victim");
     const store = await eventStore();
     await store.push(caller.email, [mealRecord("mine-1")]);
     await store.push(victim.email, [mealRecord("theirs-1")]);
@@ -218,7 +217,7 @@ describe("request identity", () => {
 describe("push", () => {
   it("reports exactly one outcome per id sent, with the highest sequence assigned", async () => {
     const app = syncApp();
-    const { email, token } = await proUser();
+    const { email, token } = await signedInUser();
     const records = ["one", "two", "three"].map((id) => mealRecord(id));
 
     const { status, body } = await syncCall(app, {
@@ -240,7 +239,7 @@ describe("push", () => {
 
   it("stores nothing and names every id when one record breaks a check", async () => {
     const app = syncApp();
-    const { email, token } = await proUser();
+    const { email, token } = await signedInUser();
     const store = await eventStore();
 
     const payload = [
@@ -273,7 +272,7 @@ describe("push", () => {
 
   it("rejects a payload carrying one id twice", async () => {
     const app = syncApp();
-    const { email, token } = await proUser();
+    const { email, token } = await signedInUser();
     const store = await eventStore();
 
     const { status, body } = await syncCall(app, {
@@ -296,7 +295,7 @@ describe("push", () => {
 
   it("rejects an id the store cannot key a record by", async () => {
     const app = syncApp();
-    const { email, token } = await proUser();
+    const { email, token } = await signedInUser();
     const store = await eventStore();
 
     // Each of these is a non-empty string, so it can be *named* in a response, but
@@ -325,7 +324,7 @@ describe("push", () => {
 
   it("answers 400 for a body that is not a push payload", async () => {
     const app = syncApp();
-    const { token } = await proUser();
+    const { token } = await signedInUser();
 
     const malformed = await syncCall(app, { method: "POST", path: PUSH, token, bodyText: "{" });
     expect(malformed.status).toBe(400);
@@ -342,7 +341,7 @@ describe("push", () => {
 
   it("assigns gap-free ascending sequences across two interleaved pushes", async () => {
     const app = syncApp();
-    const { token } = await proUser();
+    const { token } = await signedInUser();
 
     const first = ["a-1", "a-2", "a-3"].map((id) => mealRecord(id));
     const second = ["b-1", "b-2", "b-3"].map((id) => mealRecord(id));
@@ -390,7 +389,7 @@ describe("push", () => {
 describe("pull", () => {
   it("pages at 500 records and reports whether more remain", async () => {
     const app = syncApp();
-    const { email, token } = await proUser();
+    const { email, token } = await signedInUser();
     const store = await eventStore();
 
     // Seeded through the store rather than 501 push requests: paging is what is
@@ -431,7 +430,7 @@ describe("pull", () => {
 
   it("reports an unusable cursor as a 200 carrying the reset signal", async () => {
     const app = syncApp();
-    const { email, token } = await proUser();
+    const { email, token } = await signedInUser();
     const store = await eventStore();
     await store.push(email, [mealRecord("reset-1")]);
 
@@ -461,8 +460,8 @@ describe("pull", () => {
 
   it("serves each user only their own records for a shared id", async () => {
     const app = syncApp();
-    const a = await proUser("iso-a");
-    const b = await proUser("iso-b");
+    const a = await signedInUser("iso-a");
+    const b = await signedInUser("iso-b");
     const store = await eventStore();
 
     const shared = "shared-id-1";
@@ -506,7 +505,7 @@ describe("pull", () => {
 describe("payload limits", () => {
   it("answers 413 for a declared oversize push and stores nothing", async () => {
     const app = syncApp();
-    const { email, token } = await proUser();
+    const { email, token } = await signedInUser();
     const store = await eventStore();
     await store.push(email, [mealRecord("kept-1")]);
     const before = await store.pull(email);
@@ -526,7 +525,7 @@ describe("payload limits", () => {
 
   it("answers 413 for a chunked oversize body and stops reading it", async () => {
     const app = syncApp();
-    const { email, token } = await proUser();
+    const { email, token } = await signedInUser();
     const store = await eventStore();
     await store.push(email, [mealRecord("kept-2")]);
     const before = await store.pull(email);
@@ -562,7 +561,7 @@ describe("payload limits", () => {
 describe("rate limits", () => {
   it("answers 429 with the seconds remaining once one user exceeds the window", async () => {
     const app = syncApp();
-    const { token } = await proUser();
+    const { token } = await signedInUser();
 
     for (let i = 0; i < USER_REQUESTS_PER_WINDOW; i += 1) {
       const ok = await syncFetch(app, { method: "GET", path: PULL, token });

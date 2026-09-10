@@ -58,9 +58,6 @@ import {
   restore as restoreSyncSettings,
   setDestinationEnabled,
 } from "./syncSettings";
-
-// Stub for removed entitlement function — tests will be cleaned up in task 1.8/1.9
-function applyEntitlement(_e: { pro: boolean; proUntil: number | null }): void {}
 import {
   arbStoredRecord,
   arbStoredRecords,
@@ -78,8 +75,6 @@ const SEEDED_CURSOR = formatCursor(1, 100);
 const SEEDED_LAST_SYNC = 1_700_000_000_000;
 /** The skipped count that rides with it (Req 20.5), likewise unchanged. */
 const SEEDED_LAST_SKIPPED = 3;
-
-const PRO_ENTITLEMENT = { pro: true, proUntil: null };
 
 /** The cursor a served pull page hands back for page `index`. */
 const pageCursor = (index: number): string => formatCursor(1, 200 + index * 100);
@@ -185,7 +180,6 @@ type FailurePoint =
   | { kind: "timeout" }
   | { kind: "server-error" }
   | { kind: "rate-limited" }
-  | { kind: "upgrade-required" }
   | { kind: "unauthorized" }
   | { kind: "unreadable-body" }
   | { kind: "rejected"; status: 400 | 409 | 413 };
@@ -195,7 +189,6 @@ const arbFailurePoint: fc.Arbitrary<FailurePoint> = fc.oneof(
   fc.constant<FailurePoint>({ kind: "timeout" }),
   fc.constant<FailurePoint>({ kind: "server-error" }),
   fc.constant<FailurePoint>({ kind: "rate-limited" }),
-  fc.constant<FailurePoint>({ kind: "upgrade-required" }),
   fc.constant<FailurePoint>({ kind: "unauthorized" }),
   fc.constant<FailurePoint>({ kind: "unreadable-body" }),
   fc.constant<FailurePoint>({ kind: "rejected", status: 400 }),
@@ -231,12 +224,11 @@ function unreadableResponse(): Response {
  * names none at all.
  */
 function rejectionBody(status: 400 | 409 | 413, ids: string[]): Record<string, unknown> {
-  if (status === 413) return { error: "payload_too_large", entitlement: PRO_ENTITLEMENT };
+  if (status === 413) return { error: "payload_too_large" };
   const reason = status === 400 ? "invalid_record" : "record_cap";
   return {
     error: reason,
     outcomes: ids.map((id) => ({ id, outcome: "rejected", reason })),
-    entitlement: PRO_ENTITLEMENT,
   };
 }
 
@@ -255,20 +247,7 @@ function failureResponse(point: FailurePoint, ids: string[]): Promise<Response> 
     case "server-error":
       return Promise.resolve(jsonResponse(503, { error: "server_error" }));
     case "rate-limited":
-      return Promise.resolve(
-        jsonResponse(429, {
-          error: "rate_limited",
-          retryAfterSeconds: 30,
-          entitlement: PRO_ENTITLEMENT,
-        }),
-      );
-    case "upgrade-required":
-      return Promise.resolve(
-        jsonResponse(402, {
-          error: "upgrade_required",
-          entitlement: { pro: false, proUntil: null },
-        }),
-      );
+      return Promise.resolve(jsonResponse(429, { error: "rate_limited", retryAfterSeconds: 30 }));
     case "unauthorized":
       return Promise.resolve(jsonResponse(401, { error: "unauthorized" }));
     case "unreadable-body":
@@ -303,8 +282,8 @@ interface ServiceScript {
 /**
  * Emulate the Sync_Service, failing at the scripted point.
  *
- * `POST /api/sync/push` → 200 `{ outcomes, highestSequence, entitlement }`.
- * `GET /api/sync/pull` → 200 `{ records, cursor, hasMore, entitlement }`.
+ * `POST /api/sync/push` → 200 `{ outcomes, highestSequence }`.
+ * `GET /api/sync/pull` → 200 `{ records, cursor, hasMore }`.
  */
 function installFetch(script: ServiceScript): ServiceLog {
   const log: ServiceLog = { settled: [], committed: [] };
@@ -331,7 +310,6 @@ function installFetch(script: ServiceScript): ServiceLog {
           jsonResponse(200, {
             outcomes: ids.map((id) => ({ id, outcome: "stored" })),
             highestSequence: ids.length > 0 ? sequence : null,
-            entitlement: PRO_ENTITLEMENT,
           }),
         );
       }
@@ -347,7 +325,6 @@ function installFetch(script: ServiceScript): ServiceLog {
             cursor: pageCursor(index),
             // Always more, so the loop reaches the scripted failure.
             hasMore: true,
-            entitlement: PRO_ENTITLEMENT,
           }),
         );
       }
@@ -398,8 +375,8 @@ function remotize(pages: SyncStoredRecord[][]): SyncStoredRecord[][] {
 }
 
 /**
- * A signed-in, Pro, Cloud-enabled device holding `records` locally, with
- * `queued` in the Outbox and a cursor and last-sync timestamp already stored.
+ * A signed-in, Cloud-enabled device holding `records` locally, with `queued` in
+ * the Outbox and a cursor and last-sync timestamp already stored.
  */
 async function setUpDevice(records: StoredRecord[], queued: string[]): Promise<void> {
   await resetStores();
@@ -409,7 +386,6 @@ async function setUpDevice(records: StoredRecord[], queued: string[]): Promise<v
 
   setToken("session-token-for-tests");
   await restoreSyncSettings();
-  applyEntitlement(PRO_ENTITLEMENT);
   setDestinationEnabled("cloud", true);
 
   await seedRecords(records);
@@ -567,7 +543,6 @@ describe("a failed second push batch (Req 6.8)", () => {
           jsonResponse(200, {
             outcomes: body.records.map((r) => ({ id: r.id, outcome: "stored" })),
             highestSequence: body.records.length,
-            entitlement: PRO_ENTITLEMENT,
           }),
         );
       }),

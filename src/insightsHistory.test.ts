@@ -225,9 +225,9 @@ describe("the trigger reference", () => {
   });
 
   it("makes no causal or diagnostic claim", () => {
-    // The same line docs/positioning.md draws for the marketing copy, for the same
-    // regulatory reason — and this copy is easier to get wrong, because explaining a
-    // mechanism invites causal phrasing.
+    // The line docs/intuitive-eating.md draws in "What the app may and may not
+    // say", for the regulatory reason it gives — and this copy is easier to get
+    // wrong, because explaining a mechanism invites causal phrasing.
     const forbidden = [
       /\bcauses\b/i,
       /\bwill cause\b/i,

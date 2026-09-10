@@ -1,5 +1,6 @@
 // Symptom taxonomy grounded in IBS / SIBO / FODMAP / histamine literature.
-// See docs/research-and-insights.md. This replaces the old "mood" model.
+// docs/fodmap-program.md covers how these feed the trigger grouping, and
+// docs/intuitive-eating.md the evidence base and the limits of reading them.
 
 export type SymptomCategory =
   | "Positive"

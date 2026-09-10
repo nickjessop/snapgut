@@ -266,8 +266,8 @@ describe("the symptom descriptions", () => {
   });
 
   it("makes no diagnostic claim", () => {
-    // Same line docs/positioning.md draws: these describe a feeling, they do not
-    // interpret it.
+    // The line docs/intuitive-eating.md draws in "What the app may and may not
+    // say": these describe a feeling, they do not interpret it.
     const forbidden = [/\bdiagnos/i, /\byou have\b/i, /\bcauses\b/i, /\bintoleran/i, /\ballerg/i];
     for (const s of SYMPTOMS) {
       for (const pattern of forbidden) {
