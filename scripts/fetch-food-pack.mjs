@@ -50,7 +50,10 @@ import { execSync } from "node:child_process";
  *
  * The archive holds bare `<slug>.webp` entries at its root — no wrapping
  * directory — which is what `extractArchive` below expects to flatten into
- * FOOD_PACK_DIR.
+ * FOOD_PACK_DIR. It also carries a `LICENSE` file, which lands in the pack
+ * directory alongside the images; the server only serves names matching
+ * `^[a-z0-9-]+\.webp$`, so it is inert there and travels with the artifact it
+ * licenses.
  */
 const ARCHIVE_URL =
   "https://github.com/nickjessop/snap-gut/releases/download/food-pack-v1/food-pack-v1.tar.gz";
@@ -58,10 +61,11 @@ const ARCHIVE_URL =
 /**
  * Expected SHA-256 hex digest of the archive file.
  *
- * 3,036 files, 62,844,026 bytes compressed, ~66 MB extracted.
+ * 3,037 entries — 3,036 WebP illustrations plus the MIT `LICENSE` that covers
+ * them — 62,845,615 bytes compressed, ~66 MB extracted.
  */
 const EXPECTED_SHA256 =
-  "47d03aef1325bc5d1db6048c2c306ef415ccef985781f272abd2c741ea9c40c6";
+  "1af6fda464d43e50fbf914e1b2cb89865ba84be70c1eacc1a0dc9c00809c0cbf";
 
 // ---------------------------------------------------------------------------
 // Timeouts

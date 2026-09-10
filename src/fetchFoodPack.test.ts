@@ -327,7 +327,7 @@ describe("fetchFoodPack — placeholder guard survives", () => {
   });
 
   it("refuses to run if the digest is malformed", () => {
-    const result = runWithDigest("47d03aef");
+    const result = runWithDigest("deadbeef");
 
     expect(result.status).toBe(1);
     expect(`${result.stderr}`).toMatch(/not a valid SHA-256 hex digest/i);

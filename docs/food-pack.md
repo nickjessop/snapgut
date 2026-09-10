@@ -7,8 +7,8 @@ not the repository's licensing.
 
 ## What it is
 
-- **3,036 WebP images**, one per food illustration.
-- About **66 MB** on disk once extracted. The download is **62,844,026 bytes**.
+- **3,036 WebP images**, one per food illustration, plus an MIT `LICENSE` file.
+- About **66 MB** on disk once extracted. The download is **62,845,615 bytes**.
 - Served by the app at **`/foods/<slug>.webp`**.
 - A single consistent visual style across the whole set, so the collection reads as one
   thing rather than a pile of stock photos.
@@ -63,8 +63,8 @@ Published asset for the current revision:
 ```
 Release  food-pack-v1
 Asset    food-pack-v1.tar.gz
-SHA-256  47d03aef1325bc5d1db6048c2c306ef415ccef985781f272abd2c741ea9c40c6
-Size     62844026 bytes
+SHA-256  1af6fda464d43e50fbf914e1b2cb89865ba84be70c1eacc1a0dc9c00809c0cbf
+Size     62845615 bytes
 ```
 
 `food-pack-v1` is an **asset-only tag**. It is not an application version and has no
@@ -99,7 +99,7 @@ authentication and its digest matches the value the script expects, byte for byt
 
 ```
 shasum -a 256 food-pack-v1.tar.gz
-tar -tzf food-pack-v1.tar.gz | wc -l   # 3036
+tar -tzf food-pack-v1.tar.gz | wc -l   # 3037 (3036 images + LICENSE)
 ```
 
 The archive is built reproducibly — sorted entry order, normalised mtime, `uid`/`gid` zeroed,
@@ -145,26 +145,34 @@ checkout: it needs Google Cloud credentials and Vertex AI access, and its depend
 Generation is deliberately an offline, one-time step. The app then serves static files with
 no runtime AI cost and no per-request dependency on an image provider.
 
-## Licensing — an open decision
+## Licensing — MIT
 
-**The pack's licence is not settled, and this document does not set one.**
+**The pack is licensed under the MIT License**, deliberately more permissive than the
+application. The code is AGPL-3.0-or-later because a self-hosted app should stay copyleft;
+the illustrations are MIT because there is no reason to restrict who reuses a picture of a
+carrot.
 
-The images are AI-generated and are distributed as a separate downloadable artifact rather
-than as part of the source tree. They are therefore **not covered by the repository's
-AGPL-3.0-or-later licence**, which applies to the code. No other licence has been chosen for
-them — not CC0, not Creative Commons, not public domain, nothing.
+The licence ships **inside the archive** as a `LICENSE` file, so it travels with the images
+rather than living only in this repository. After extraction it sits in the pack directory
+next to the WebP files, where it is inert — the server only serves names matching
+`^[a-z0-9-]+\.webp$`.
 
-This is an **open decision for the project owner**. Until it is made:
+Practically: use them, modify them, redistribute them, ship them in something commercial.
+Keep the copyright notice with them.
 
-- Treat the pack as **provided as-is for use with this application**.
-- Do not assume any right to redistribute the images, repackage them, or use them outside
-  this application.
-- If you are deploying SnapGut somewhere that needs clear asset licensing, the safe options
-  are to run without the pack, or to substitute your own images.
+Two honest caveats, also recorded in the archive's own `LICENSE`:
 
-Two facts that keep this from blocking anyone:
+- **MIT is a software licence being applied to image assets.** That is common practice and
+  the intent is unambiguous, but it was not drafted for artwork. If you need artwork-native
+  terms, CC0 or CC-BY are the conventional choices and nothing stops a downstream project
+  from relicensing its own derived set.
+- **The images are AI-generated**, produced with Vertex AI Gemini image models. The copyright
+  status of AI-generated output is unsettled in several jurisdictions, so this licence grants
+  what can be granted and makes no warranty about third-party rights. That is a statement
+  about the state of the law, not a known defect in these files.
+
+Independently of the licence, two facts keep the pack from being load-bearing:
 
 1. The app works with **no pack at all** — you get letter avatars, as described above.
 2. **Any directory of correctly named WebP files can substitute.** Point `FOOD_PACK_DIR` at
-   your own images named `<slug>.webp` and the server will serve them. You are not obliged
-   to use this pack to run SnapGut.
+   your own images named `<slug>.webp` and the server will serve them.

@@ -409,5 +409,7 @@ distribute — or offer to others over a network — must be made available unde
 
 See [LICENSE](LICENSE) for the full text.
 
-The food illustration pack is not part of this repository. It is distributed separately as a
-release artifact under its own terms.
+The food illustration pack is **MIT-licensed** — deliberately more permissive than the code,
+and carried as a `LICENSE` file inside the archive itself. It is not part of this repository;
+it is distributed separately as a release artifact. See
+[docs/food-pack.md](docs/food-pack.md).
